@@ -1076,3 +1076,337 @@ export const ITEMS: Item[] = [
     cost: 2000,
   },
 ];
+
+// ─── Habitats ────────────────────────────────────────────────────────────────
+
+export type Habitat = "Towns/Cities" | "Plains/Grassland" | "Forest/Jungle" | "Lakes/Rivers/Sea" | "Caves/Mountains" | "Desert/Volcanoes" | "Arctic Regions";
+
+export interface HabitatData {
+  name: Habitat;
+  emoji: string;
+  color: string;
+  description: string;
+  commonTypes: PokemonType[];
+  uncommonTypes: PokemonType[];
+  rareTypes: PokemonType[];
+  pokemonNumbers: number[];
+}
+
+export const HABITATS: HabitatData[] = [
+  {
+    name: "Towns/Cities",
+    emoji: "🏙️",
+    color: "#a040a0",
+    description: "Wild Pokémon living in or close to human settlements. Types are very varied — Normal, Electric, Flying, Dark, Poison, Psychic. Expect them to be resourceful and street-smart.",
+    commonTypes: ["Normal", "Electric", "Flying", "Dark"],
+    uncommonTypes: ["Poison", "Psychic", "Steel"],
+    rareTypes: ["Ghost", "Fairy"],
+    pokemonNumbers: [52, 39, 25, 133],
+  },
+  {
+    name: "Plains/Grassland",
+    emoji: "🌾",
+    color: "#78c850",
+    description: "Most Pokémon lurk hidden in tall grass so this habitat is perfect to find a variety of Pokémon Types. Though Normal and Flying may be the most commonly seen.",
+    commonTypes: ["Normal", "Flying", "Ground", "Grass"],
+    uncommonTypes: ["Fight", "Rock", "Dark", "Electric"],
+    rareTypes: ["Fire", "Fairy", "Psychic"],
+    pokemonNumbers: [1, 4, 7, 25, 39, 133, 261],
+  },
+  {
+    name: "Forest/Jungle",
+    emoji: "🌲",
+    color: "#228b22",
+    description: "Grass, Bug and Poison Types thrive in this environment. If you dare to travel after dusk, you may be surprised by a Ghost or Fairy Type lurking in the night.",
+    commonTypes: ["Bug", "Grass", "Poison", "Flying"],
+    uncommonTypes: ["Fight", "Electric", "Normal", "Rock"],
+    rareTypes: ["Ghost", "Steel", "Dark"],
+    pokemonNumbers: [1, 39, 52, 133, 353],
+  },
+  {
+    name: "Lakes/Rivers/Sea",
+    emoji: "🌊",
+    color: "#6890f0",
+    description: "Trying to find a Water Type Pokémon? Dive in or get a fishing rod! You may also find other Pokémon preying on fish-Pokémon or trying to cool themselves.",
+    commonTypes: ["Water", "Ice"],
+    uncommonTypes: ["Flying", "Normal", "Electric"],
+    rareTypes: ["Dragon", "Psychic"],
+    pokemonNumbers: [7, 131, 246],
+  },
+  {
+    name: "Caves/Mountains",
+    emoji: "⛰️",
+    color: "#b8a038",
+    description: "Rock and Steel Pokémon can blend easily in this environment. Due to the difficult living conditions, Fighting Types train here. Pokémon become stronger the deeper and higher you go.",
+    commonTypes: ["Rock", "Ground", "Fight", "Steel"],
+    uncommonTypes: ["Normal", "Poison", "Dark"],
+    rareTypes: ["Dragon", "Ghost", "Ice"],
+    pokemonNumbers: [94, 246, 445],
+  },
+  {
+    name: "Desert/Volcanoes",
+    emoji: "🌋",
+    color: "#f08030",
+    description: "Few Pokémon can resist the high temperature, but if you are looking for Ground, Fire and even Dragon Type Pokémon, these habitats should be explored carefully.",
+    commonTypes: ["Fire", "Ground", "Rock"],
+    uncommonTypes: ["Dragon", "Steel", "Normal"],
+    rareTypes: ["Ice", "Psychic"],
+    pokemonNumbers: [4, 445],
+  },
+  {
+    name: "Arctic Regions",
+    emoji: "❄️",
+    color: "#98d8d8",
+    description: "Ice Types are rarely seen away from their element. Just be careful as you explore these areas where the nearest Pokémon Center may be hundreds of kilometers away.",
+    commonTypes: ["Ice", "Water"],
+    uncommonTypes: ["Normal", "Steel"],
+    rareTypes: ["Dragon", "Ghost"],
+    pokemonNumbers: [131],
+  },
+];
+
+// ─── Status Effects ───────────────────────────────────────────────────────────
+
+export interface StatusEffect {
+  name: string;
+  color: string;
+  description: string;
+  modifiers: {
+    accuracyPenalty?: number;
+    strengthPenalty?: number;
+    dexterityPenalty?: number;
+    specialPenalty?: number;
+    damageTaken?: number;
+    cannotAct?: boolean;
+    cannotEvade?: boolean;
+  };
+  endOfRound?: string;
+}
+
+export const STATUS_EFFECTS: Record<string, StatusEffect> = {
+  Healthy: { name: "Healthy", color: "#00d4aa", description: "No status ailment.", modifiers: {} },
+  Burned: {
+    name: "Burned", color: "#f08030",
+    description: "The Pokémon is on fire. Loses 1 HP at the end of each round. Physical move damage is reduced by 1.",
+    modifiers: { strengthPenalty: 1 },
+    endOfRound: "Take 1 Fire damage (ignoring defenses)",
+  },
+  Frozen: {
+    name: "Frozen", color: "#98d8d8",
+    description: "The Pokémon is frozen solid. Cannot act or evade. Thaws if hit by a Fire-Type move.",
+    modifiers: { cannotAct: true, cannotEvade: true },
+  },
+  Paralyzed: {
+    name: "Paralyzed", color: "#f8d030",
+    description: "The Pokémon can barely move. Dexterity is reduced by 2 for accuracy rolls.",
+    modifiers: { dexterityPenalty: 2 },
+  },
+  Poisoned: {
+    name: "Poisoned", color: "#a040a0",
+    description: "The Pokémon is mildly poisoned. Loses 1 HP at end of each round.",
+    modifiers: {},
+    endOfRound: "Take 1 Poison damage (ignoring defenses)",
+  },
+  "Badly Poisoned": {
+    name: "Badly Poisoned", color: "#7038f8",
+    description: "The Pokémon is badly poisoned. Loses 2 HP at end of each round.",
+    modifiers: {},
+    endOfRound: "Take 2 Poison damage (ignoring defenses)",
+  },
+  Asleep: {
+    name: "Asleep", color: "#705898",
+    description: "The Pokémon is asleep. Cannot act or evade. Wakes after 1-3 rounds or if hit.",
+    modifiers: { cannotAct: true, cannotEvade: true },
+  },
+  Confused: {
+    name: "Confused", color: "#f85888",
+    description: "The Pokémon is confused. Before acting, roll 1 die — on a failure it hits itself.",
+    modifiers: {},
+  },
+  Flinched: {
+    name: "Flinched", color: "#e8eaf0",
+    description: "The Pokémon flinched. Loses its action this turn. Clears at end of round.",
+    modifiers: { cannotAct: true },
+  },
+};
+
+// ─── Weather / Environment ────────────────────────────────────────────────────
+
+export interface WeatherEffect {
+  name: string;
+  emoji: string;
+  color: string;
+  description: string;
+  endOfRoundEffect?: string;
+  modifiers: {
+    typeBoost?: PokemonType;
+    typeWeaken?: PokemonType;
+    damagePerRound?: number;
+    immuneTypes?: PokemonType[];
+  };
+  triggeredAbilities?: string[];
+}
+
+export const WEATHER_EFFECTS: WeatherEffect[] = [
+  {
+    name: "Clear",
+    emoji: "☀️ (Normal)",
+    color: "#e8eaf0",
+    description: "No special weather conditions. Standard battle rules apply.",
+    modifiers: {},
+  },
+  {
+    name: "Sunny",
+    emoji: "☀️",
+    color: "#f8d030",
+    description: "Strong sunlight boosts Fire-Type moves and weakens Water-Type moves. Solar Beam charges in one action.",
+    modifiers: { typeBoost: "Fire", typeWeaken: "Water" },
+    triggeredAbilities: ["Blaze", "Chlorophyll", "Solar Power", "Forecast", "Flower Gift"],
+  },
+  {
+    name: "Rain",
+    emoji: "🌧️",
+    color: "#6890f0",
+    description: "Rain boosts Water-Type moves and weakens Fire-Type moves. Thunder never misses.",
+    modifiers: { typeBoost: "Water", typeWeaken: "Fire" },
+    triggeredAbilities: ["Torrent", "Rain Dish", "Hydration", "Swift Swim", "Forecast", "Cloud Nine"],
+  },
+  {
+    name: "Sandstorm",
+    emoji: "🌪️",
+    color: "#e0c068",
+    description: "All non-Rock/Ground/Steel Pokémon take 1 damage at end of each round. Rock-Type Pokémon get +1 Sp. Defense.",
+    modifiers: { damagePerRound: 1, immuneTypes: ["Rock", "Ground", "Steel"] },
+    endOfRoundEffect: "Non-Rock/Ground/Steel Pokémon take 1 typeless damage",
+    triggeredAbilities: ["Sand Veil", "Sand Stream", "Sand Rush", "Sand Force"],
+  },
+  {
+    name: "Hail",
+    emoji: "🧊",
+    color: "#98d8d8",
+    description: "All non-Ice Pokémon take 1 damage at end of each round.",
+    modifiers: { damagePerRound: 1, immuneTypes: ["Ice"] },
+    endOfRoundEffect: "Non-Ice Pokémon take 1 Ice damage",
+    triggeredAbilities: ["Slush Rush", "Ice Body", "Forecast", "Blizzard never misses"],
+  },
+  {
+    name: "Fog",
+    emoji: "🌫️",
+    color: "#8b90a8",
+    description: "Accuracy rolls for all Pokémon are reduced by 1 success.",
+    modifiers: {},
+  },
+  {
+    name: "Electric Terrain",
+    emoji: "⚡",
+    color: "#f8d030",
+    description: "Electric-Type Moves get +1 die to their Damage Pool. Pokémon on the ground cannot fall asleep.",
+    modifiers: { typeBoost: "Electric" },
+    triggeredAbilities: ["Electric Surge", "Hadron Engine"],
+  },
+  {
+    name: "Misty Terrain",
+    emoji: "🌸",
+    color: "#EE99AC",
+    description: "Fairy-Type Moves get +1 die to Damage Pool. Pokémon on the ground cannot be inflicted with status ailments.",
+    modifiers: { typeBoost: "Fairy" },
+    triggeredAbilities: ["Misty Surge"],
+  },
+];
+
+// ─── Missingno ────────────────────────────────────────────────────────────────
+
+export const MISSINGNO: PokemonEntry = {
+  number: 0,
+  name: "Missingno.",
+  types: ["Normal"],
+  height: "???",
+  weight: "???",
+  baseHp: 0,
+  attributes: { strength: 0, dexterity: 0, vitality: 0, special: 0, insight: 0 },
+  attributeLimits: { strength: 10, dexterity: 10, vitality: 10, special: 10, insight: 10 },
+  abilities: [],
+  suggestedRank: "Starter",
+  evolutiveStage: "???",
+  moves: [],
+  description: "A blank entry. Use this to create custom creatures and encounters — edit all stats, moves, and abilities freely in the Battle Tracker.",
+  weaknesses: [],
+  resistances: [],
+  immunities: [],
+};
+
+// ─── Trainer Types ────────────────────────────────────────────────────────────
+
+export type TrainerAge = "Child" | "Teen" | "Adult" | "Senior";
+
+export interface TrainerCharacter {
+  id: string;
+  name: string;
+  playerName: string;
+  concept: string;
+  nature: string;
+  age: TrainerAge;
+  rank: Rank;
+  hp: number;
+  maxHp: number;
+  willPoints: number;
+  maxWillPoints: number;
+  money: number;
+  attributes: {
+    strength: number;
+    dexterity: number;
+    vitality: number;
+    insight: number;
+  };
+  socialAttributes: {
+    tough: number;
+    cool: number;
+    beauty: number;
+    cute: number;
+    clever: number;
+  };
+  skills: {
+    brawl: number;
+    channel: number;
+    clash: number;
+    evasion: number;
+    alert: number;
+    athletic: number;
+    nature: number;
+    stealth: number;
+    etiquette: number;
+    intimidate: number;
+    perform: number;
+  };
+  achievements: string[];
+  notes: string;
+  gymBadges: boolean[];
+  pokemon: string[]; // IDs of Pokemon in party
+  favoriteId?: string;
+}
+
+export const AGE_BONUSES: Record<TrainerAge, { attributes: number; social: number }> = {
+  Child: { attributes: 0, social: 0 },
+  Teen: { attributes: 2, social: 2 },
+  Adult: { attributes: 4, social: 4 },
+  Senior: { attributes: 3, social: 6 },
+};
+
+export const RANK_BONUSES: Record<Rank, { attributes: number; social: number; skills: number; skillLimit: number }> = {
+  Starter: { attributes: 0, social: 0, skills: 5, skillLimit: 1 },
+  Rookie: { attributes: 2, social: 2, skills: 10, skillLimit: 2 },
+  Standard: { attributes: 4, social: 4, skills: 14, skillLimit: 3 },
+  Advanced: { attributes: 6, social: 6, skills: 17, skillLimit: 4 },
+  Expert: { attributes: 8, social: 8, skills: 19, skillLimit: 5 },
+  Ace: { attributes: 10, social: 10, skills: 20, skillLimit: 5 },
+  Master: { attributes: 10, social: 10, skills: 22, skillLimit: 5 },
+  Champion: { attributes: 14, social: 14, skills: 25, skillLimit: 5 },
+};
+
+export const NATURES = [
+  "Hardy","Lonely","Brave","Adamant","Naughty",
+  "Bold","Docile","Relaxed","Impish","Lax",
+  "Timid","Hasty","Serious","Jolly","Naive",
+  "Modest","Mild","Quiet","Bashful","Rash",
+  "Calm","Gentle","Sassy","Careful","Quirky",
+];
