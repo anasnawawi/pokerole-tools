@@ -1,0 +1,3240 @@
+"use client";
+import React from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import Link from "next/link";
+import {
+  POKEMON, MOVES, ABILITIES, ITEMS, TYPE_COLORS, TYPE_CHART, MISSINGNO, HABITATS,
+  PokemonEntry, Move, PokemonType, Rank,
+} from "../data/pokerole-data";
+import type { ItemData } from "../data/pokerole-data";
+import {
+  STATUS_CONDITIONS, WEATHER_DATA, WeatherData,
+  getDisobedienceLevel, getPainPenalty,
+} from "../data/game-rules";
+import { saveToStorage, loadFromStorage } from "../lib/storage";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Standard:"#f8d030",Advanced:"#f08030",Expert:"#a040a0",Ace:"#e04040",Master:"#705898",Champion:"#ffd700"};
+type AttrSet={strength:number;dexterity:number;vitality:number;special:number;insight:number};
+interface StatMod{source:string;attr:string;amount:number;appliedBy?:string;}
+interface AbilityState{name:string;active:boolean;}
+interface BattleEntry{
+  id:string; pokemon:PokemonEntry; nickname:string;
+  initiative:number; currentHp:number; maxHp:number; currentWill:number; maxWill:number;
+  loyalty:number; happiness:number;
+  statuses:string[];   // array of active status conditions (no duplicates)
+  statusTurnsLeft:number;
+  notes:string; isExpanded:boolean; hasTakenTurn:boolean;
+  side:"player"|"enemy"|"neutral"; trainerRank:Rank;
+  abilities:AbilityState[]; moves:Move[];
+  attrs:AttrSet; statMods:StatMod[];
+  weatherImmune:boolean; actionCount:number;
+  reactionUsed:boolean;
+  pokemonSkills?:{brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;intimidate:number;perform:number};
+  linkedTrainerId?:string; linkedPokemonSheetKey?:string; showTrainerView?:boolean;
+  isProtected?:boolean;            // Protect: blocks incoming attacks this round
+  morphedTo?:PokemonEntry;         // Transform: copied target's pokemon
+  originalAttrs?:AttrSet;          // saved before transform to allow revert
+  originalMoves?:Move[];           // saved before transform
+  hasSubstitute?:boolean;          // Substitute up
+  substituteHp?:number;            // HP remaining in substitute
+  // ── Advanced mechanics ──────────────────────────────────────
+  isMegaEvolved?:boolean;          // Mega Evolution active
+  megaOriginalAttrs?:AttrSet;      // pre-mega attrs for revert
+  isDynamaxed?:boolean;            // Dynamax/Gigamax active
+  dynamaxRoundsLeft?:number;       // 3→0, decrements each Next Turn
+  dynamaxExtraHpCur?:number;       // current extra HP pool
+  isGigamax?:boolean;
+  isTerastallized?:boolean;
+  teraType?:string;                // chosen tera affinity type
+  teraFirstMoveBonusUsed?:boolean; // +3/+2 first move bonus spent
+  zMoveUsed?:boolean;              // Z-Move activated this battle
+  trainerCurrentHp?:number;       // trainer HP tracked separately when linked
+  trainerCurrentWp?:number;       // trainer WP tracked separately when linked
+  // ── Support move effects ─────────────────────────────────────────────────
+  abilityOverride?:string;        // Role Play / Skill Swap / Entrainment
+  abilitySuppressed?:boolean;     // Gastro Acid / Simple Beam / Worry Seed
+  typeOverride?:string[];         // Soak / Trick-Or-Treat / Forest's Curse / Camouflage
+  heldItem?:string;               // tracked held item for Trick/Bestow/Embargo
+  itemEmbargoed?:boolean;         // Embargo: cannot use items
+  isFollowMeTarget?:boolean;      // Follow Me / Spotlight: all moves redirect here
+  chargeActive?:boolean;          // Charge: +2 to next Electric move
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
+  return <span style={{display:"inline-flex",alignItems:"center",padding:small?"1px 5px":"2px 7px",borderRadius:3,fontSize:small?9:11,fontWeight:700,color:"#fff",background:TYPE_COLORS[type]||"#555"}}>{type}</span>;
+}
+function rollDice(n:number):{rolls:number[];successes:number}{
+  const p=Math.max(1,n);
+  const rolls=Array.from({length:p},()=>Math.floor(Math.random()*6)+1);
+  return{rolls,successes:rolls.filter(r=>r>=4).length};
+}
+// Compatibility: get primary status from statuses array (first non-Healthy)
+function primaryStatus(e:{statuses?:string[];status?:string}):string{
+  if(e.statuses&&e.statuses.length>0)return e.statuses[0];
+  return (e as any).status||"Healthy";
+}
+function addStatus(statuses:string[],s:string):string[]{
+  if(!s||s==="Healthy"||statuses.includes(s))return statuses;
+  return [...statuses.filter(x=>x!=="Healthy"),s];
+}
+function removeStatus(statuses:string[],s:string):string[]{
+  const r=statuses.filter(x=>x!==s);
+  return r.length===0?["Healthy"]:r;
+}
+
+function HpBar({cur,max}:{cur:number;max:number}){
+  const pct=max>0?Math.max(0,Math.min(1,cur/max)):0;
+  return <div style={{background:"#0f1117",borderRadius:3,height:5,overflow:"hidden"}}><div style={{width:`${pct*100}%`,height:"100%",background:pct>0.5?"#00d4aa":pct>0.25?"#ffd32a":"#ff4757",transition:"width 0.3s"}}/></div>;
+}
+const adjBtn:React.CSSProperties={width:20,height:20,background:"#1a1d27",border:"1px solid #3a4060",borderRadius:3,color:"#00d4aa",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
+
+function getEffectiveAttrs(e:BattleEntry):AttrSet{
+  const sc=STATUS_CONDITIONS[primaryStatus(e)];const accPen=sc?.accuracyPenalty??0;
+  const pain=getPainPenalty(e.currentHp,e.maxHp);
+  const mods=e.statMods.reduce<Partial<AttrSet>>((acc,m)=>{const k=m.attr as keyof AttrSet;if(k in e.attrs)acc[k]=(acc[k]??e.attrs[k])+m.amount;return acc;},{});
+  return{strength:Math.max(0,(mods.strength??e.attrs.strength)-pain),dexterity:Math.max(0,(mods.dexterity??e.attrs.dexterity)-accPen-pain),vitality:Math.max(0,mods.vitality??e.attrs.vitality),special:Math.max(0,(mods.special??e.attrs.special)-pain),insight:Math.max(0,(mods.insight??e.attrs.insight)-pain)};
+}
+
+type PokemonSkills={brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;intimidate:number;perform:number};
+function calcAccPool(move:Move,attrs:AttrSet,weather?:WeatherData,skills?:Partial<PokemonSkills>):number{
+  const acc=move.accuracy.toLowerCase();let p=0;
+  if(acc.includes("strength"))p+=attrs.strength;
+  if(acc.includes("dexterity"))p+=attrs.dexterity;
+  if(acc.includes("special"))p+=attrs.special;
+  if(acc.includes("insight"))p+=attrs.insight;
+  if(acc.includes("vitality"))p+=attrs.vitality;
+  // Add skill rank — use actual value if non-zero, else fall back to fixed defaults
+  const sk=(k:keyof PokemonSkills)=>skills?.[k]||((k==="brawl"||k==="channel"||k==="athletic"||k==="perform"||k==="clash")?2:1);
+  if(acc.includes("brawl"))p+=sk("brawl");
+  else if(acc.includes("athletic"))p+=sk("athletic");
+  else if(acc.includes("channel"))p+=sk("channel");
+  else if(acc.includes("perform"))p+=sk("perform");
+  else if(acc.includes("clash"))p+=sk("clash");
+  else if(acc.includes("alert"))p+=sk("alert");
+  else if(acc.includes("intimidate"))p+=sk("intimidate");
+  else if(acc.includes("stealth"))p+=sk("stealth");
+  else if(acc.includes("nature"))p+=sk("nature");
+  else p+=1; // unknown skill — minimal bonus
+  if(weather?.accuracyPenalty)p=Math.max(0,p-weather.accuracyPenalty);
+  return Math.max(1,p);
+}
+
+function calcDmgPool(move:Move,attrs:AttrSet,weather:WeatherData,stab:boolean,abilBonus:number,loyalty:number,happiness:number):number{
+  const dmg=move.damagePool.toLowerCase();
+  if(dmg==="-")return 0;
+  let p=0;
+  // Handle special cases first
+  if(dmg.includes("samedmg")||dmg.includes("sameasbasepower")){
+    // Power is loyalty+happiness (e.g. Acid Downpour)
+    const pw=move.power.toLowerCase();
+    if(pw.includes("happiness")&&pw.includes("loyalty"))p=happiness+loyalty;
+    else if(pw.includes("loyalty"))p=loyalty;
+    else if(pw.includes("happiness"))p=happiness;
+    else{const pm=move.power.match(/(\d+)/);if(pm)p+=parseInt(pm[1]);}
+    // Also add any extra "+loyalty"/"+ happiness" in damagePool itself
+    if(dmg.includes("loyalty"))p+=loyalty;
+    if(dmg.includes("happiness"))p+=happiness;
+    // Subtract the duplicate we just added
+    const pwL=pw.includes("loyalty")?loyalty:0;const pwH=pw.includes("happiness")?happiness:0;
+    p=Math.max(1,p);
+  } else {
+    if(dmg.includes("strength"))p+=attrs.strength;
+    if(dmg.includes("special"))p+=attrs.special;
+    if(dmg.includes("loyalty"))p+=loyalty;
+    if(dmg.includes("happiness"))p+=happiness;
+    const pm=move.power.match(/(\d+)/);
+    if(pm&&!move.power.toLowerCase().includes("loyalty")&&!move.power.toLowerCase().includes("happiness"))p+=parseInt(pm[1]);
+    else if(move.power.toLowerCase().includes("happiness")&&move.power.toLowerCase().includes("loyalty"))p+=happiness+loyalty;
+    else if(move.power.toLowerCase().includes("loyalty"))p+=loyalty;
+    else if(move.power.toLowerCase().includes("happiness"))p+=happiness;
+  }
+  if(stab)p+=1;
+  if(weather.typeBoost===move.type&&weather.typeBoostDice)p+=weather.typeBoostDice;
+  if(weather.typeWeaken===move.type&&weather.typeWeakenDice)p=Math.max(1,p-weather.typeWeakenDice);
+  return Math.max(1,p+abilBonus);
+  // Tera bonus: +1 die after first move bonus; caller adds first-move bonus separately
+  // Dynamax Max Moves: +2 acc and dmg dice (handled in MovePopup for now)
+}
+
+function getTypeMult(mt:PokemonType,dts:PokemonType[]):{label:string;color:string;mod:number}{
+  let w=false,r=false,i=false;
+  dts.forEach(dt=>{const c=TYPE_CHART[dt];if(c?.weaknesses?.includes(mt))w=true;if(c?.resistances?.includes(mt))r=true;if(c?.immunities?.includes(mt))i=true;});
+  if(i)return{label:"Immune",color:"#5a6080",mod:-999};
+  if(w)return{label:"Super Effective ×2",color:"#ff4757",mod:2};
+  if(r)return{label:"Not very effective −2",color:"#00d4aa",mod:-1};
+  return{label:"Normal",color:"#8b90a8",mod:0};
+}
+
+function calcAbilityBonus(entry:BattleEntry,move:Move,weather:WeatherData):{bonus:number;reasons:string[]}{
+  const res={bonus:0,reasons:[] as string[]};
+  const mt=move.type as PokemonType;const atHalf=entry.currentHp<=entry.maxHp/2;const isP=move.category==="Physical";
+  entry.abilities.filter(a=>a.active).forEach(ab=>{const n=ab.name;
+    if((n==="Blaze"&&mt==="Fire")||(n==="Overgrow"&&mt==="Grass")||(n==="Torrent"&&mt==="Water")||(n==="Swarm"&&mt==="Bug")){if(atHalf){res.bonus+=2;res.reasons.push(`${n} +2 (HP≤50%)`);}}
+    else if(n==="Technician"&&move.power!=="-"&&parseInt(move.power)<=2){res.bonus+=2;res.reasons.push("Technician +2");}
+    else if((n==="Huge Power"||n==="Pure Power")&&isP){res.bonus+=2;res.reasons.push(`${n} +2`);}
+    else if(n==="Tough Claws"&&isP){res.bonus+=2;res.reasons.push("Tough Claws +2");}
+    else if(n==="Iron Fist"&&move.effect.toLowerCase().includes("punch")){res.bonus+=2;res.reasons.push("Iron Fist +2");}
+    else if(n==="Strong Jaw"&&move.effect.toLowerCase().includes("bite")){res.bonus+=2;res.reasons.push("Strong Jaw +2");}
+    else if(n==="Transistor"&&mt==="Electric"){res.bonus+=2;res.reasons.push("Transistor +2");}
+    else if(n==="Guts"&&isP&&primaryStatus(entry)!=="Healthy"){res.bonus+=2;res.reasons.push(`Guts +2 (${primaryStatus(entry)})`);}
+    else if(n==="Gorilla Tactics"&&isP){res.bonus+=2;res.reasons.push("Gorilla Tactics +2");}
+    else if(n==="Flash Fire"&&mt==="Fire"){res.bonus+=2;res.reasons.push("Flash Fire +2");}
+    else if(n==="Dark Aura"&&mt==="Dark"){res.bonus+=1;res.reasons.push("Dark Aura +1");}
+    else if(n==="Fairy Aura"&&mt==="Fairy"){res.bonus+=1;res.reasons.push("Fairy Aura +1");}
+    else if(n==="Adaptability"&&entry.pokemon.types.includes(mt)){res.bonus+=1;res.reasons.push("Adaptability +1");}
+    else if(n==="Sniper"){res.reasons.push("Sniper: crits +2");}
+    else if(n==="Parental Bond"&&move.category!=="Support"){res.reasons.push("Parental Bond: hits twice");}
+    // Weather-boosted abilities
+    else if(n==="Solar Power"&&mt==="Fire"&&weather.name==="Sunny"){res.bonus+=2;res.reasons.push("Solar Power +2 (Sunny)");}
+    else if(n==="Chlorophyll"&&weather.name==="Sunny"){res.reasons.push("Chlorophyll: DEX+2 in Sunny (apply manually)");}
+    else if(n==="Swift Swim"&&weather.name==="Rain"){res.reasons.push("Swift Swim: DEX+2 in Rain (apply manually)");}
+    else if(n==="Sand Rush"&&weather.name==="Sandstorm"){res.reasons.push("Sand Rush: DEX+2 in Sandstorm (apply manually)");}
+    else if(n==="Sand Force"&&weather.name==="Sandstorm"&&(mt==="Rock"||mt==="Ground"||mt==="Steel")){res.bonus+=2;res.reasons.push("Sand Force +2 (Sandstorm)");}
+    else if(n==="Slush Rush"&&(weather.name==="Hail"||weather.name==="Snow")){res.reasons.push("Slush Rush: DEX+2 in Snow/Hail (apply manually)");}
+    else if(n==="Ice Body"&&(weather.name==="Hail"||weather.name==="Snow")){res.reasons.push("Ice Body: +1 HP per round in Snow/Hail (track manually)");}
+    else if(n==="Rain Dish"&&weather.name==="Rain"){res.reasons.push("Rain Dish: +1 HP per round in Rain (track manually)");}
+    // Type-based damage boosts
+    else if((n==="Aerilate")&&mt==="Normal"){res.reasons.push("Aerilate: becomes Flying (change type manually)");}
+    else if((n==="Refrigerate")&&mt==="Normal"){res.reasons.push("Refrigerate: becomes Ice (change type manually)");}
+    else if((n==="Pixilate")&&mt==="Normal"){res.reasons.push("Pixilate: becomes Fairy (change type manually)");}
+    else if((n==="Galvanize")&&mt==="Normal"){res.reasons.push("Galvanize: becomes Electric (change type manually)");}
+    else if(n==="Sheer Force"&&move.effect.toLowerCase().match(/chance|may|roll.*chance/)){res.bonus+=2;res.reasons.push("Sheer Force +2 (bonus effect removed)");}
+    else if(n==="Reckless"&&move.effect.toLowerCase().includes("recoil")){res.bonus+=2;res.reasons.push("Reckless +2 (recoil move)");}
+    else if(n==="Mega Launcher"&&move.effect.toLowerCase().includes("pulse")){res.bonus+=2;res.reasons.push("Mega Launcher +2 (pulse move)");}
+    else if(n==="Liquid Voice"&&move.effect.toLowerCase().includes("sound")){res.reasons.push("Liquid Voice: move becomes Water-type");}
+    else if((n==="Overpowered")&&isP){res.bonus+=2;res.reasons.push("Overpowered +2");}
+    else if(n==="Defiant"&&entry.statMods.some(m=>m.amount<0)){res.bonus+=2;res.reasons.push("Defiant +2 (stat was lowered)");}
+    else if(n==="Competitive"&&entry.statMods.some(m=>m.amount<0)){res.bonus+=2;res.reasons.push("Competitive +2 (stat was lowered)");}
+    else if(n==="Analytic"&&move.priority===0){res.bonus+=1;res.reasons.push("Analytic +1 (lower initiative — apply if slower)");}
+    else if(n==="Compound Eyes"&&move.accuracy.toLowerCase().includes("low")){res.bonus+=2;res.reasons.push("Compound Eyes +2 (low accuracy move)");}
+    // Contact/on-hit abilities (informational for defender)
+    else if(n==="Flame Body"&&isP){res.reasons.push("Flame Body: attacker rolls 3 chance dice → Burn on contact");}
+    else if(n==="Static"&&isP){res.reasons.push("Static: attacker rolls 3 chance dice → Paralyze on contact");}
+    else if(n==="Poison Point"&&isP){res.reasons.push("Poison Point: attacker rolls 3 chance dice → Poison on contact");}
+    else if(n==="Rough Skin"||n==="Iron Barbs"){if(isP)res.reasons.push(`${n}: attacker takes 1 damage on contact`);}
+    else if(n==="Rocky Helmet"){if(isP)res.reasons.push("Rocky Helmet: attacker takes 1 damage on contact");}
+    // Screen/utility
+    else if(n==="Prankster"&&move.category==="Support"){res.reasons.push("Prankster: this Support move gets Priority 1");}
+    else if(n==="Gale Wings"&&mt==="Flying"){res.reasons.push("Gale Wings: this Flying move gets Reaction 1 priority");}
+    else if(n==="Mold Breaker"||n==="Teravolt"||n==="Turboblaze"){res.reasons.push(`${n}: ignores target's ability`);}
+    else if(n==="Scrappy"&&(mt==="Normal"||mt==="Fight")){res.reasons.push("Scrappy: Normal/Fighting hits Ghost-types");}
+    else if(n==="Normalize"){res.reasons.push("Normalize: this move is treated as Normal-type");}
+    else if(n==="No Guard"){res.reasons.push("No Guard: this move and incoming moves never miss");}
+    else if(n==="Magic Guard"){res.reasons.push("Magic Guard: no indirect damage (weather, status, hazards)");}
+    else if(n==="Levitate"){res.reasons.push("Levitate: immune to Ground-type moves and entry hazards");}
+    else if(n==="Wonder Guard"){res.reasons.push("Wonder Guard: only super-effective moves deal damage");}
+    else if(n==="Intimidate"&&entry.statMods.length===0){res.reasons.push("Intimidate: lowers foe's STR by 1 when entering battle");}
+    else if(n==="Download"){res.reasons.push("Download: raises STR or SPC based on foe's lower defense");}
+    else if(n==="Speed Boost"){res.reasons.push("Speed Boost: DEX +1 each round (track manually)");}
+    else if(n==="Beast Boost"){res.reasons.push("Beast Boost: best stat +1 after KO (apply manually)");}
+  });
+  return res;
+}
+
+function moveTargetsSelf(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  if(move.name==="Transform")return false; // Transform needs to select a COPY target
+  return e.startsWith("target self")||e.includes("targets self")||
+         (e.includes("self.")&&(e.includes("increase")||e.includes("defense")||e.includes("evasion")))||
+         move.name==="Harden"||move.name==="Substitute"||move.name==="Baton Pass"||move.name==="Imprison";
+}
+function moveSelfDestructsAll(move:Move):boolean{
+  return move.name==="Self-Destruct"||move.name==="Explosion"||move.effect.toLowerCase().includes("self-destructs");
+}
+function isMoveAOE(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  return e.includes("area move")||e.includes("target all")||e.includes("all foes")||
+         e.includes("all allies")||e.includes("target battlefield")||e.includes("battlefield")||
+         e.includes(",all.")||moveSelfDestructsAll(move);
+}
+function moveUserFaints(move:Move):boolean{
+  return move.effect.toLowerCase().includes("user faints")||move.effect.toLowerCase().includes("lethal")||
+         moveSelfDestructsAll(move);
+}
+function moveHealsSelf(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  return e.includes("basic heal")||(e.includes("heal")&&(e.includes("user")||e.startsWith("target self")))||
+         ["Recover","Moonlight","Synthesis","Rest","Roost","Slack Off","Soft-Boiled","Milk Drink","Swallow"].includes(move.name);
+}
+function moveHealsTarget(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  return (e.includes("heal")&&(e.includes("ally")||e.includes("target one")))||
+         ["Floral Healing","Heal Pulse","Life Dew","Wish"].includes(move.name);
+}
+function moveAppliesStatus(move:Move):string|null{
+  const e=move.effect.toLowerCase();
+  if(e.includes("poison those affected")||e.includes("target is poisoned")||e.includes("badly poison"))return"Poisoned";
+  if(e.includes("burn")&&(e.includes("inflict")||e.includes("may")))return"Burned";
+  if(e.includes("paralyze"))return"Paralyzed";
+  if(e.includes("put to sleep")||e.includes("falls asleep"))return"Asleep";
+  if(e.includes("freeze")&&e.includes("inflict"))return"Frozen";
+  if(e.includes("confuse"))return"Confused";
+  if(e.includes("flinch"))return"Flinched";
+  return null;
+}
+function moveSetsWeather(move:Move):string|null{
+  const e=move.effect.toLowerCase();const n=move.name.toLowerCase();
+  if(n==="sunny day"||n==="max flare"||e.includes("activate sunny"))return"Sunny";
+  if(n==="rain dance"||n==="max geyser"||e.includes("activate rain"))return"Rain";
+  if(n==="sandstorm"||n==="max rockfall"||e.includes("activate sandstorm"))return"Sandstorm";
+  if(n==="hail"||n==="snow"||n==="max hailstorm"||e.includes("activate hail")||e.includes("snow weather"))return"Hail";
+  if(n==="fog"||e.includes("activate fog"))return"Fog";
+  return null;
+}
+function moveHasRecoil(move:Move):boolean{
+  return move.effect.toLowerCase().includes("recoil")||move.name==="Wave Crash"||move.name==="Double-Edge"||move.name==="Head Smash"||move.name==="Flare Blitz";
+}
+
+function moveIsTransform(move:Move):boolean{return move.name==="Transform"||move.effect.toLowerCase().includes("transform into");}
+function moveIsReflectType(move:Move):boolean{return move.name==="Reflect Type"||move.effect.toLowerCase().includes("change the user's type to match");}
+function moveIsMetronome(move:Move):boolean{return move.name==="Metronome";}
+function moveIsBatonPass(move:Move):boolean{return move.name==="Baton Pass"||move.effect.toLowerCase().includes("switcher move");}
+function moveIsImprison(move:Move):boolean{return move.name==="Imprison";}
+function movePowerSplit(move:Move):boolean{return move.name==="Power Split"||move.effect.toLowerCase().includes("average the user");}
+function movePowerSwap(move:Move):boolean{return move.name==="Power Swap"||move.effect.toLowerCase().includes("switch the user's strength and special with the target");}
+function moveIsStatsReset(move:Move):boolean{
+  return move.name==="Haze"||move.name==="Clear Smog"||(move.effect.toLowerCase().includes("reset all")&&move.effect.toLowerCase().includes("attrib"));
+}
+function moveIsEntryHazard(move:Move):boolean{
+  return ["Spikes","Stealth Rock","Toxic Spikes","Sticky Web"].includes(move.name)||move.effect.toLowerCase().includes("entry hazard");
+}
+function moveIsDisableLock(move:Move):boolean{
+  return ["Disable","Encore","Taunt","Torment"].includes(move.name);
+}
+function moveIsCounter(move:Move):boolean{
+  return ["Counter","Mirror Coat","Metal Burst"].includes(move.name)||move.effect.toLowerCase().includes("late reaction 5");
+}
+function moveIsTwoTurn(move:Move):boolean{
+  return move.effect.toLowerCase().includes("two-turn")||
+         move.effect.toLowerCase().includes("digs underground")||
+         move.effect.toLowerCase().includes("flies up high")||
+         move.effect.toLowerCase().includes("bounces up")||
+         move.effect.toLowerCase().includes("dives underwater")||
+         move.effect.toLowerCase().includes("charges");
+}
+function moveIsMultiHit(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  return e.includes("hits twice")||e.includes("2 to 5")||e.includes("three times")||e.includes("consecutively");
+}
+function moveIsProtectScreen(move:Move):boolean{
+  return ["Reflect","Light Screen","Aurora Veil","Safeguard","Mist"].includes(move.name);
+}
+function moveIsCopyMove(move:Move):boolean{
+  return ["Copycat","Mirror Move","Me First","Mimic","Assist"].includes(move.name);
+}
+function moveIsWish(move:Move):boolean{
+  return move.name==="Wish";
+}
+function moveIsPerishSong(move:Move):boolean{
+  return move.name==="Perish Song";
+}
+function moveIsTrap(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  return e.includes("trap")&&e.includes("cannot switch")||["Wrap","Bind","Fire Spin","Whirlpool","Clamp","Sand Tomb","Infestation","Magma Storm"].includes(move.name);
+}
+function moveDrainsHP(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  return e.includes("drain")&&e.includes("user")||["Absorb","Mega Drain","Giga Drain","Leech Life","Draining Kiss","Oblivion Wing","Strength Sap","Horn Leech"].includes(move.name);
+}
+function moveIsGrudge(move:Move):boolean{
+  return move.name==="Grudge"||move.name==="Spite";
+}
+function moveIsTrickRoom(move:Move):boolean{
+  return move.name==="Trick Room"||move.name==="Magic Room"||move.name==="Wonder Room";
+}
+function moveIsForesight(move:Move):boolean{
+  return ["Foresight","Odor Sleuth","Miracle Eye"].includes(move.name);
+}
+function moveIsRolePlay(move:Move):boolean{return move.name==="Role Play";}
+function moveIsSkillSwap(move:Move):boolean{return move.name==="Skill Swap";}
+function moveIsEntrainment(move:Move):boolean{return move.name==="Entrainment";}
+function moveIsDoodle(move:Move):boolean{return move.name==="Doodle";}
+function moveSuppressesAbility(move:Move):boolean{return ["Simple Beam","Worry Seed","Gastro Acid"].includes(move.name);}
+function moveIsSoak(move:Move):boolean{return move.name==="Soak";}
+function moveIsTrickOrTreat(move:Move):boolean{return move.name==="Trick-Or-Treat";}
+function moveIsForestsCurse(move:Move):boolean{return move.name==="Forest's Curse";}
+function moveIsCamouflage(move:Move):boolean{return move.name==="Camouflage";}
+function moveSetsTerrain(move:Move):boolean{return ["Electric Terrain","Grassy Terrain","Misty Terrain","Psychic Terrain"].includes(move.name);}
+function moveIsTrick(move:Move):boolean{return ["Trick","Switcheroo"].includes(move.name);}
+function moveIsBestow(move:Move):boolean{return move.name==="Bestow";}
+function moveIsEmbargo(move:Move):boolean{return move.name==="Embargo";}
+function moveIsCorrosiveGas(move:Move):boolean{return move.name==="Corrosive Gas";}
+function moveIsBellyDrum(move:Move):boolean{return move.name==="Belly Drum";}
+function moveIsClangorousSoul(move:Move):boolean{return move.name==="Clangorous Soul";}
+function moveIsFilletAway(move:Move):boolean{return move.name==="Fillet Away";}
+function moveIsFollowMe(move:Move):boolean{return ["Follow Me","Spotlight","Rage Powder"].includes(move.name);}
+function moveIsAfterYou(move:Move):boolean{return move.name==="After You";}
+function moveIsAttract(move:Move):boolean{return move.name==="Attract";}
+function moveIsAcupressure(move:Move):boolean{return move.name==="Acupressure";}
+function moveIsCharge(move:Move):boolean{return move.name==="Charge";}
+
+function statAppliestoSelf(move:Move):boolean{
+  const e=move.effect.toLowerCase();
+  return e.includes("increase user")||e.includes("increase the user")||e.includes("raises user")||
+         e.includes("user's strength increase")||e.includes("user's def")||
+         moveTargetsSelf(move);
+}
+
+// ── Held Item helpers ────────────────────────────────────────────────────────
+function getHeldItem(entry:BattleEntry,trainers:any[]):string|null{
+  if(!entry.linkedTrainerId)return null;
+  const trainer=trainers.find(t=>t.id===entry.linkedTrainerId);
+  if(!trainer)return null;
+  // Look for items marked as held (category contains "Held" or explicit held slot)
+  const inv:any[]=trainer.inventory||[];
+  // Check if any item name matches a known hold item for this pokemon
+  const heldKeywords=["band","specs","scarf","orb","helmet","sash","vest","stone","eviolite","leftovers","sludge","berry","plate","drive","memory","silk scarf","black glasses","magnet","mystic water","charcoal","miracle seed","never-melt ice","soft sand","sharp beak","poison barb","twisted spoon","hard stone","spell tag","metal coat","dragon fang","black belt","pink bow","polkadot bow","silverpowder","wave incense","odd incense","rock incense","rose incense","full incense"];
+  for(const item of inv){
+    if(heldKeywords.some(k=>item.name.toLowerCase().includes(k))){
+      return item.name;
+    }
+  }
+  return null;
+}
+
+// ── Trainer Skill Defs ────────────────────────────────────────────────────────
+const TRAINER_SKILL_DEFS: Record<string,{attr:string;attr2?:string;desc:string;combat:string}> = {
+  brawl:     {attr:"strength",            desc:"Melee combat and wrestling.",           combat:"Roll STR + Brawl. Damage = successes − target VIT."},
+  channel:   {attr:"special",             desc:"Use devices, throw Pokéballs.",         combat:"Roll SPC + Channel. Used for catching or technical actions."},
+  clash:     {attr:"strength",attr2:"dexterity",desc:"Reaction — intercept an attack.",  combat:"Priority 6. Roll STR/DEX + Clash. Negate attack and deal STR dmg."},
+  evasion:   {attr:"dexterity",           desc:"Dodge incoming attacks.",               combat:"Priority 6. Roll DEX + Evasion vs attacker accuracy."},
+  alert:     {attr:"insight",             desc:"Detect threats, avoid surprise.",        combat:"Roll INS + Alert vs foe's stealth to detect ambush."},
+  athletic:  {attr:"strength",attr2:"dexterity",desc:"Running, climbing, swimming.",    combat:"Roll STR or DEX + Athletic for physical feats in combat."},
+  nature:    {attr:"insight",             desc:"Interact with wild Pokémon.",            combat:"Roll INS + Nature to calm or influence Pokémon."},
+  stealth:   {attr:"dexterity",           desc:"Move silently, set ambushes.",          combat:"Roll DEX + Stealth vs target Alert to set up a surprise."},
+  etiquette: {attr:"insight",             desc:"Social protocol and persuasion.",       combat:"Roll INS + Etiquette to negotiate or de-escalate."},
+  intimidate:{attr:"strength",            desc:"Frighten or coerce others.",            combat:"Roll STR + Intimidate. 3+ succ: target Flinches or −1 next roll."},
+  perform:   {attr:"special",             desc:"Entertain, distract, or dazzle.",       combat:"Roll SPC + Perform. Success: target −2 dice on next action."},
+  capture:   {attr:"special",attr2:"dexterity",desc:"Throw Pokéballs accurately.",      combat:"Roll SPC/DEX + Capture (Channel). Seal potency adds to success count."},
+};
+
+// ── Clash Section ─────────────────────────────────────────────────────────────
+function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilBonus,loyalty,happiness,onApplyDmg,onApplyEffect}:{
+  attacker:BattleEntry;targets:string[];allEntries:BattleEntry[];move:Move;
+  attrs:AttrSet;weather:WeatherData;stab:boolean;abilBonus:number;loyalty:number;happiness:number;
+  onApplyDmg:(id:string,dmg:number)=>void;
+  onApplyEffect?:(id:string,attr:string,amount:number,src:string,appliedBy?:string)=>void;
+}){
+  const [atkRoll,setAtkRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [defMoves,setDefMoves]=useState<Record<string,Move>>({});
+  const [defRolls,setDefRolls]=useState<Record<string,{rolls:number[];successes:number}>>({});
+  const [resolved,setResolved]=useState<string>("");
+
+  const doAtkRoll=()=>setAtkRoll(rollDice(calcAccPool(move,attrs,undefined,attacker.pokemonSkills)));
+  const pickDefMove=(tid:string,m:Move)=>{
+    setDefMoves(p=>({...p,[tid]:m}));
+    const t=allEntries.find(e=>e.id===tid);
+    if(t){const da=getEffectiveAttrs(t);setDefRolls(p=>({...p,[tid]:rollDice(calcAccPool(m,da,undefined,t.pokemonSkills))}));}
+  };
+  const resolve=()=>{
+    if(!atkRoll)return;
+    const lines:string[]=[];
+    targets.forEach(tid=>{
+      const t=allEntries.find(e=>e.id===tid);const dr=defRolls[tid];
+      if(!t||!dr)return;
+      if(atkRoll.successes>dr.successes){
+        const pool=calcDmgPool(move,attrs,weather,stab,abilBonus,loyalty,happiness);
+        const dmgR=rollDice(pool);
+        const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;
+        const finalDmg=Math.max(1,dmgR.successes-def);
+        onApplyDmg(tid,finalDmg);
+        // Auto-apply attacker's stat effects on clash win (e.g. Power-Up Punch +STR)
+        if(onApplyEffect){
+          const el=move.effect.toLowerCase();
+          if(el.includes("increase user")||el.includes("increase the user")||statAppliestoSelf(move)){
+            if(el.includes("strength")&&el.includes("increase"))onApplyEffect(attacker.id,"strength",1,move.name,attacker.nickname||attacker.pokemon.name);
+            if(el.includes("special")&&el.includes("increase"))onApplyEffect(attacker.id,"special",1,move.name,attacker.nickname||attacker.pokemon.name);
+            if(el.includes("defense")&&el.includes("increase")&&!el.includes("sp."))onApplyEffect(attacker.id,"vitality",1,move.name,attacker.nickname||attacker.pokemon.name);
+          }
+        }
+        lines.push(`✓ ${attacker.nickname||attacker.pokemon.name} wins (${atkRoll.successes} vs ${dr.successes}) — ${finalDmg} dmg applied to ${t.nickname||t.pokemon.name}`);
+      } else if(dr.successes>atkRoll.successes){
+        const dm=defMoves[tid];const defA=getEffectiveAttrs(t);
+        const pool=calcDmgPool(dm,defA,weather,t.pokemon.types.includes(dm.type as PokemonType),0,t.loyalty,t.happiness);
+        const dmgR=rollDice(pool);
+        const def=dm.category==="Physical"?attacker.attrs.vitality:attacker.attrs.insight;
+        const finalDmg=Math.max(1,dmgR.successes-def);
+        onApplyDmg(attacker.id,finalDmg);
+        lines.push(`✗ ${t.nickname||t.pokemon.name} wins Clash (${dr.successes} vs ${atkRoll.successes}) — ${finalDmg} dmg applied to ${attacker.nickname||attacker.pokemon.name}`);
+      } else lines.push(`⚖ Tie (${atkRoll.successes} vs ${dr.successes}) — no damage`);
+    });
+    setResolved(lines.join("\n"));
+  };
+
+  return(
+    <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:6,padding:"10px 12px"}}>
+      <div style={{fontSize:11,fontWeight:700,color:"#00d4aa",marginBottom:6}}>⚡ Clash Resolution (Priority 6)</div>
+      <div style={{fontSize:10,color:"#8b90a8",marginBottom:10,lineHeight:1.5}}>Both sides roll their chosen move's accuracy simultaneously. Highest successes wins — winner deals full damage. Tie = no damage.</div>
+      <div style={{marginBottom:10}}>
+        <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>Attacker: {attacker.nickname||attacker.pokemon.name} — {move.name} ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button onClick={doAtkRoll} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:"#6890f0",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Attacker ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</button>
+          {atkRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{atkRoll.rolls.join(",")}] = <span style={{color:"#6890f0"}}>{atkRoll.successes} hits</span></span>}
+        </div>
+      </div>
+      {targets.map(tid=>{
+        const t=allEntries.find(e=>e.id===tid);if(!t)return null;
+        const dm=defMoves[tid];const dr=defRolls[tid];
+        return(
+          <div key={tid} style={{background:"#13151f",borderRadius:5,padding:"8px 10px",marginBottom:8}}>
+            <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:6}}>Defender: {t.nickname||t.pokemon.name} — pick counter move</div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
+              {t.moves.map((m,i)=><button key={i} onClick={()=>pickDefMove(tid,m)} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:4,border:`1px solid ${dm?.name===m.name?"#ff4757":"#3a4060"}`,background:dm?.name===m.name?"rgba(255,71,87,0.15)":"#1e2235",cursor:"pointer",fontSize:10}}>
+                <TypeBadge type={m.type as PokemonType} small/>{m.name}
+              </button>)}
+              {t.moves.length===0&&<span style={{fontSize:10,color:"#5a6080",fontStyle:"italic"}}>No moves in tracker</span>}
+            </div>
+            {dm&&dr&&<div style={{fontSize:11,color:"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{t.nickname||t.pokemon.name}: [{dr.rolls.join(",")}] = {dr.successes} hits with {dm.name}</div>}
+          </div>
+        );
+      })}
+      {atkRoll&&Object.keys(defRolls).length>0&&!resolved&&(
+        <button onClick={resolve} style={{width:"100%",background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>⚡ Resolve Clash & Apply Damage</button>
+      )}
+      {resolved&&<div style={{background:"#13151f",borderRadius:4,padding:"8px 10px",fontSize:11,color:"#e8eaf0",whiteSpace:"pre-line",lineHeight:1.6}}>{resolved}</div>}
+    </div>
+  );
+}
+
+// ── Trainer Skill Popup ───────────────────────────────────────────────────────
+function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:any;entry:BattleEntry;allEntries:BattleEntry[];onClose:()=>void;}){
+  const [selSkill,setSelSkill]=useState<string|null>(null);
+  const [targets,setTargets]=useState<string[]>([]);
+  const [roll,setRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [brawlDmg,setBrawlDmg]=useState<{rolls:number[];successes:number}|null>(null);
+  const attrs=trainerData?.attributes||{strength:1,dexterity:1,vitality:1,insight:1};
+  const skills=trainerData?.skills||{};
+  const actReq=[1,2,3,4,5][Math.min(entry.actionCount,4)];
+  const def=selSkill?TRAINER_SKILL_DEFS[selSkill]:null;
+  const av=(k:string)=>(attrs as any)[k]??1;
+  const pool=def?av(def.attr)+(skills[selSkill!]||0):0;
+  const others=allEntries.filter(e=>e.id!==entry.id&&e.currentHp>0);
+  const combatSkills=["brawl","clash","evasion","intimidate","channel","capture"];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
+      <div style={{background:"#1e2235",border:"1px solid #3d8bff40",borderRadius:10,width:490,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+        <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:18}}>👤</span>
+          <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#3d8bff",margin:0,flex:1}}>{trainerData?.name||"Trainer"} — Skill Action</h3>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        <div style={{padding:16,overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {[["STR","strength"],["DEX","dexterity"],["VIT","vitality"],["INS","insight"]].map(([l,k])=><div key={k} style={{textAlign:"center"}}><div style={{fontSize:9,color:"#5a6080"}}>{l}</div><div style={{fontSize:16,fontFamily:"'Exo 2'",fontWeight:700,color:"#3d8bff"}}>{av(k)}</div></div>)}
+          </div>
+          {entry.actionCount>0&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.3)",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757"}}>Action #{entry.actionCount+1} — needs {actReq}+ to succeed</div>}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+            {Object.entries(TRAINER_SKILL_DEFS).map(([sk,d])=>{const sv=skills[sk]||0;const a=av(d.attr);const active=selSkill===sk;return(
+              <button key={sk} onClick={()=>{setSelSkill(sk);setRoll(null);setBrawlDmg(null);setTargets([]);}} style={{display:"flex",gap:8,padding:"8px 10px",borderRadius:5,cursor:"pointer",border:`1px solid ${active?"#3d8bff":"#2a2f45"}`,background:active?"rgba(61,139,255,0.12)":"#13151f",textAlign:"left"}}>
+                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:active?"#3d8bff":"#e8eaf0",textTransform:"capitalize"}}>{sk}</div><div style={{fontSize:9,color:"#5a6080"}}>{d.attr.slice(0,3).toUpperCase()} {a} + {sv} = {a+sv}d</div></div>
+                <div style={{fontSize:14,fontFamily:"'Exo 2'",fontWeight:800,color:active?"#3d8bff":"#5a6080"}}>{a+sv}</div>
+              </button>
+            );})}
+          </div>
+          {selSkill&&def&&<>
+            <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px"}}>
+              <div style={{fontSize:12,color:"#e8eaf0",marginBottom:4}}>{def.desc}</div>
+              <div style={{fontSize:11,color:"#8b90a8",lineHeight:1.5}}><strong style={{color:"#5a6080"}}>Combat: </strong>{def.combat}</div>
+              <div style={{fontSize:11,color:"#3d8bff",marginTop:5}}>Pool: {def.attr} ({av(def.attr)}){def.attr2?<span> or {def.attr2} ({av(def.attr2)})</span>:null} + {selSkill} ({skills[selSkill]||0}) = <strong>{pool}d</strong></div>
+            </div>
+            {combatSkills.includes(selSkill)&&<div>
+              <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Target</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {others.map(t=><button key={t.id} onClick={()=>setTargets(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:targets.includes(t.id)?"#e8eaf0":"#8b90a8"}}>{t.nickname||t.pokemon.name} ({t.currentHp}/{t.maxHp})</button>)}
+              </div>
+            </div>}
+            <div>
+              <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Roll {selSkill} ({pool}d) · Need {actReq}+</div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setRoll(rollDice(pool))} style={{background:"#3d8bff20",border:"1px solid #3d8bff60",borderRadius:4,color:"#3d8bff",padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({pool}d)</button>
+                {roll&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>[{roll.rolls.join(",")}]={roll.successes} {roll.successes>=actReq?"✓ Success":"✗ Fail"}</span>}
+              </div>
+            </div>
+            {roll&&roll.successes>=actReq&&selSkill==="brawl"&&targets.length>0&&(
+              <div style={{background:"#13151f",borderRadius:5,padding:"10px 12px"}}>
+                <div style={{fontSize:11,color:"#e8eaf0",fontWeight:700,marginBottom:6}}>Damage (STR {av("strength")}d vs target VIT)</div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <button onClick={()=>setBrawlDmg(rollDice(av("strength")))} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:"#f08030",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Damage</button>
+                  {brawlDmg&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{brawlDmg.rolls.join(",")}]={brawlDmg.successes}</span>}
+                </div>
+                {brawlDmg&&targets.length>0&&(()=>{const t=allEntries.find(e=>e.id===targets[0]);const def2=t?.attrs.vitality??1;const dmg=Math.max(1,brawlDmg.successes-def2);return t?<div style={{fontSize:11,color:"#8b90a8",marginTop:5}}>{brawlDmg.successes} − {def2} DEF = <strong style={{color:"#ff4757"}}>{dmg} damage</strong></div>:null;})()}
+              </div>
+            )}
+          </>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Draggable Popup Hook ─────────────────────────────────────────────────────
+function useDraggablePopup():{pos:{x:number;y:number};handlers:{onMouseDown:(e:React.MouseEvent)=>void}}{
+  const [pos,setPos]=React.useState({x:0,y:0});
+  const dragging=React.useRef(false);
+  const start=React.useRef({mx:0,my:0,px:0,py:0});
+  const onMouseDown=(e:React.MouseEvent)=>{
+    if((e.target as HTMLElement).closest("button,input,select,textarea"))return;
+    dragging.current=true;
+    start.current={mx:e.clientX,my:e.clientY,px:pos.x,py:pos.y};
+    const onMove=(ev:MouseEvent)=>{if(!dragging.current)return;setPos({x:start.current.px+(ev.clientX-start.current.mx),y:start.current.py+(ev.clientY-start.current.my)});};
+    const onUp=()=>{dragging.current=false;window.removeEventListener("mousemove",onMove);window.removeEventListener("mouseup",onUp);};
+    window.addEventListener("mousemove",onMove);
+    window.addEventListener("mouseup",onUp);
+  };
+  return{pos,handlers:{onMouseDown}};
+}
+
+// ── Move Popup ────────────────────────────────────────────────────────────────
+function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial,onEndTurn,fromPriorityPhase}:{
+  move:Move;attacker:BattleEntry;allEntries:BattleEntry[];weather:WeatherData;
+  onClose:()=>void;onApplyDmg:(id:string,dmg:number)=>void;
+  onApplyEffect:(id:string,attr:string,amount:number,src:string,appliedBy?:string)=>void;
+  onIncrementAction:(id:string,isReaction?:boolean)=>void;
+  onSpendWP:(id:string,amount:number)=>void;
+  onApplySpecial?:(id:string,u:Partial<BattleEntry>)=>void;
+  onEndTurn?:()=>void;
+  fromPriorityPhase?:boolean;
+}){
+  const {pos:popupPos,handlers:popupHandlers}=useDraggablePopup();
+  const [targets,setTargets]=useState<string[]>(()=>{
+    if(moveTargetsSelf(move)&&!moveSelfDestructsAll(move)&&!moveIsTransform(move))return[attacker.id];
+    return[];
+  });
+  const [accResult,setAccResult]=useState<{rolls:number[];successes:number}|null>(null);
+  const [dmgResults,setDmgResults]=useState<Record<string,{rolls:number[];successes:number}>>({});
+  const [applied,setApplied]=useState<Set<string>>(new Set());
+  // Defender reactions: each target can choose Clash or Evasion as their reaction
+  const [defReactions,setDefReactions]=useState<Record<string,{type:"clash"|"evasion";move?:Move;roll?:{rolls:number[];successes:number};atkRoll?:{rolls:number[];successes:number};resolved?:boolean;clashOutcome?:"attackerWins"|"defenderWins"|"tie";clashDmgRoll?:{rolls:number[];successes:number}}>>({});
+  const isPriority=fromPriorityPhase===true;
+  const isSubstitute=move.name==="Substitute"||move.effect.toLowerCase().includes("substitute");
+  const isProtectMove=move.name==="Protect"||move.name==="Detect"||move.name==="King's Shield"||move.name==="Spiky Shield"||move.effect.toLowerCase().includes("user protects itself");
+  const weatherSet=moveSetsWeather(move);
+  const hasRecoil=moveHasRecoil(move);
+  const isStatsReset=moveIsStatsReset(move);
+  const isEntryHazard=moveIsEntryHazard(move);
+  const isDisableLock=moveIsDisableLock(move);
+  const isCounter=moveIsCounter(move);
+  const isTwoTurn=moveIsTwoTurn(move);
+  const isMultiHit=moveIsMultiHit(move);
+  const isProtectScreen=moveIsProtectScreen(move);
+  const isCopyMove=moveIsCopyMove(move);
+  const isWish=moveIsWish(move);
+  const isPerishSong=moveIsPerishSong(move);
+  const isTrap=moveIsTrap(move);
+  const drains=moveDrainsHP(move);
+  const isGrudge=moveIsGrudge(move);
+  const isTrickRoom=moveIsTrickRoom(move);
+  const isForesight=moveIsForesight(move);
+  const isRolePlay=moveIsRolePlay(move);
+  const isSkillSwap=moveIsSkillSwap(move);
+  const isEntrainment=moveIsEntrainment(move);
+  const isDoodle=moveIsDoodle(move);
+  const isSuppressAbility=moveSuppressesAbility(move);
+  const isSoak=moveIsSoak(move);
+  const isTrickOrTreat=moveIsTrickOrTreat(move);
+  const isForestsCurse=moveIsForestsCurse(move);
+  const isCamouflage=moveIsCamouflage(move);
+  const isTerrainMove=moveSetsTerrain(move);
+  const isTrick=moveIsTrick(move);
+  const isBestow=moveIsBestow(move);
+  const isEmbargo=moveIsEmbargo(move);
+  const isCorrosiveGas=moveIsCorrosiveGas(move);
+  const isBellyDrum=moveIsBellyDrum(move);
+  const isClangorousSoul=moveIsClangorousSoul(move);
+  const isFilletAway=moveIsFilletAway(move);
+  const isFollowMe=moveIsFollowMe(move);
+  const isAfterYou=moveIsAfterYou(move);
+  const isAttract=moveIsAttract(move);
+  const isAcupressure=moveIsAcupressure(move);
+  const isCharge=moveIsCharge(move);
+  const [acupressureResult,setAcupressureResult]=useState<string|null>(null);
+  const [heldItemInputA,setHeldItemInputA]=useState<string>(attacker.heldItem||"");
+  const [preRollDone,setPreRollDone]=useState<{canAct:boolean;detail:string}|null>(
+    primaryStatus(attacker)==="Flinched"?{canAct:false,detail:"Flinched — cannot act this turn."}:
+    !(STATUS_CONDITIONS[primaryStatus(attacker)]?.requiresRollToAct)?{canAct:true,detail:""}:null
+  );
+  const [loyaltyRoll,setLoyaltyRoll]=useState<{rolls:number[];successes:number}|null>(null);
+
+  const attrs=getEffectiveAttrs(attacker);
+  const attackerPain=getPainPenalty(attacker.currentHp,attacker.maxHp);
+  const stab=attacker.pokemon.types.includes(move.type as PokemonType);
+  const actReq=[1,2,3,4,5][Math.min(attacker.actionCount,4)];
+  const abilMods=calcAbilityBonus(attacker,move,weather);
+  const accPool=calcAccPool(move,attrs,weather,attacker.pokemonSkills);
+  const canAct=preRollDone?.canAct??false;
+
+  // Disobedience: ONLY for player side, and never blocks rolls — just a warning
+  const isPlayer=attacker.side==="player";
+  const disobedience=isPlayer?getDisobedienceLevel(attacker.pokemon.suggestedRank,attacker.trainerRank):"none";
+
+  // Target detection
+  const selfTarget=moveTargetsSelf(move);
+  const selfDestruct=moveSelfDestructsAll(move);
+  const aoeMove=isMoveAOE(move);
+  const isAOE=aoeMove||selfDestruct;
+  const isClash=(move.name==="Clash"||(move.priority??0)>=6)&&!selfTarget&&!selfDestruct;
+  const isTransformMove=moveIsTransform(move);
+  const isReflectType=moveIsReflectType(move);
+  const isMetronome=moveIsMetronome(move);
+  const isBatonPass=moveIsBatonPass(move);
+  const isImprison=moveIsImprison(move);
+  const isPowerSplit=movePowerSplit(move);
+  const isPowerSwap=movePowerSwap(move);
+  const healsUser=moveHealsSelf(move);
+  const healsTarget=moveHealsTarget(move);
+  const statusEffect=moveAppliesStatus(move);
+  const userFaints=moveUserFaints(move);
+
+  // Target options
+  const others=allEntries.filter(e=>e.id!==attacker.id&&e.currentHp>0);
+  const allCombatants=[attacker,...others];
+  // Transform needs to pick a pokemon to copy — shows all entries
+  const targetOptions=isTransformMove ? others
+    : selfTarget ? [attacker,...(selfDestruct?others:[])]
+    : isAOE ? others  // AOE: multi-select from others (+ self if self-destruct)
+    : others;
+
+  // Pool breakdown
+  const accBreakdown=(()=>{
+    const acc=move.accuracy.toLowerCase();const parts:string[]=[];
+    if(acc.includes("strength"))parts.push(`STR ${attrs.strength}`);
+    if(acc.includes("dexterity"))parts.push(`DEX ${attrs.dexterity}`);
+    if(acc.includes("special"))parts.push(`SPC ${attrs.special}`);
+    if(acc.includes("insight"))parts.push(`INS ${attrs.insight}`);
+    if(acc.includes("vitality"))parts.push(`VIT ${attrs.vitality}`);
+    const sk=acc.includes("brawl")?"Brawl":acc.includes("athletic")?"Athletic":acc.includes("channel")?"Channel":acc.includes("perform")?"Perform":acc.includes("clash")?"Clash":acc.includes("alert")?"Alert":acc.includes("intimidate")?"Intimidate":acc.includes("stealth")?"Stealth":acc.includes("nature")?"Nature":"Skill";
+    const skKey=sk.toLowerCase() as keyof PokemonSkills;
+    const sv=attacker.pokemonSkills?.[skKey]||((acc.includes("brawl")||acc.includes("athletic")||acc.includes("channel")||acc.includes("perform")||acc.includes("clash"))?2:1);
+    parts.push(`${sk} ${sv}`);
+    const statusPen=STATUS_CONDITIONS[primaryStatus(attacker)]?.accuracyPenalty??0;
+    if(statusPen>0)parts.push(`${primaryStatus(attacker)} −${statusPen}`);
+    if(attackerPain>0)parts.push(`Pain −${attackerPain}`);
+    if(weather.accuracyPenalty&&weather.accuracyPenalty>0)parts.push(`${weather.name} −${weather.accuracyPenalty}`);
+    return parts.join(" + ");
+  })();
+
+  // Loyalty/happiness in pool
+  const loyaltyInPool=move.power.toLowerCase().includes("loyalty")||move.damagePool.toLowerCase().includes("loyalty");
+  const happinessInPool=move.power.toLowerCase().includes("happiness")||move.damagePool.toLowerCase().includes("happiness");
+  const chargeBonus=(attacker.chargeActive&&move.type==="Electric")?2:0;
+  const dmgPool=calcDmgPool(move,attrs,weather,stab,abilMods.bonus,attacker.loyalty,attacker.happiness)+chargeBonus;
+  const dmgBreakdown=(()=>{const dmg=move.damagePool.toLowerCase();const parts:string[]=[];if(dmg.includes("strength"))parts.push(`STR ${attrs.strength}`);if(dmg.includes("special"))parts.push(`SPC ${attrs.special}`);const pm=move.power.match(/(\d+)/);if(pm&&!move.power.toLowerCase().includes("loyalty")&&!move.power.toLowerCase().includes("happiness"))parts.push(`Power ${pm[1]}`);if(stab)parts.push("STAB +1");if(abilMods.bonus!==0)parts.push(`Ability ${abilMods.bonus>0?"+":""}${abilMods.bonus}`);if(attackerPain>0)parts.push(`Pain −${attackerPain}`);if(chargeBonus>0)parts.push("⚡ Charge +2");return parts.join(" + ");})();
+
+  const toggleTarget=(id:string)=>{
+    if(isAOE||isTransformMove){
+      setTargets(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+    } else {
+      setTargets([id]);
+    }
+  };
+  // Pre-select all for AOE moves
+  const selectAllTargets=()=>setTargets(targetOptions.map(e=>e.id));
+
+  const doPreRoll=()=>{
+    const s=primaryStatus(attacker);
+    if(s==="Asleep"||s==="Frozen"){const r=Math.floor(Math.random()*6)+1;const ok=s==="Asleep"?r>=4:r>=5;const woke=s==="Asleep"?"Woke up":"Thawed";setPreRollDone({canAct:ok,detail:"Rolled "+r+" — "+(ok?"✓ "+woke+"!":"✗ Still "+s+".")});}
+    else if(s==="Paralyzed"){const r=Math.floor(Math.random()*6)+1;setPreRollDone({canAct:r>=3,detail:`Paralysis: ${r} — ${r>=3?"✓ Can act (−2 acc).":"✗ Cannot act."}`});}
+    else if(s==="Confused"){const r=Math.floor(Math.random()*6)+1;setPreRollDone({canAct:r>=4,detail:`Confusion: ${r} — ${r>=4?"✓ Acts normally.":"✗ Hits itself!"}`});}
+    else if(s==="Infatuated"){const res=rollDice(attacker.currentWill);setPreRollDone({canAct:res.successes>=2,detail:`WP [${res.rolls.join(",")}]=${res.successes} — ${res.successes>=2?"✓ Can act.":"✗ Distracted!"}`});}
+  };
+  const doDmg=(tid:string)=>setDmgResults(p=>({...p,[tid]:rollDice(dmgPool)}));
+  const applyDmg=(tid:string)=>{
+    const isSelf=tid===attacker.id;
+    const t=isSelf?attacker:allEntries.find(e=>e.id===tid);
+    const dr=dmgResults[tid];if(!t||!dr)return;
+    if(isSelf){onApplyDmg(tid,dr.successes);setApplied(p=>new Set([...p,tid]));return;}
+    const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);
+    if(tm.mod===-999){alert(`${t.nickname||t.pokemon.name} is immune!`);return;}
+    const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;
+    let succ=Math.max(1,dr.successes);
+    const brutalBonus2=dr.rolls.filter(r=>r===6).length>=2?2:0;
+    const rawDmg=Math.max(1,succ-def);
+    const typeAdj=tm.mod===2?rawDmg+2:tm.mod===-1?Math.max(1,rawDmg-2):rawDmg;
+    const finalDmg=typeAdj+brutalBonus2;
+    onApplyDmg(tid,finalDmg);setApplied(p=>new Set([...p,tid]));
+    // Happiness drop when target is in pain
+    const defPainPenalty=getPainPenalty(t.currentHp,t.maxHp);
+    if(defPainPenalty>0&&onApplySpecial){
+      const isSE=tm.mod===2;const isBrutal=brutalBonus2>0;
+      const fainted=t.currentHp-finalDmg<=0;
+      const happinessDrop=(isSE||isBrutal)?2:1;
+      const totalHappinessDrop=happinessDrop+(fainted?1:0);
+      const newHappiness=(t.happiness??5)-totalHappinessDrop;
+      const loyaltyOverflow=newHappiness<0?Math.abs(newHappiness):0;
+      onApplySpecial(tid,{happiness:Math.max(0,newHappiness),loyalty:loyaltyOverflow>0?Math.max(0,(t.loyalty??5)-loyaltyOverflow):t.loyalty});
+    }
+    // If target had an unresolved evasion reaction that failed, spend their WP and mark resolved
+    const evasReact=defReactions[tid];
+    if(evasReact?.type==="evasion"&&!evasReact.resolved){
+      const atkSucc=accResult?.successes??evasReact.atkRoll?.successes??0;
+      const defSucc=evasReact.roll?.successes??0;
+      if(defSucc<atkSucc){onSpendWP(tid,1);onIncrementAction(tid,true);setDefReactions(p=>({...p,[tid]:{...p[tid],resolved:true}}));}
+    }
+    onSpendWP(attacker.id,1);onIncrementAction(attacker.id,isPriority);
+    // Clear charge after Electric move fires
+    if(chargeBonus>0&&onApplySpecial)onApplySpecial(attacker.id,{chargeActive:false});
+    if(!selfDestruct)onClose();
+  };
+
+  // Stat effects — each has a toSelf flag: true=applies to attacker, false=applies to target(s)
+  const statFx:{attr:string;amount:number;label:string;toSelf:boolean}[]=[];
+  const el=move.effect.toLowerCase();
+  const selfApply=statAppliestoSelf(move);
+  // Debuffs on foe
+  if((el.includes("reduce")&&el.includes("strength"))||(el.includes("lower")&&el.includes("strength"))||(el.includes("strength")&&el.includes("by 1")&&!el.includes("increase")))statFx.push({attr:"strength",amount:-1,label:"Str −1",toSelf:false});
+  if((el.includes("reduce")&&el.includes("defense")&&!el.includes("sp."))||(el.includes("defense")&&el.includes("by 1")&&!el.includes("sp.")&&!el.includes("increase")))statFx.push({attr:"vitality",amount:-1,label:"Def −1",toSelf:false});
+  if((el.includes("reduce")&&el.includes("sp. def"))||(el.includes("sp. def")&&el.includes("by 1")))statFx.push({attr:"insight",amount:-1,label:"Sp.Def −1",toSelf:false});
+  // Accuracy/Evasion debuffs on foe (Smokescreen, Flash, Sand Attack)
+  if((el.includes("accuracy")&&(el.includes("reduce")||el.includes("lower")||el.includes("decrease")))||(el.includes("accuracy")&&el.includes("by 1")))statFx.push({attr:"dexterity",amount:-1,label:"Acc −1 (DEX)",toSelf:false});
+  if(el.includes("evasion")&&(el.includes("raise")||el.includes("increase")||el.includes("double evasion")))statFx.push({attr:"dexterity",amount:1,label:"Evasion +1",toSelf:true});
+  // Self-buffs (Harden=Def+1, Swords Dance=Str+2, etc.)
+  if(el.includes("increase")&&(el.includes("defense")||el.includes("vitality"))&&!el.includes("sp.")&&!el.includes("lower"))statFx.push({attr:"vitality",amount:1,label:"Def +1",toSelf:true});
+  if(el.includes("increase")&&el.includes("strength")&&!el.includes("lower"))statFx.push({attr:"strength",amount:1,label:"Str +1",toSelf:selfApply});
+  if(el.includes("increase")&&el.includes("dexterity")&&!el.includes("lower"))statFx.push({attr:"dexterity",amount:1,label:"Dex +1",toSelf:true});
+  if(el.includes("increase")&&el.includes("special")&&!el.includes("lower"))statFx.push({attr:"special",amount:1,label:"Spc +1",toSelf:selfApply});
+  if(el.includes("increase")&&el.includes("sp. def")&&!el.includes("lower"))statFx.push({attr:"insight",amount:1,label:"Sp.Def +1",toSelf:true});
+  if(el.includes("increase")&&el.includes("evasion")&&!el.includes("lower"))statFx.push({attr:"dexterity",amount:1,label:"Evasion +1",toSelf:true});
+  // Heal (HP restore)
+  const isHeal=healsUser||healsTarget;
+  const healAmount=attacker.maxHp-attacker.currentHp; // restore to full by default
+  // Status inflict
+  const statusToInflict=statusEffect;
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
+      <div {...popupHandlers} style={{background:"#1e2235",border:"1px solid #3a4060",borderRadius:10,width:520,maxWidth:"95vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)",transform:`translate(${popupPos.x}px,${popupPos.y}px)`,cursor:"default",userSelect:"none"}}>
+        <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",gap:8,flexShrink:0,cursor:"move"}}>
+          <TypeBadge type={move.type as PokemonType}/>
+          <span style={{fontSize:11,fontWeight:700,color:move.category==="Physical"?"#f08030":move.category==="Special"?"#6890f0":"#78c850",background:move.category==="Physical"?"rgba(240,128,48,0.15)":move.category==="Special"?"rgba(104,144,240,0.15)":"rgba(120,200,80,0.15)",padding:"2px 7px",borderRadius:3}}>{move.category}</span>
+          {stab&&<span style={{fontSize:9,color:"#ffd32a",background:"rgba(255,211,42,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>STAB +1</span>}
+          {(move.priority??0)>0&&<span style={{fontSize:9,color:"#00d4aa",background:"rgba(0,212,170,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY {move.priority}</span>}
+          {selfTarget&&<span style={{fontSize:9,color:"#a040a0",background:"rgba(160,64,160,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>TARGET: SELF</span>}
+          {selfDestruct&&<span style={{fontSize:9,color:"#ff4757",background:"rgba(255,71,87,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SELF-DESTRUCT</span>}
+          <h3 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:16,color:"#e8eaf0",margin:0,flex:1}}>{move.name}</h3>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        <div style={{padding:14,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,flex:1}}>
+          <p style={{fontSize:12,color:"#8b90a8",lineHeight:1.5,margin:0}}>{move.description}</p>
+          <div style={{background:"#13151f",borderRadius:5,padding:"7px 10px",fontSize:11,color:"#e8eaf0"}}><strong style={{color:"#5a6080"}}>Effect: </strong>{move.effect}</div>
+
+          {/* Loyalty/Happiness pool info */}
+          {(loyaltyInPool||happinessInPool)&&(
+            <div style={{background:"rgba(255,211,42,0.08)",border:"1px solid rgba(255,211,42,0.3)",borderRadius:5,padding:"8px 10px"}}>
+              <div style={{fontSize:10,color:"#ffd32a",fontWeight:700,marginBottom:3}}>❤ Loyalty/Happiness Move</div>
+              <div style={{fontSize:11,color:"#8b90a8"}}>
+                Power formula: {move.power} → {loyaltyInPool?`Loyalty (${attacker.loyalty}) `:""}{happinessInPool?`Happiness (${attacker.happiness})`:""}
+              </div>
+              <div style={{fontSize:11,color:"#ffd32a",fontWeight:700,marginTop:3}}>Damage pool = {dmgPool}d</div>
+              {dmgBreakdown&&<div style={{fontSize:9,color:"#5a6080",marginTop:1}}>{dmgBreakdown}</div>}
+            </div>
+          )}
+
+          {/* Ability modifiers */}
+          {(abilMods.bonus>0||abilMods.reasons.length>0)&&<div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa20",borderRadius:5,padding:"8px 10px"}}><div style={{fontSize:10,color:"#00d4aa",fontWeight:700,marginBottom:4}}>Active Ability Modifiers</div>{abilMods.reasons.map((r,i)=><div key={i} style={{fontSize:10,color:"#8b90a8"}}>✦ {r}</div>)}{abilMods.bonus>0&&<div style={{fontSize:11,color:"#00d4aa",fontWeight:700,marginTop:3}}>+{abilMods.bonus} dice to damage pool</div>}</div>}
+
+          {/* Weather */}
+          {(weather.typeBoost===move.type||weather.typeWeaken===move.type)&&<div style={{background:"rgba(255,211,42,0.08)",border:"1px solid rgba(255,211,42,0.3)",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ffd32a"}}>{weather.emoji?.split(" ")[0]} {weather.name}: {weather.typeBoost===move.type?`+${weather.typeBoostDice}d`:`−${weather.typeWeakenDice}d`}</div>}
+          {attacker.isTerastallized&&<div style={{background:"rgba(160,64,160,0.08)",border:"1px solid #a040a040",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#a040a0"}}>💎 Tera ({attacker.teraType}): {!attacker.teraFirstMoveBonusUsed?<span>First-move bonus: <strong>+{attacker.pokemon.types.includes(move.type)?3:2} dice</strong> (click Mark in card)</span>:<span>+1 die to all moves</span>}</div>}
+          {attacker.isDynamaxed&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475740",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757"}}>💫 Max Move: +2 Accuracy and Damage dice. Cannot be Evaded or Clashed.</div>}
+
+          {/* Action penalty */}
+          {attacker.actionCount>0&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.3)",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757"}}>Action #{attacker.actionCount+1} — needs {actReq}+</div>}
+
+          {/* Disobedience — WARNING ONLY, never blocks rolls */}
+          {disobedience!=="none"&&(
+            <div style={{background:disobedience==="high"?"rgba(255,71,87,0.1)":"rgba(255,211,42,0.08)",border:`1px solid ${disobedience==="high"?"#ff475740":"#ffd32a40"}`,borderRadius:4,padding:"8px 10px"}}>
+              <div style={{fontWeight:700,color:disobedience==="high"?"#ff4757":"#ffd32a",fontSize:11,marginBottom:4}}>
+                {disobedience==="high"?"⚠ High Disobedience":"⚠ Low Disobedience"}
+                <span style={{fontSize:9,color:"#8b90a8",fontWeight:400,marginLeft:6}}>(rolls are still available — GM decides if action proceeds)</span>
+              </div>
+              {disobedience==="low"&&<div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setLoyaltyRoll(rollDice(attacker.loyalty||1))} style={{background:"rgba(255,211,42,0.15)",border:"1px solid #ffd32a40",borderRadius:4,color:"#ffd32a",padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Loyalty ({attacker.loyalty||1}d, need 3+)</button>
+                {loyaltyRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:loyaltyRoll.successes>=3?"#00d4aa":"#ff4757"}}>[{loyaltyRoll.rolls.join(",")}]={loyaltyRoll.successes} {loyaltyRoll.successes>=3?"✓":"✗"}</span>}
+              </div>}
+            </div>
+          )}
+
+          {/* Status pre-check */}
+          {primaryStatus(attacker)!=="Healthy"&&primaryStatus(attacker)!=="Flinched"&&(STATUS_CONDITIONS[primaryStatus(attacker)]?.requiresRollToAct)&&(
+            <div style={{background:"rgba(168,64,160,0.1)",border:"1px solid #a040a040",borderRadius:4,padding:"8px 10px"}}>
+              <div style={{fontSize:11,fontWeight:700,color:STATUS_CONDITIONS[primaryStatus(attacker)]?.color,marginBottom:4}}>{primaryStatus(attacker)}</div>
+              <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>{STATUS_CONDITIONS[primaryStatus(attacker)]?.rollToActDesc}</div>
+              <button onClick={doPreRoll} style={{background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",borderRadius:4,color:"#a040a0",padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Pre-Action Check</button>
+              {preRollDone&&<div style={{fontSize:12,fontWeight:700,color:preRollDone.canAct?"#00d4aa":"#ff4757",marginBottom:preRollDone.canAct?0:8}}>{preRollDone.detail}</div>}
+              {preRollDone&&!preRollDone.canAct&&<button onClick={()=>{onIncrementAction(attacker.id,isPriority);onClose();if(onEndTurn)onEndTurn();}} style={{background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>⏭ End Turn</button>}
+            </div>
+          )}
+          {primaryStatus(attacker)==="Flinched"&&<div style={{background:"rgba(192,192,208,0.1)",border:"1px solid #c0c0d040",borderRadius:4,padding:"6px 10px",fontSize:11,color:"#c0c0d0"}}>Flinched — cannot act this turn (clears at end of turn)</div>}
+
+          {/* Target selector */}
+          {canAct&&(
+            <div>
+              <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>
+                {isTransformMove?"Select Pokémon to Transform into":selfDestruct?"Select Targets (all take damage — incl. self)":isAOE?"Select Targets (multi-target)":selfTarget?"Target: Self (auto)":"Select Target"}
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {(isAOE||selfDestruct)&&<button onClick={selectAllTargets} style={{padding:"4px 8px",borderRadius:4,fontSize:10,cursor:"pointer",border:"1px solid #ff4757",background:"rgba(255,71,87,0.15)",color:"#ff4757",fontWeight:700}}>☑ Select All</button>}
+                {selfTarget&&!isTransformMove&&targets.length===0&&(
+                  <button onClick={()=>setTargets([attacker.id])} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid #a040a0",background:"rgba(160,64,160,0.15)",color:"#e8eaf0"}}>
+                    ✓ {attacker.nickname||attacker.pokemon.name} (Self)
+                  </button>
+                )}
+                {targetOptions.map(t=>{
+                  const isSelf=t.id===attacker.id;
+                  const sel=targets.includes(t.id);
+                  return<button key={t.id} onClick={()=>toggleTarget(t.id)} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${sel?(isSelf?"#a040a0":TYPE_COLORS[t.pokemon.types[0]]):"#3a4060"}`,background:sel?(isSelf?"rgba(160,64,160,0.2)":TYPE_COLORS[t.pokemon.types[0]]+"20"):"transparent",color:sel?"#e8eaf0":"#8b90a8"}}>
+                    {isSelf?"(Self) ":""}{t.nickname||t.pokemon.name} ({t.currentHp}/{t.maxHp})
+                  </button>;
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Protect warning */}
+          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||!t.isProtected)return null;return<div key={`prot-${tid}`} style={{background:"rgba(104,144,240,0.1)",border:"1px solid #6890f040",borderRadius:4,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#6890f0"}}>🛡 {t.nickname||t.pokemon.name} is PROTECTED — move has no effect this round!</div>;})}
+
+          {/* Type effectiveness */}
+          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||t.isProtected)return null;const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;return<div key={tid} style={{background:tm.color+"10",border:`1px solid ${tm.color}30`,borderRadius:4,padding:"6px 10px"}}><div style={{fontSize:11,fontWeight:700,color:tm.color}}>{t.nickname||t.pokemon.name}: {tm.label}</div><div style={{fontSize:10,color:"#8b90a8",marginTop:2}}>DEF: {def} ({move.category==="Physical"?"VIT":"INS"})</div></div>;})}
+
+          {/* Defender Reactions — only shown when target has WP and hasn't reacted */}
+          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{
+            const t=allEntries.find(e=>e.id===tid);if(!t||move.category==="Support")return null;
+            const react=defReactions[tid];
+            const hasWP=t.currentWill>=1;
+            const reactionUsed=t.reactionUsed;
+            // Hide entire section if reaction unavailable — no clutter
+            if((!hasWP&&!react)||reactionUsed&&!react)return null;
+            if(react?.resolved)return null;
+            return(
+              <div key={`react-${tid}`} style={{background:"rgba(168,64,160,0.06)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
+                <div style={{fontSize:10,color:"#a040a0",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>
+                  ⚡ {t.nickname||t.pokemon.name} Reaction {reactionUsed?"(Reaction used this round)":hasWP?"(costs 1 WP)":"(no WP)"}
+                </div>
+                {!reactionUsed&&hasWP&&!react&&(
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <button onClick={()=>setDefReactions(p=>({...p,[tid]:{type:"clash"}}))} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(240,128,48,0.1)",border:"1px solid #f0803040",color:"#f08030"}}>⚡ Clash (counter-attack)</button>
+                    <button onClick={()=>setDefReactions(p=>({...p,[tid]:{type:"evasion"}}))} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(104,144,240,0.1)",border:"1px solid #6890f040",color:"#6890f0"}}>💨 Evasion (dodge)</button>
+                    <button onClick={()=>setDefReactions(p=>({...p,[tid]:{type:"clash",resolved:true}}))} style={{padding:"5px 10px",borderRadius:4,fontSize:10,cursor:"pointer",background:"transparent",border:"1px solid #3a4060",color:"#5a6080"}}>No reaction</button>
+                  </div>
+                )}
+                {(reactionUsed||!hasWP)&&!react&&<div style={{fontSize:10,color:"#5a6080",fontStyle:"italic"}}>{reactionUsed?"Reaction already spent this round.":"Not enough WP to react."}</div>}
+                {/* Clash reaction */}
+                {react?.type==="clash"&&!react.resolved&&(()=>{
+                  const defPainC=getPainPenalty(t.currentHp,t.maxHp);
+                  const clashMoves=t.moves.filter(m=>m.category===move.category||m.priority!=null);
+                  // Attacker accuracy pool (reuse accResult if available)
+                  const atkAccPool=accPool;
+                  const atkRollForClash=accResult??react.atkRoll??null;
+                  // Defender clash pool (from selected move)
+                  const defClashPool=react.move?Math.max(1,calcAccPool(react.move,getEffectiveAttrs(t),undefined,t.pokemonSkills)):null;
+                  const bothRolled=atkRollForClash&&react.roll;
+                  const atkSucc=atkRollForClash?.successes??0;
+                  const defSucc=react.roll?.successes??0;
+                  const outcome=bothRolled?(defSucc>atkSucc?"defenderWins":defSucc===atkSucc?"tie":"attackerWins"):null;
+                  return(
+                    <div style={{marginTop:8}}>
+                      <div style={{fontSize:10,color:"#f08030",fontWeight:700,letterSpacing:"0.5px",marginBottom:6}}>⚡ Clash Check</div>
+                      {/* Move picker */}
+                      {!react.clashOutcome&&<div style={{marginBottom:8}}>
+                        <div style={{fontSize:9,color:"#5a6080",marginBottom:4}}>Pick counter move ({t.nickname||t.pokemon.name}):</div>
+                        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                          {clashMoves.map((m,i)=>(
+                            <button key={i} onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],move:m,roll:undefined}}))} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:3,border:`1px solid ${react.move?.name===m.name?"#f08030":"#3a4060"}`,background:react.move?.name===m.name?"rgba(240,128,48,0.15)":"#13151f",cursor:"pointer",fontSize:10}}>
+                              <TypeBadge type={m.type as PokemonType} small/>{m.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>}
+                      {/* Two-column roll panel */}
+                      {react.move&&!react.clashOutcome&&(
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:6}}>
+                          {/* Attacker accuracy */}
+                          <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"6px 8px"}}>
+                            <div style={{fontSize:9,color:"#f08030",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{attacker.nickname||attacker.pokemon.name} — Accuracy</div>
+                            <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{accBreakdown}{attackerPain>0?` − Pain ${attackerPain}`:""} = {atkAccPool}d</div>
+                            {accResult?(
+                              <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030"}}>[{accResult.rolls.join(",")}]={accResult.successes} <span style={{fontSize:9,color:"#5a6080"}}>(Phase 1)</span></div>
+                            ):(
+                              <>
+                                <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:rollDice(atkAccPool)}}))} style={{width:"100%",background:"#f0803020",border:"1px solid #f0803050",borderRadius:4,color:"#f08030",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({atkAccPool}d)</button>
+                                {react.atkRoll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030",marginTop:4}}>[{react.atkRoll.rolls.join(",")}]={react.atkRoll.successes}</div>}
+                              </>
+                            )}
+                          </div>
+                          {/* Defender clash roll */}
+                          <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"6px 8px"}}>
+                            <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t.nickname||t.pokemon.name} — Clash</div>
+                            <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{(()=>{const acc=react.move.accuracy.toLowerCase();const da2=getEffectiveAttrs(t);const parts:string[]=[];if(acc.includes("strength"))parts.push(`STR ${da2.strength}`);if(acc.includes("dexterity"))parts.push(`DEX ${da2.dexterity}`);if(acc.includes("special"))parts.push(`SPC ${da2.special}`);if(acc.includes("insight"))parts.push(`INS ${da2.insight}`);if(acc.includes("vitality"))parts.push(`VIT ${da2.vitality}`);const sk=acc.includes("brawl")?"Brawl":acc.includes("athletic")?"Athletic":acc.includes("channel")?"Channel":acc.includes("perform")?"Perform":acc.includes("clash")?"Clash":acc.includes("alert")?"Alert":acc.includes("evasion")?"Evasion":"Skill";const sv=t.pokemonSkills?.[sk.toLowerCase() as keyof PokemonSkills]||2;parts.push(`${sk} ${sv}`);if(defPainC>0)parts.push(`Pain −${defPainC}`);return parts.join(" + ");})() } = {defClashPool}d</div>
+                            <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:rollDice(defClashPool??1)}}))} style={{width:"100%",background:"#00d4aa20",border:"1px solid #00d4aa50",borderRadius:4,color:"#00d4aa",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({defClashPool}d)</button>
+                            {react.roll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>[{react.roll.rolls.join(",")}]={react.roll.successes}</div>}
+                          </div>
+                        </div>
+                      )}
+                      {/* Result banner + resolve */}
+                      {bothRolled&&!react.clashOutcome&&(
+                        <>
+                          <div style={{textAlign:"center",padding:"6px 10px",borderRadius:5,background:outcome==="attackerWins"?"rgba(255,71,87,0.12)":outcome==="tie"?"rgba(90,96,128,0.12)":"rgba(0,212,170,0.12)",border:`1px solid ${outcome==="attackerWins"?"#ff475740":outcome==="tie"?"#5a608040":"#00d4aa40"}`,fontSize:12,fontWeight:700,color:outcome==="attackerWins"?"#ff4757":outcome==="tie"?"#5a6080":"#00d4aa",marginBottom:6}}>
+                            {outcome==="attackerWins"?`✗ ${t.nickname||t.pokemon.name} loses Clash (${defSucc} vs ${atkSucc}) — ${attacker.nickname||attacker.pokemon.name} hits!`
+                              :outcome==="tie"?`⚖ Tie (${atkSucc} vs ${defSucc}) — no damage`
+                              :`✓ ${t.nickname||t.pokemon.name} wins Clash (${defSucc} vs ${atkSucc}) — ${attacker.nickname||attacker.pokemon.name}'s move fails!`}
+                          </div>
+                          <button onClick={()=>{
+                            if(outcome==="defenderWins"){
+                              // Apply flat clash damage immediately — no dice roll
+                              const atkMoveType=move.type as PokemonType;
+                              const defMoveType=react.move?.type as PokemonType|undefined;
+                              const defTM=getTypeMult(atkMoveType,t.pokemon.types);
+                              const defClashDmg=defTM.mod===-999?0:defTM.mod===2?2:defTM.mod===-1?0:1;
+                              const atkTM=defMoveType?getTypeMult(defMoveType,attacker.pokemon.types):{mod:0};
+                              const atkClashDmg=atkTM.mod===-999?0:atkTM.mod===2?2:atkTM.mod===-1?0:1;
+                              if(atkClashDmg>0)onApplyDmg(attacker.id,atkClashDmg);
+                              if(defClashDmg>0)onApplyDmg(tid,defClashDmg);
+                              onSpendWP(tid,1);onIncrementAction(tid,true);
+                              setDefReactions(p=>({...p,[tid]:{...p[tid],clashOutcome:outcome!,resolved:true}}));
+                              onSpendWP(attacker.id,1);onIncrementAction(attacker.id,isPriority);onClose();
+                            } else if(outcome==="tie"){
+                              onSpendWP(tid,1);onIncrementAction(tid,true);
+                              setDefReactions(p=>({...p,[tid]:{...p[tid],clashOutcome:outcome!,resolved:true}}));
+                              onSpendWP(attacker.id,1);onIncrementAction(attacker.id,isPriority);onClose();
+                            } else {
+                              onSpendWP(tid,1);onIncrementAction(tid,true);
+                              setDefReactions(p=>({...p,[tid]:{...p[tid],clashOutcome:outcome!}}));
+                            }
+                          }} style={{width:"100%",background:outcome==="defenderWins"?"#00d4aa":outcome==="tie"?"#5a6080":"#ff4757",color:"#fff",border:"none",borderRadius:4,padding:"5px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            {outcome==="defenderWins"?`✓ ${t.nickname||t.pokemon.name} wins — Apply Clash Damage & Close`
+                              :outcome==="tie"?"⚖ Tie — Close"
+                              :`✗ ${t.nickname||t.pokemon.name} loses — Roll damage below`}
+                          </button>
+                        </>
+                      )}
+                      {react.clashOutcome&&(()=>{
+                        // Flat clash damage: 1 base, type effectiveness applied
+                        const atkMoveType=move.type as PokemonType;
+                        const defMoveType=react.move?.type as PokemonType|undefined;
+                        // Damage defender takes (from attacker's move type vs defender's types)
+                        const defTM=getTypeMult(atkMoveType,t.pokemon.types);
+                        const defClashDmg=defTM.mod===-999?0:defTM.mod===2?2:defTM.mod===-1?0:1;
+                        // Damage attacker takes (from defender's clash move type vs attacker's types)
+                        const atkTM=defMoveType?getTypeMult(defMoveType,attacker.pokemon.types):{label:"Normal",color:"#8b90a8",mod:0};
+                        const atkClashDmg=atkTM.mod===-999?0:atkTM.mod===2?2:atkTM.mod===-1?0:1;
+                        return(
+                          <>
+                            <div style={{textAlign:"center",padding:"6px 10px",borderRadius:5,background:react.clashOutcome==="attackerWins"?"rgba(255,71,87,0.12)":react.clashOutcome==="tie"?"rgba(90,96,128,0.12)":"rgba(0,212,170,0.12)",border:`1px solid ${react.clashOutcome==="attackerWins"?"#ff475740":react.clashOutcome==="tie"?"#5a608040":"#00d4aa40"}`,fontSize:12,fontWeight:700,color:react.clashOutcome==="attackerWins"?"#ff4757":react.clashOutcome==="tie"?"#5a6080":"#00d4aa",marginBottom:6}}>
+                              {react.clashOutcome==="attackerWins"?`✗ ${t.nickname||t.pokemon.name} loses Clash (${react.roll?.successes??0} vs ${(accResult??react.atkRoll)?.successes??0}) — ${attacker.nickname||attacker.pokemon.name} hits!`
+                                :react.clashOutcome==="tie"?"⚖ Clash Tie — no damage"
+                                :`✓ ${t.nickname||t.pokemon.name} wins Clash (${react.roll?.successes??0} vs ${(accResult??react.atkRoll)?.successes??0}) — ${attacker.nickname||attacker.pokemon.name}'s move fails!`}
+                            </div>
+                            {react.clashOutcome==="attackerWins"&&<div style={{fontSize:10,color:"#ff4757",fontStyle:"italic",textAlign:"center"}}>Roll damage below — WP will be deducted on apply.</div>}
+                            {react.clashOutcome==="defenderWins"&&!react.resolved&&(
+                              <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px",marginTop:6}}>
+                                <div style={{fontSize:9,fontWeight:700,color:"#00d4aa",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>⚡ Clash Damage (flat)</div>
+                                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
+                                  <div style={{background:"rgba(255,71,87,0.06)",border:"1px solid #ff475730",borderRadius:4,padding:"6px 8px"}}>
+                                    <div style={{fontSize:9,color:"#ff4757",fontWeight:700,marginBottom:3}}>{attacker.nickname||attacker.pokemon.name} takes</div>
+                                    <div style={{fontSize:9,color:"#5a6080",marginBottom:3}}>{defMoveType} vs {attacker.pokemon.types.join("/")} → {atkTM.label}</div>
+                                    <div style={{fontSize:14,fontWeight:700,color:"#ff4757"}}>{atkClashDmg} HP</div>
+                                  </div>
+                                  <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:4,padding:"6px 8px"}}>
+                                    <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,marginBottom:3}}>{t.nickname||t.pokemon.name} takes</div>
+                                    <div style={{fontSize:9,color:"#5a6080",marginBottom:3}}>{atkMoveType} vs {t.pokemon.types.join("/")} → {defTM.label}</div>
+                                    <div style={{fontSize:14,fontWeight:700,color:"#00d4aa"}}>{defClashDmg} HP</div>
+                                  </div>
+                                </div>
+                                <button onClick={()=>{
+                                  if(atkClashDmg>0)onApplyDmg(attacker.id,atkClashDmg);
+                                  if(defClashDmg>0)onApplyDmg(tid,defClashDmg);
+                                  setDefReactions(p=>({...p,[tid]:{...p[tid],resolved:true}}));
+                                  onSpendWP(attacker.id,1);onIncrementAction(attacker.id,isPriority);onClose();
+                                }} style={{width:"100%",background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:4,padding:"6px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Apply Clash Damage (−1 WP) &amp; Close</button>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  );
+                })()}
+                {/* Evasion reaction */}
+                {react?.type==="evasion"&&!react.resolved&&(()=>{
+                  const da=getEffectiveAttrs(t);
+                  const defPain=getPainPenalty(t.currentHp,t.maxHp);
+                  const evasionRank=t.pokemonSkills?.evasion??1;
+                  const evasPool=Math.max(1,da.dexterity+evasionRank);
+                  const atkAcc=move.accuracy.toLowerCase();
+                  const atkAttrLabel=atkAcc.includes("strength")?"STR":atkAcc.includes("dexterity")?"DEX":atkAcc.includes("special")?"SPC":atkAcc.includes("insight")?"INS":"VIT";
+                  const atkAttrVal=atkAcc.includes("strength")?attrs.strength:atkAcc.includes("dexterity")?attrs.dexterity:atkAcc.includes("special")?attrs.special:atkAcc.includes("insight")?attrs.insight:attrs.vitality;
+                  const atkSkLabel=atkAcc.includes("brawl")?"Brawl":atkAcc.includes("athletic")?"Athletic":atkAcc.includes("channel")?"Channel":atkAcc.includes("perform")?"Perform":atkAcc.includes("clash")?"Clash":"Skill";
+                  const atkSkVal=attacker.pokemonSkills?.[atkSkLabel.toLowerCase() as keyof PokemonSkills]||((atkAcc.includes("brawl")||atkAcc.includes("athletic")||atkAcc.includes("channel")||atkAcc.includes("perform")||atkAcc.includes("clash"))?2:1);
+                  const atkPool=Math.max(1,atkAttrVal+atkSkVal);
+                  const atkRollForEvasion=accResult??react.atkRoll??null;
+                  const bothRolled=react.roll&&atkRollForEvasion;
+                  const dodged=bothRolled?react.roll!.successes>=atkRollForEvasion!.successes:false;
+                  return(
+                    <div style={{marginTop:8}}>
+                      <div style={{fontSize:10,color:"#6890f0",marginBottom:6,fontWeight:700,letterSpacing:"0.5px"}}>💨 Evasion Check</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:6}}>
+                        {/* Attacker accuracy — reuse Phase 1 roll if available */}
+                        <div style={{background:"rgba(104,144,240,0.06)",border:"1px solid #6890f030",borderRadius:5,padding:"6px 8px"}}>
+                          <div style={{fontSize:9,color:"#6890f0",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{attacker.nickname||attacker.pokemon.name} — Accuracy</div>
+                          <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{atkAttrLabel} ({atkAttrVal}) + {atkSkLabel} ({atkSkVal}){attackerPain>0?` − Pain ${attackerPain}`:""} = {atkPool}d</div>
+                          {accResult?(
+                            <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>[{accResult.rolls.join(",")}]={accResult.successes} <span style={{fontSize:9,color:"#5a6080"}}>(from Phase 1)</span></div>
+                          ):(
+                            <>
+                              <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:rollDice(atkPool)}}))} style={{width:"100%",background:"#6890f020",border:"1px solid #6890f050",borderRadius:4,color:"#6890f0",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({atkPool}d)</button>
+                              {react.atkRoll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0",marginTop:4}}>[{react.atkRoll.rolls.join(",")}]={react.atkRoll.successes}</div>}
+                            </>
+                          )}
+                        </div>
+                        {/* Target evasion roll */}
+                        <div style={{background:"rgba(104,144,240,0.06)",border:"1px solid #6890f030",borderRadius:5,padding:"6px 8px"}}>
+                          <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t.nickname||t.pokemon.name} — Evasion</div>
+                          <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>DEX ({da.dexterity}) + Evasion ({evasionRank}){defPain>0?` − Pain ${defPain}`:""} = {evasPool}d</div>
+                          <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:rollDice(evasPool)}}))} style={{width:"100%",background:"#00d4aa20",border:"1px solid #00d4aa50",borderRadius:4,color:"#00d4aa",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                            🎲 Roll ({evasPool}d)
+                          </button>
+                          {react.roll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>[{react.roll.rolls.join(",")}]={react.roll.successes}</div>}
+                        </div>
+                      </div>
+                      {bothRolled&&(
+                        <>
+                          <div style={{textAlign:"center",padding:"6px 10px",borderRadius:5,background:dodged?"rgba(0,212,170,0.12)":"rgba(255,71,87,0.12)",border:`1px solid ${dodged?"#00d4aa40":"#ff475740"}`,fontSize:12,fontWeight:700,color:dodged?"#00d4aa":"#ff4757",marginBottom:6}}>
+                            {dodged?"✓ DODGED":"✗ Couldn't Dodge"} (def {react.roll!.successes} vs atk {atkRollForEvasion!.successes})
+                          </div>
+                          {dodged&&<button onClick={()=>{onSpendWP(tid,1);onIncrementAction(tid,true);onIncrementAction(attacker.id,isPriority);setDefReactions(p=>({...p,[tid]:{...p[tid],resolved:true}}));onClose();}} style={{width:"100%",background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:4,padding:"5px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Dodge successful — Apply (−1 WP) &amp; Close</button>}
+                          {!dodged&&<div style={{fontSize:10,color:"#ff4757",fontStyle:"italic",textAlign:"center"}}>Roll damage below — WP will be deducted on apply.</div>}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })}
+
+          {/* Phase 1: Accuracy */}
+          {canAct&&(
+            <div style={{background:"rgba(104,144,240,0.05)",border:"1px solid #6890f020",borderRadius:6,padding:"8px 10px"}}>
+              <div style={{fontSize:9,fontWeight:700,color:"#6890f0",letterSpacing:"1px",textTransform:"uppercase",marginBottom:5}}>① Accuracy Roll — {move.accuracy} · Need {actReq}+ hits</div>
+              <div style={{fontSize:10,color:"#5a6080",marginBottom:6,fontStyle:"italic"}}>Pool: {accBreakdown} = <strong style={{color:accPool<actReq?"#ff4757":"#6890f0"}}>{accPool}d</strong></div>
+              {accPool<=0&&<div style={{background:"rgba(255,71,87,0.12)",border:"1px solid #ff475740",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Dice pool is 0 — cannot roll. Action is impossible.</div>}
+              {accPool>0&&accPool<actReq&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Pool ({accPool}d) is less than required hits ({actReq}) — success is very unlikely.</div>}
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setAccResult(rollDice(accPool))} disabled={accPool<=0} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:accPool<=0?"#5a6080":"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:accPool<=0?"default":"pointer"}}>🎲 Roll Accuracy ({accPool}d)</button>
+                {accResult&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:accResult.successes>=actReq?"#00d4aa":"#ff4757"}}>[{accResult.rolls.join(",")}]={accResult.successes} {accResult.successes>=actReq?"✓ HIT":"✗ MISS"}</span>}
+              </div>
+              {targets.filter(tid=>{const t=allEntries.find(e=>e.id===tid);return t&&t.reactionUsed;}).map(tid=>{const t=allEntries.find(e=>e.id===tid)!;return<div key={tid} style={{marginTop:5,background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:10,color:"#ff4757"}}>⚠ {t.nickname||t.pokemon.name} has already used their reaction — Clash &amp; Evasion unavailable.</div>;})}
+              {/* Miss button — shown when rolled a miss and no pending unresolved reactions */}
+              {(()=>{
+                if(!accResult||accResult.successes>=actReq)return null;
+                const nonSelfTargets=targets.filter(tid=>tid!==attacker.id);
+                const allResolved=nonSelfTargets.length===0||nonSelfTargets.every(tid=>{const r=defReactions[tid];return r==null?true:r.resolved===true;});
+                if(!allResolved)return null;
+                return<button onClick={()=>{onIncrementAction(attacker.id,isPriority);onClose();}} style={{marginTop:6,width:"100%",padding:"8px 10px",background:"#ff4757",border:"none",borderRadius:5,fontSize:12,fontWeight:700,color:"#fff",cursor:"pointer"}}>
+                  ✗ Miss — Count Action &amp; Close ({isPriority?"Reaction":"Action #"+String((attacker.actionCount||0)+1)})
+                </button>;
+              })()}
+            </div>
+          )}
+
+          {/* Clash */}
+          {canAct&&isClash&&targets.length>0&&(
+            <ClashSection attacker={attacker} targets={targets} allEntries={allEntries} move={move} attrs={attrs} weather={weather} stab={stab} abilBonus={abilMods.bonus} loyalty={attacker.loyalty} happiness={attacker.happiness} onApplyDmg={onApplyDmg} onApplyEffect={onApplyEffect}/>
+          )}
+
+          {/* Damage (non-clash move, or clash move won by attacker) */}
+          {canAct&&move.category!=="Support"&&targets.map(tid=>{
+            // Show damage if Phase-1 accuracy hit OR target failed evasion OR attacker won clash reaction
+            const evasR=defReactions[tid];
+            const atkSuccEvas=accResult?.successes??evasR?.atkRoll?.successes??0;
+            const evasFailed=evasR?.type==="evasion"&&evasR.roll!=null&&atkSuccEvas>evasR.roll.successes;
+            const clashWon=evasR?.type==="clash"&&evasR.clashOutcome==="attackerWins";
+            const accHit=accResult!=null&&accResult.successes>=actReq&&!isClash;
+            if(!accHit&&!evasFailed&&!clashWon)return null;
+            const isSelf=tid===attacker.id;
+            const t=isSelf?attacker:allEntries.find(e=>e.id===tid);if(!t)return null;
+            if(!isSelf&&t.isProtected)return null; // protected - no damage
+            const tm=isSelf?{label:"Self",color:"#a040a0",mod:0}:getTypeMult(move.type as PokemonType,t.pokemon.types);
+            const def=isSelf?0:(move.category==="Physical"?t.attrs.vitality:t.attrs.insight);
+            const dr=dmgResults[tid];
+            const brutalHit=dr?(dr.rolls.filter(r=>r===6).length>=2):false;
+            const brutalBonus=brutalHit?2:0;
+            const rawDmg=dr&&!isSelf?Math.max(1,dr.successes-def):null;
+            const typeAdj=rawDmg!=null?(tm.mod===2?rawDmg+2:tm.mod===-1?Math.max(1,rawDmg-2):rawDmg):null;
+            const baseDmg=dr?(isSelf?dr.successes:typeAdj??0):null;
+            const finalDmg=baseDmg!=null?baseDmg+brutalBonus:null;
+            const wasApplied=applied.has(tid);
+            return<div key={tid} style={{background:"#13151f",borderRadius:6,padding:"10px 12px",border:brutalHit?"1px solid #ffd32a60":"none"}}>
+              <div style={{fontSize:9,fontWeight:700,color:"#f08030",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>② Damage → {isSelf?"SELF":t.nickname||t.pokemon.name} ({dmgPool}d)</div>
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                <button onClick={()=>doDmg(tid)} disabled={!!dr} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:dr?"#5a6080":"#f08030",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:dr?"default":"pointer"}}>🎲 Roll Damage ({dmgPool}d)</button>
+                {dr&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{dr.rolls.map(r=>{const s=String(r);return r===6?"★"+s:s;}).join(",")}]={dr.successes}</span>}
+              </div>
+              {brutalHit&&<div style={{background:"rgba(255,211,42,0.12)",border:"1px solid #ffd32a60",borderRadius:4,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#ffd32a",marginBottom:6,textAlign:"center",letterSpacing:"1px"}}>⚡ BRUTAL HIT! +2 damage</div>}
+              {dr&&tm.mod!==-999&&<div>
+                <div style={{fontSize:11,color:"#8b90a8",marginBottom:6}}>{isSelf?dr.successes:`${dr.successes} − ${def} DEF${tm.mod===2?" +2 SE":tm.mod===-1?" −2 NVE":""}${brutalHit?" +2 Brutal":""}`} = <strong style={{color:"#ff4757"}}>{finalDmg} damage</strong></div>
+                {/* Status chance — inline, before apply button */}
+                {statusToInflict&&!isSelf&&!t.isProtected&&(()=>{
+                  const chanceKey=`status-${tid}`;
+                  const chanceRoll=dmgResults[chanceKey];
+                  return<div style={{background:"rgba(160,64,160,0.08)",border:"1px solid #a040a040",borderRadius:4,padding:"6px 8px",marginBottom:6}}>
+                    <div style={{fontSize:10,color:"#a040a0",fontWeight:700,marginBottom:4}}>
+                      Status Chance: {statusToInflict} (if 4+ on d6)
+                    </div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <button onClick={()=>{const r=rollDice(1);setDmgResults(p=>({...p,[chanceKey]:r}));}} style={{background:"rgba(160,64,160,0.15)",border:"1px solid #a040a040",borderRadius:3,color:"#a040a0",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll Chance (d6)</button>
+                      {chanceRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:chanceRoll.successes>0?"#a040a0":"#5a6080"}}>[{chanceRoll.rolls[0]}] = {chanceRoll.rolls[0]>=4?"✓ Inflict!":"✗ No effect"}</span>}
+                    </div>
+                    {chanceRoll&&chanceRoll.rolls[0]>=4&&onApplySpecial&&(
+                      <button onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||[],statusToInflict!),statusTurnsLeft:statusToInflict==="Asleep"?3:0});}} style={{marginTop:4,width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                        💢 Apply {statusToInflict} to {t.nickname||t.pokemon.name}
+                      </button>
+                    )}
+                  </div>;
+                })()}
+                {!wasApplied&&<button onClick={()=>applyDmg(tid)} style={{width:"100%",background:isSelf?"#a040a0":"#ff4757",color:"#fff",border:"none",borderRadius:5,padding:"7px",fontWeight:700,fontSize:12,cursor:"pointer"}}>⚔ Apply {finalDmg} to {isSelf?"SELF":t.nickname||t.pokemon.name}</button>}
+                {wasApplied&&<div style={{textAlign:"center",color:"#00d4aa",fontWeight:700}}>✓ Applied</div>}
+              </div>}
+            </div>;
+          })}
+
+          {/* Effects on success — stat changes, healing, status, Transform, etc. */}
+          {canAct&&(accResult?.successes??0)>=actReq&&(
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {/* Stat changes */}
+              {statFx.length>0&&(targets.length>0||selfTarget||statFx.some(s=>s.toSelf))&&(
+                <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Stat Changes</div>
+                  {statFx.map((se,i)=>{
+                    // toSelf=true → apply to attacker only; toSelf=false → apply to each selected target
+                    const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
+                    return applyTargets.map(tid=>{
+                      const isSelf=tid===attacker.id;
+                      const t=isSelf?attacker:allEntries.find(e=>e.id===tid);
+                      return<div key={`${i}-${tid}`} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:4,background:se.amount<0?"rgba(255,71,87,0.1)":"rgba(0,212,170,0.1)",border:`1px solid ${se.amount<0?"#ff475730":"#00d4aa30"}`,color:se.amount<0?"#ff4757":"#00d4aa",fontSize:11,fontWeight:700,width:"100%",marginBottom:3,boxSizing:"border-box"}}>
+                        {se.amount>0?"▲":"▼"} {se.label} → {isSelf?"SELF":t?.nickname||t?.pokemon.name}
+                      </div>;
+                    });
+                  })}
+                </div>
+              )}
+
+              {/* Status is now inline in the damage block above — no separate section needed for damage moves */}
+              {/* Support-only status moves (e.g. Stun Spore with no damage) */}
+              {statusToInflict&&move.category==="Support"&&targets.filter(t=>t!==attacker.id).length>0&&(
+                <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Apply Status (Support Move)</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{
+                    const t=allEntries.find(e=>e.id===tid);if(!t)return null;
+                    return<button key={tid} onClick={()=>{if(onApplySpecial)onApplySpecial(tid,{statuses:addStatus(t.statuses||[],statusToInflict!),statusTurnsLeft:statusToInflict==="Asleep"?3:0});onIncrementAction(attacker.id,isPriority);}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:4,cursor:"pointer",background:"rgba(160,64,160,0.1)",border:"1px solid #a040a040",color:"#a040a0",fontSize:11,fontWeight:700,width:"100%",marginBottom:3}}>
+                      💢 Apply {statusToInflict} → {t.nickname||t.pokemon.name}
+                    </button>;
+                  })}
+                </div>
+              )}
+
+              {/* Healing */}
+              {isHeal&&(
+                <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:10,color:"#00d4aa",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Healing</div>
+                  {(healsUser?[attacker]:[]).concat(healsTarget?others.filter(e=>targets.includes(e.id)):[]).map(t=>
+                    <button key={t.id} onClick={()=>{const heal=Math.floor(t.maxHp/2);onApplyDmg(t.id,-heal);onIncrementAction(attacker.id,false);onClose();}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:4,cursor:"pointer",background:"rgba(0,212,170,0.1)",border:"1px solid #00d4aa30",color:"#00d4aa",fontSize:11,fontWeight:700,width:"100%",marginBottom:3}}>
+                      💚 Restore ~½ HP to {t.id===attacker.id?"SELF":t.nickname||t.pokemon.name} (+{Math.floor(t.maxHp/2)})
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* User faints (Self-Destruct, Explosion) */}
+              {userFaints&&(
+                <button onClick={()=>{onApplyDmg(attacker.id,attacker.currentHp);onIncrementAction(attacker.id,false);onClose();}} style={{padding:"8px",background:"#ff4757",color:"#fff",border:"none",borderRadius:5,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  💀 User Faints — Apply {attacker.currentHp} damage to {attacker.nickname||attacker.pokemon.name}
+                </button>
+              )}
+
+              {/* Transform */}
+              {isTransformMove&&onApplySpecial&&(
+                <div style={{background:"rgba(160,64,160,0.08)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:6}}>🔄 Transform — Select Pokémon to copy</div>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {others.map(t=><button key={t.id} onClick={()=>{
+                      onApplySpecial!(attacker.id,{
+                        morphedTo:t.pokemon,
+                        moves:t.moves.slice(0,4),
+                        attrs:{...t.attrs},
+                        originalAttrs:attacker.originalAttrs||{...attacker.attrs}, // save original if not already saved
+                        originalMoves:attacker.originalMoves||[...attacker.moves],
+                      });
+                      onIncrementAction(attacker.id,false);onClose();
+                    }} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(160,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>
+                      🔄 → {t.nickname||t.pokemon.name}
+                    </button>)}
+                  </div>
+                </div>
+              )}
+
+              {/* Reflect Type */}
+              {isReflectType&&onApplySpecial&&(
+                <div style={{background:"rgba(104,144,240,0.08)",border:"1px solid #6890f040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#6890f0",marginBottom:6}}>🎭 Reflect Type — Choose new type</div>
+                  <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                    {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);return t?<button key={tid} onClick={()=>{onApplySpecial!(attacker.id,{attrs:{...attacker.attrs}});alert(`Type changed to match ${t.nickname||t.pokemon.name}: ${t.pokemon.types.join("/")}. Update manually on card.`);onClose();}} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",background:"rgba(104,144,240,0.15)",border:"1px solid #6890f040",color:"#6890f0"}}>Copy {t.nickname||t.pokemon.name}&apos;s type ({t.pokemon.types.join("/")})</button>:null;})}
+                  </div>
+                </div>
+              )}
+
+              {/* Metronome */}
+              {isMetronome&&(
+                <div style={{background:"rgba(248,216,48,0.08)",border:"1px solid #f8d03040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#f8d030",marginBottom:6}}>🎵 Metronome — Random Move</div>
+                  <button onClick={()=>{const m=MOVES[Math.floor(Math.random()*MOVES.length)];alert(`Metronome: ${m.name} (${m.type} ${m.category})! Use it as your next action.`);}} style={{padding:"6px 12px",background:"#f8d030",color:"#0f1117",border:"none",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Random Move</button>
+                </div>
+              )}
+
+              {/* Power Split / Power Swap */}
+              {(isPowerSplit||isPowerSwap)&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#78c850",marginBottom:6}}>{isPowerSplit?"Power Split":"Power Swap"}</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{
+                    const t=allEntries.find(e=>e.id===tid);if(!t)return null;
+                    return<button key={tid} onClick={()=>{
+                      if(isPowerSplit){const avgStr=Math.floor((attacker.attrs.strength+t.attrs.strength)/2);const avgSpc=Math.floor((attacker.attrs.special+t.attrs.special)/2);onApplySpecial!(attacker.id,{attrs:{...attacker.attrs,strength:avgStr,special:avgSpc}});onApplySpecial!(tid,{attrs:{...t.attrs,strength:avgStr,special:avgSpc}});}
+                      else{const aStr=attacker.attrs.strength;const aSpc=attacker.attrs.special;onApplySpecial!(attacker.id,{attrs:{...attacker.attrs,strength:t.attrs.strength,special:t.attrs.special}});onApplySpecial!(tid,{attrs:{...t.attrs,strength:aStr,special:aSpc}});}
+                      onIncrementAction(attacker.id,false);onClose();
+                    }} style={{width:"100%",background:"#78c850",color:"#0f1117",border:"none",borderRadius:4,padding:"7px",fontSize:11,fontWeight:700,cursor:"pointer",marginTop:3}}>
+                      {isPowerSplit?"Average":"Swap"} STR/SPC with {t.nickname||t.pokemon.name}
+                    </button>;
+                  })}
+                </div>
+              )}
+
+              {/* Baton Pass */}
+              {isBatonPass&&(
+                <div style={{background:"rgba(248,216,48,0.06)",border:"1px solid #f8d03030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#f8d030"}}>
+                  🏃 Baton Pass — Stat changes on {attacker.nickname||attacker.pokemon.name} will transfer to the next Pokémon switched in. Switch the Pokémon card manually.
+                </div>
+              )}
+
+              {/* Protect */}
+              {isProtectMove&&onApplySpecial&&(
+                <button onClick={()=>{onApplySpecial!(attacker.id,{isProtected:true});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"8px",background:"#6890f0",color:"#fff",border:"none",borderRadius:5,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  🛡️ Activate Protect — blocks all incoming moves this round
+                </button>
+              )}
+
+              {/* Stats Reset (Haze, Clear Smog) */}
+              {isStatsReset&&targets.length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(90,96,128,0.1)",border:"1px solid #5a608040",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#8b90a8",fontWeight:700,marginBottom:5}}>📊 Stats Reset</div>
+                  {targets.map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statMods:[]});onIncrementAction(attacker.id,false);}} style={{width:"100%",background:"#5a6080",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Reset all stat mods on {t.nickname||t.pokemon.name}</button>;})}
+                </div>
+              )}
+
+              {/* Entry Hazard */}
+              {isEntryHazard&&(
+                <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#78c850"}}>
+                  ⚠️ <strong>{move.name}</strong> — Entry Hazard. Note this on the field (no automatic mechanic yet). Affects Pokémon entering the battle on that side.
+                </div>
+              )}
+
+              {/* Disable / Encore / Taunt / Torment */}
+              {isDisableLock&&targets.length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(168,64,160,0.08)",border:"1px solid #a040a030",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#a040a0",fontWeight:700,marginBottom:5}}>🔒 {move.name}: {move.effect.slice(0,80)}</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[${move.name} by ${attacker.nickname||attacker.pokemon.name} — ${move.effect.slice(0,50)}]`});onIncrementAction(attacker.id,false);}} style={{width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} to {t.nickname||t.pokemon.name} (noted on card)</button>;})}
+                </div>
+              )}
+
+              {/* Two-Turn Charge */}
+              {isTwoTurn&&onApplySpecial&&(
+                <div style={{background:"rgba(255,211,42,0.06)",border:"1px solid #ffd32a30",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#ffd32a",fontWeight:700,marginBottom:5}}>⏳ Two-Turn Move</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:5}}>{move.effect.slice(0,120)}</div>
+                  <button onClick={()=>{onApplySpecial!(attacker.id,{notes:(attacker.notes?attacker.notes+" ":"")+`[Charging ${move.name} — attacks next turn]`});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"5px 10px",background:"rgba(255,211,42,0.15)",border:"1px solid #ffd32a30",borderRadius:4,color:"#ffd32a",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    Note Charging (attacks next turn)
+                  </button>
+                </div>
+              )}
+
+              {/* Multi-Hit */}
+              {isMultiHit&&(
+                <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#f08030"}}>
+                  💥 <strong>Multi-Hit:</strong> {move.effect.slice(0,80)} — Roll accuracy and damage separately for each hit.
+                </div>
+              )}
+
+              {/* Reflect / Light Screen / Aurora Veil */}
+              {isProtectScreen&&onApplySpecial&&(
+                <div style={{background:"rgba(104,144,240,0.06)",border:"1px solid #6890f030",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#6890f0",fontWeight:700,marginBottom:5}}>🛡 {move.name}</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:5}}>{move.effect.slice(0,100)}</div>
+                  <button onClick={()=>{onApplySpecial!(attacker.id,{notes:(attacker.notes?attacker.notes+" ":"")+`[${move.name} active — ${move.name==="Reflect"?"-2 dice vs Physical":move.name==="Light Screen"?"-2 dice vs Special":"-2 dice vs both"} for 4 rounds]`});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"5px 10px",background:"rgba(104,144,240,0.15)",border:"1px solid #6890f040",borderRadius:4,color:"#6890f0",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    Activate {move.name} (noted on card)
+                  </button>
+                </div>
+              )}
+
+              {/* Copy Move (Copycat, Mirror Move) */}
+              {isCopyMove&&(
+                <div style={{background:"rgba(248,216,48,0.06)",border:"1px solid #f8d03030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#f8d030"}}>
+                  🔄 <strong>{move.name}:</strong> Copies a move used by another Pokémon. Select the move from that Pokémon's card and use it as your action.
+                </div>
+              )}
+
+              {/* Wish */}
+              {isWish&&onApplySpecial&&(
+                <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#00d4aa",fontWeight:700,marginBottom:5}}>⭐ Wish — Heal next turn</div>
+                  <button onClick={()=>{onApplySpecial!(attacker.id,{notes:(attacker.notes?attacker.notes+" ":"")+`[Wish pending — restore ${Math.floor(attacker.maxHp/2)} HP at end of next turn]`});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"5px 10px",background:"rgba(0,212,170,0.1)",border:"1px solid #00d4aa30",borderRadius:4,color:"#00d4aa",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    Note Wish (heal {Math.floor(attacker.maxHp/2)} HP next turn)
+                  </button>
+                </div>
+              )}
+
+              {/* Perish Song */}
+              {isPerishSong&&onApplySpecial&&(
+                <div style={{background:"rgba(112,88,152,0.08)",border:"1px solid #70589840",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#705898",fontWeight:700,marginBottom:5}}>🎵 Perish Song — 3-round countdown</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {allEntries.filter(e=>e.currentHp>0).map(e=><button key={e.id} onClick={()=>{onApplySpecial!(e.id,{notes:(e.notes?e.notes+" ":"")+`[Perish Song — faints in 3 rounds]`});}} style={{padding:"4px 8px",background:"rgba(112,88,152,0.15)",border:"1px solid #70589840",borderRadius:3,color:"#705898",fontSize:10,fontWeight:700,cursor:"pointer"}}>Apply to {e.nickname||e.pokemon.name}</button>)}
+                  </div>
+                </div>
+              )}
+
+              {/* Trap (Wrap, Bind, Fire Spin etc.) */}
+              {isTrap&&targets.length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#f08030",fontWeight:700,marginBottom:5}}>🔗 {move.name} — Trap</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[Trapped by ${move.name} — −1 HP/round, cannot switch, 4-5 rounds]`});}} style={{width:"100%",padding:"5px",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",borderRadius:4,color:"#f08030",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Trap {t.nickname||t.pokemon.name} (noted on card)</button>;})}
+                </div>
+              )}
+
+              {/* Drain HP (Giga Drain, Leech Life, etc.) */}
+              {drains&&accResult&&(accResult.successes??0)>=actReq&&targets.filter(t=>t!==attacker.id).length>0&&(
+                <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#00d4aa",fontWeight:700,marginBottom:5}}>🌿 Drain — heal attacker</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{
+                    const dr=dmgResults[tid];
+                    const t=allEntries.find(e=>e.id===tid);
+                    const def=move.category==="Physical"?t?.attrs.vitality??0:t?.attrs.insight??0;
+                    const finalDmg=dr?Math.max(1,(dr.successes)-def):null;
+                    const healAmt=finalDmg?Math.floor(finalDmg/2):null;
+                    if(!healAmt||!dr)return<div key={tid} style={{fontSize:10,color:"#5a6080"}}>Roll damage first, then drain heal will appear</div>;
+                    return<button key={tid} onClick={()=>{onApplyDmg(attacker.id,-healAmt);}} style={{width:"100%",padding:"5px",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",borderRadius:4,color:"#00d4aa",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>💚 Heal {healAmt} HP to {attacker.nickname||attacker.pokemon.name} (½ drain)</button>;
+                  })}
+                </div>
+              )}
+
+              {/* Counter / Mirror Coat */}
+              {isCounter&&(
+                <div style={{background:"rgba(255,71,87,0.06)",border:"1px solid #ff475730",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#ff4757"}}>
+                  ⚡ <strong>{move.name} (Late Reaction 5):</strong> Can only be used if last move used against you was {move.name==="Counter"?"Physical":"Special"}. Deal damage equal to the damage you just received. Track incoming damage manually, then apply back.
+                </div>
+              )}
+
+              {/* Grudge / Spite */}
+              {isGrudge&&targets.length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(112,88,152,0.08)",border:"1px solid #70589840",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#705898",fontWeight:700,marginBottom:5}}>💀 {move.name}</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;
+                    return<button key={tid} onClick={()=>{onApplySpecial!(tid,{currentWill:move.name==="Grudge"?0:Math.max(1,t.currentWill-1)});onApplySpecial!(attacker.id,{currentHp:move.name==="Grudge"?0:attacker.currentHp});onClose();}} style={{width:"100%",padding:"5px",background:"rgba(112,88,152,0.2)",border:"1px solid #70589840",borderRadius:4,color:"#705898",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} → {t.nickname||t.pokemon.name}</button>;
+                  })}
+                </div>
+              )}
+
+              {/* Trick Room / Magic Room / Wonder Room */}
+              {isTrickRoom&&(
+                <div style={{background:"rgba(160,64,160,0.06)",border:"1px solid #a040a030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#a040a0"}}>
+                  🔮 <strong>{move.name}:</strong> {move.effect.slice(0,100)} — Note this as an active field effect and apply initiative/type changes manually for 5 rounds.
+                </div>
+              )}
+
+              {/* Foresight / Odor Sleuth / Miracle Eye */}
+              {isForesight&&targets.length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(248,216,48,0.06)",border:"1px solid #f8d03030",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#f8d030",fontWeight:700,marginBottom:5}}>👁 {move.name}: removes Ghost immunity and Evasion on target</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[${move.name} — Ghost immune and Evasion removed]`});onClose();}} style={{width:"100%",padding:"5px",background:"rgba(248,216,48,0.1)",border:"1px solid #f8d03040",borderRadius:4,color:"#f8d030",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} to {t.nickname||t.pokemon.name}</button>;})}
+                </div>
+              )}
+
+              {/* Imprison */}
+              {isImprison&&onApplySpecial&&(
+                <button onClick={()=>{onApplySpecial!(attacker.id,{notes:attacker.notes?attacker.notes+" [IMPRISON active]":"[IMPRISON active]"});onClose();}} style={{padding:"7px",background:"#705898",color:"#fff",border:"none",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                  🔒 Activate Imprison (noted on card)
+                </button>
+              )}
+
+              {/* Role Play */}
+              {isRolePlay&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(168,64,160,0.08)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:6}}>🎭 Role Play — Copy target's ability</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return(
+                    <div key={tid} style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {t.abilities.map(ab=><button key={ab.name} onClick={()=>{onApplySpecial!(attacker.id,{abilityOverride:ab.name});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>✨ Copy {ab.name}</button>)}
+                    </div>
+                  );})}
+                </div>
+              )}
+
+              {/* Skill Swap */}
+              {isSkillSwap&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(168,64,160,0.08)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:6}}>🔀 Skill Swap — Exchange abilities</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;
+                    const atkAbil=attacker.abilityOverride||(attacker.abilities[0]?.name||"—");
+                    const defAbil=t.abilityOverride||(t.abilities[0]?.name||"—");
+                    return<button key={tid} onClick={()=>{onApplySpecial!(attacker.id,{abilityOverride:defAbil});onApplySpecial!(tid,{abilityOverride:atkAbil});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px 8px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>
+                      Swap: {attacker.nickname||attacker.pokemon.name} [{atkAbil}] ↔ {t.nickname||t.pokemon.name} [{defAbil}]
+                    </button>;
+                  })}
+                </div>
+              )}
+
+              {/* Entrainment */}
+              {isEntrainment&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(168,64,160,0.08)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:6}}>📡 Entrainment — Force target to copy your ability</div>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
+                    {attacker.abilities.map(ab=>targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={ab.name+tid} onClick={()=>{onApplySpecial!(tid,{abilityOverride:ab.name});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>Force {t.nickname||t.pokemon.name} → {ab.name}</button>;}))}
+                  </div>
+                </div>
+              )}
+
+              {/* Doodle */}
+              {isDoodle&&onApplySpecial&&(
+                <div style={{background:"rgba(168,64,160,0.08)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:6}}>🎨 Doodle — Copy ability to all allies</div>
+                  {targets.filter(t=>t!==attacker.id).length>0&&attacker.abilities.length>0&&(
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {attacker.abilities.map(ab=><button key={ab.name} onClick={()=>{const allies=allEntries.filter(e=>e.id!==attacker.id&&e.side===attacker.side&&e.currentHp>0);allies.forEach(e=>onApplySpecial!(e.id,{abilityOverride:ab.name}));onIncrementAction(attacker.id,false);onClose();}} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>✨ Copy {ab.name} to all allies</button>)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Suppress ability */}
+              {isSuppressAbility&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(90,96,128,0.1)",border:"1px solid #5a608040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#8b90a8",marginBottom:6}}>⊘ {move.name} — Suppress target's ability</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{abilitySuppressed:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(90,96,128,0.15)",border:"1px solid #5a608040",color:"#8b90a8",marginBottom:3}}>⊘ Suppress ability on {t.nickname||t.pokemon.name}</button>;})}
+                </div>
+              )}
+
+              {/* Soak */}
+              {isSoak&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(104,144,240,0.08)",border:"1px solid #6890f040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#6890f0",marginBottom:6}}>💧 Soak — Change target's type to Water</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:["Water"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(104,144,240,0.15)",border:"1px solid #6890f040",color:"#6890f0",marginBottom:3}}>💧 Make {t.nickname||t.pokemon.name} Water-type</button>;})}
+                </div>
+              )}
+
+              {/* Trick-Or-Treat */}
+              {isTrickOrTreat&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475740",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#ff4757",marginBottom:6}}>👻 Trick-Or-Treat — Add Ghost type</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;const cur=t.typeOverride||t.pokemon.types;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:[...cur,"Ghost"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",color:"#ff4757",marginBottom:3}}>👻 Add Ghost to {t.nickname||t.pokemon.name} ({cur.join("/")})</button>;})}
+                </div>
+              )}
+
+              {/* Forest's Curse */}
+              {isForestsCurse&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#78c850",marginBottom:6}}>🌿 Forest's Curse — Add Grass type</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;const cur=t.typeOverride||t.pokemon.types;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:[...cur,"Grass"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(120,200,80,0.15)",border:"1px solid #78c85040",color:"#78c850",marginBottom:3}}>🌿 Add Grass to {t.nickname||t.pokemon.name} ({cur.join("/")})</button>;})}
+                </div>
+              )}
+
+              {/* Camouflage */}
+              {isCamouflage&&onApplySpecial&&(()=>{const typeMap:Record<string,string>={Clear:"Normal",Sunny:"Fire",Rain:"Water",Sandstorm:"Rock",Hail:"Ice","Snow":"Ice"};const newType=typeMap[weather.name]||"Normal";return(
+                <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#78c850",marginBottom:6}}>🦎 Camouflage — Change type to match terrain</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Current weather: {weather.name} → type becomes <strong style={{color:"#78c850"}}>{newType}</strong></div>
+                  <button onClick={()=>{onApplySpecial!(attacker.id,{typeOverride:[newType]});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(120,200,80,0.15)",border:"1px solid #78c85040",color:"#78c850"}}>
+                    Become {newType}-type
+                  </button>
+                </div>
+              );})()}
+
+              {/* Terrain moves */}
+              {isTerrainMove&&(
+                <div style={{background:"rgba(0,212,170,0.08)",border:"1px solid #00d4aa40",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#00d4aa",marginBottom:4}}>🌐 {move.name}</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>{move.name==="Electric Terrain"?"Electric moves +1 die · Grounded cannot sleep":move.name==="Grassy Terrain"?"Grass moves +1 die · Grounded heal 1 HP/round":move.name==="Misty Terrain"?"Fairy moves +1 die · Grounded immune to status":move.name==="Psychic Terrain"?"Psychic moves +1 die · Grounded immune to priority moves":move.effect.slice(0,80)}</div>
+                  <div style={{fontSize:10,color:"#ffd32a"}}>⚠ Update the Terrain selector in the nav bar above to <strong>{move.name}</strong>.</div>
+                </div>
+              )}
+
+              {/* Trick / Switcheroo */}
+              {isTrick&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(()=>{
+                const tid=targets.find(t=>t!==attacker.id);const t=tid?allEntries.find(e=>e.id===tid):null;
+                if(!t)return null;
+                return(
+                  <div style={{background:"rgba(248,216,48,0.08)",border:"1px solid #f8d03040",borderRadius:6,padding:"10px 12px"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#f8d030",marginBottom:6}}>🔀 {move.name} — Swap held items</div>
+                    <div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:9,color:"#8b90a8",marginBottom:2}}>{attacker.nickname||attacker.pokemon.name}</div>
+                        <input value={heldItemInputA} onChange={e=>setHeldItemInputA(e.target.value)} placeholder="Item name" style={{width:"100%",background:"#13151f",border:"1px solid #2a2f45",borderRadius:3,color:"#e8eaf0",fontSize:10,padding:"3px 6px"}}/>
+                      </div>
+                      <span style={{color:"#f8d030",fontSize:14}}>⇄</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:9,color:"#8b90a8",marginBottom:2}}>{t.nickname||t.pokemon.name}</div>
+                        <div style={{fontSize:10,color:"#e8eaf0",padding:"4px 6px",background:"#13151f",border:"1px solid #2a2f45",borderRadius:3}}>{t.heldItem||"(no item)"}</div>
+                      </div>
+                    </div>
+                    <button onClick={()=>{onApplySpecial!(attacker.id,{heldItem:t.heldItem});onApplySpecial!(tid!,{heldItem:heldItemInputA||undefined});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(248,216,48,0.15)",border:"1px solid #f8d03040",color:"#f8d030"}}>Swap Items</button>
+                  </div>
+                );
+              })()}
+
+              {/* Bestow */}
+              {isBestow&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(248,216,48,0.08)",border:"1px solid #f8d03040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#f8d030",marginBottom:6}}>🎁 Bestow — Give your held item</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:4}}>Your item: <strong style={{color:"#f8d030"}}>{attacker.heldItem||"(none)"}</strong></div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{heldItem:attacker.heldItem});onApplySpecial!(attacker.id,{heldItem:undefined});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(248,216,48,0.15)",border:"1px solid #f8d03040",color:"#f8d030",marginBottom:3}}>🎁 Give to {t.nickname||t.pokemon.name}</button>;})}
+                </div>
+              )}
+
+              {/* Embargo */}
+              {isEmbargo&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475740",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#ff4757",marginBottom:6}}>🚫 Embargo — Prevent item use</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{itemEmbargoed:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",color:"#ff4757",marginBottom:3}}>🚫 Embargo {t.nickname||t.pokemon.name}</button>;})}
+                </div>
+              )}
+
+              {/* Corrosive Gas */}
+              {isCorrosiveGas&&onApplySpecial&&(
+                <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#78c850",marginBottom:6}}>☠️ Corrosive Gas — Destroy all held items</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Removes held items from all combatants hit.</div>
+                  <button onClick={()=>{others.forEach(e=>{if(e.heldItem)onApplySpecial!(e.id,{heldItem:undefined});});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(120,200,80,0.15)",border:"1px solid #78c85040",color:"#78c850"}}>Destroy all held items (AOE)</button>
+                </div>
+              )}
+
+              {/* Belly Drum */}
+              {isBellyDrum&&onApplySpecial&&(()=>{const cost=Math.max(1,Math.floor(attacker.maxHp/2));const canUse=attacker.currentHp>cost;return(
+                <div style={{background:"rgba(240,128,48,0.08)",border:"1px solid #f0803040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#f08030",marginBottom:4}}>🥁 Belly Drum — Max STR at half HP</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Costs <strong style={{color:"#ff4757"}}>{cost} HP</strong> · Raises STR by <strong style={{color:"#00d4aa"}}>+3</strong></div>
+                  {!canUse&&<div style={{fontSize:10,color:"#ff4757",marginBottom:4}}>⚠ Not enough HP!</div>}
+                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);onApplyEffect(attacker.id,"strength",3,"Belly Drum",attacker.nickname||attacker.pokemon.name);onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(240,128,48,0.2)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#f0803040":"#5a608030"}`,color:canUse?"#f08030":"#5a6080"}}>
+                    🥁 Pay {cost} HP → STR +3
+                  </button>
+                </div>
+              );})()}
+
+              {/* Clangorous Soul */}
+              {isClangorousSoul&&onApplySpecial&&(()=>{const cost=Math.max(1,Math.floor(attacker.maxHp/3));const canUse=attacker.currentHp>cost;return(
+                <div style={{background:"rgba(160,64,160,0.08)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:4}}>🎶 Clangorous Soul — All stats +1</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Costs <strong style={{color:"#ff4757"}}>{cost} HP</strong> · All attributes <strong style={{color:"#00d4aa"}}>+1</strong></div>
+                  {!canUse&&<div style={{fontSize:10,color:"#ff4757",marginBottom:4}}>⚠ Not enough HP!</div>}
+                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);(["strength","dexterity","vitality","special","insight"] as const).forEach(a=>onApplyEffect(attacker.id,a,1,"Clangorous Soul",attacker.nickname||attacker.pokemon.name));onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(160,64,160,0.2)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#a040a040":"#5a608030"}`,color:canUse?"#a040a0":"#5a6080"}}>
+                    🎶 Pay {cost} HP → All +1
+                  </button>
+                </div>
+              );})()}
+
+              {/* Fillet Away */}
+              {isFilletAway&&onApplySpecial&&(()=>{const cost=Math.max(1,Math.floor(attacker.maxHp/4));const canUse=attacker.currentHp>cost;return(
+                <div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475740",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#ff4757",marginBottom:4}}>🔪 Fillet Away — Sharp offense at a cost</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Costs <strong style={{color:"#ff4757"}}>{cost} HP</strong> · STR <strong style={{color:"#00d4aa"}}>+2</strong> · SPC <strong style={{color:"#00d4aa"}}>+2</strong></div>
+                  {!canUse&&<div style={{fontSize:10,color:"#ff4757",marginBottom:4}}>⚠ Not enough HP!</div>}
+                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);onApplyEffect(attacker.id,"strength",2,"Fillet Away",attacker.nickname||attacker.pokemon.name);onApplyEffect(attacker.id,"special",2,"Fillet Away",attacker.nickname||attacker.pokemon.name);onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(255,71,87,0.15)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#ff475740":"#5a608030"}`,color:canUse?"#ff4757":"#5a6080"}}>
+                    🔪 Pay {cost} HP → STR+2, SPC+2
+                  </button>
+                </div>
+              );})()}
+
+              {/* Follow Me / Spotlight / Rage Powder */}
+              {isFollowMe&&onApplySpecial&&(
+                <div style={{background:"rgba(0,212,170,0.08)",border:"1px solid #00d4aa40",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#00d4aa",marginBottom:6}}>🎯 {move.name} — Redirect attacks</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>All single-target moves must target the marked Pokémon this round.</div>
+                  {move.name==="Spotlight"&&targets.filter(t=>t!==attacker.id).length>0?(
+                    targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{isFollowMeTarget:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",color:"#00d4aa",marginBottom:3}}>🎯 Spotlight {t.nickname||t.pokemon.name}</button>;})
+                  ):(
+                    <button onClick={()=>{onApplySpecial!(attacker.id,{isFollowMeTarget:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",color:"#00d4aa"}}>
+                      🎯 {attacker.nickname||attacker.pokemon.name} becomes the focus target
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* After You */}
+              {isAfterYou&&targets.filter(t=>t!==attacker.id).length>0&&(
+                <div style={{background:"rgba(248,216,48,0.06)",border:"1px solid #f8d03030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#f8d030"}}>
+                  ⚡ <strong>After You:</strong> {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);return t?`${t.nickname||t.pokemon.name}`:""}).join(", ")} acts immediately next. Move their card to the top of initiative manually.
+                </div>
+              )}
+
+              {/* Attract */}
+              {isAttract&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
+                <div style={{background:"rgba(240,128,48,0.08)",border:"1px solid #f0803040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#f08030",marginBottom:6}}>💕 Attract — Inflict Infatuated</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Requires opposite gender. Infatuated target must pass WP check (2 succ) to act each turn.</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||["Healthy"],"Infatuated")});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",color:"#f08030",marginBottom:3}}>💕 Infatuate {t.nickname||t.pokemon.name}</button>;})}
+                </div>
+              )}
+
+              {/* Acupressure */}
+              {isAcupressure&&onApplySpecial&&(
+                <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#00d4aa",marginBottom:6}}>📌 Acupressure — Random stat +1</div>
+                  {acupressureResult?<div style={{fontSize:11,color:"#00d4aa",marginBottom:6}}>Result: {acupressureResult}</div>:null}
+                  <button onClick={()=>{const attrs2:Array<keyof AttrSet>=["strength","dexterity","vitality","special","insight"];const labels={strength:"STR",dexterity:"DEX",vitality:"VIT",special:"SPC",insight:"INS"};const picked=attrs2[Math.floor(Math.random()*attrs2.length)];const tid=targets.length>0?targets[0]:attacker.id;const t=allEntries.find(e=>e.id===tid)||attacker;setAcupressureResult(`${labels[picked]} +1 on ${t.nickname||t.pokemon.name}`);onApplyEffect(tid,picked,1,"Acupressure",attacker.nickname||attacker.pokemon.name);}} style={{padding:"6px 12px",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",borderRadius:4,color:"#00d4aa",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    🎲 Roll Acupressure
+                  </button>
+                </div>
+              )}
+
+              {/* Charge */}
+              {isCharge&&onApplySpecial&&(
+                <div style={{background:"rgba(248,216,48,0.08)",border:"1px solid #f8d03040",borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#f8d030",marginBottom:4}}>⚡ Charge — Boost next Electric move</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Marks this Pokémon as Charged. Next Electric move deals +2 damage dice.</div>
+                  <button onClick={()=>{onApplySpecial!(attacker.id,{chargeActive:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(248,216,48,0.15)",border:"1px solid #f8d03040",color:"#f8d030"}}>
+                    ⚡ Activate Charge
+                  </button>
+                </div>
+              )}
+
+              {/* Weather-setting moves */}
+              {weatherSet&&(
+                <div style={{background:"rgba(255,211,42,0.06)",border:"1px solid #ffd32a30",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#ffd32a"}}>
+                  ☀️ This move sets weather to <strong>{weatherSet}</strong>. Change the weather selector in the nav bar above.
+                </div>
+              )}
+
+              {/* Recoil */}
+              {hasRecoil&&accResult&&accResult.successes>=actReq&&(
+                <div style={{background:"rgba(255,71,87,0.06)",border:"1px solid #ff475730",borderRadius:5,padding:"8px 10px"}}>
+                  <div style={{fontSize:10,color:"#ff4757",fontWeight:700,marginBottom:4}}>💥 Recoil</div>
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>After damage is dealt, apply recoil to user (½ damage dealt back to self).</div>
+                  <button onClick={()=>{const recoilDmg=Math.max(1,Math.floor(attacker.currentHp/4));onApplyDmg(attacker.id,recoilDmg);}} style={{padding:"4px 10px",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    Apply Recoil (~{Math.max(1,Math.floor(attacker.currentHp/4))} HP to {attacker.nickname||attacker.pokemon.name})
+                  </button>
+                </div>
+              )}
+
+              {/* Mark action taken button */}
+              <button onClick={()=>{
+                // Apply all stat effects
+                statFx.forEach(se=>{
+                  const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
+                  applyTargets.forEach(tid=>onApplyEffect(tid,se.attr,se.amount,move.name,attacker.nickname||attacker.pokemon.name));
+                });
+                onIncrementAction(attacker.id,isPriority);onClose();
+              }} style={{width:"100%",padding:"8px 10px",background:"#00d4aa",border:"none",borderRadius:5,fontSize:12,fontWeight:700,color:"#0f1117",cursor:"pointer"}}>
+                ✓ {statFx.length>0?"Apply Effect & Action Used":"Mark Action Used & Close"}{!isPriority&&` (Action #${(attacker.actionCount||0)+1})`}
+              </button>
+            </div>
+          )}
+
+          {/* Substitute — create a decoy, lose 1/4 HP */}
+          {canAct&&(accResult?.successes??0)>=actReq&&isSubstitute&&onApplySpecial&&(
+            <div style={{background:"rgba(104,144,240,0.08)",border:"1px solid #6890f040",borderRadius:6,padding:"10px 12px"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#6890f0",marginBottom:6}}>🛡️ Substitute</div>
+              <div style={{fontSize:10,color:"#8b90a8",marginBottom:8}}>Costs 1/4 max HP to create. A 🛡️ Sub indicator appears on the card.</div>
+              <button onClick={()=>{const cost=Math.max(1,Math.floor(attacker.maxHp/4));onApplyDmg(attacker.id,cost);onApplySpecial!(attacker.id,{hasSubstitute:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",background:"#6890f0",color:"#fff",border:"none",borderRadius:5,padding:"7px",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                🛡️ Create Substitute (costs {Math.max(1,Math.floor(attacker.maxHp/4))} HP)
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Capture Popup (full) ──────────────────────────────────────────────────────
+function CapturePopup({allEntries,defaultTargetId,onClose}:{allEntries:BattleEntry[];defaultTargetId?:string;onClose:()=>void;}){
+  const trainers=useMemo(()=>loadFromStorage<any[]>("trainers",[]),[]);
+  const pokemonSheets=useMemo(()=>loadFromStorage<Record<string,any>>("pokemon_sheets",{}),[]);
+
+  const [throwerId,setThrowerId]=useState<string>("");
+  const [targetId,setTargetId]=useState<string>(defaultTargetId||"");
+  const [ballKey,setBallKey]=useState<string>("");
+  const [throwRoll,setThrowRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [sealRoll,setSealRoll]=useState<{rolls:number[];successes:number}|null>(null);
+
+  const thrower=trainers.find(t=>t.id===throwerId);
+  const target=allEntries.find(e=>e.id===targetId);
+  const enemies=allEntries.filter(e=>e.side==="enemy"&&e.currentHp>0);
+
+  // Get thrower's pokeballs from inventory
+  const throwerInventory:ItemData[]=useMemo(()=>{
+    if(!thrower)return[];
+    return (thrower.inventory||[]) as ItemData[];
+  },[thrower]);
+  const balls=throwerInventory.filter(i=>i.pocket==="Pokeballs"||i.category?.toLowerCase().includes("ball")||i.name.toLowerCase().includes("ball"));
+  // Fallback: standard balls shown as unavailable if thrower has no inventory
+  const STANDARD_BALLS=[
+    {name:"Pokéball",description:"Standard ball.",pocket:"Pokeballs",category:"Ball",cost:"200",oneUse:true},
+    {name:"Great Ball",description:"Better ball.",pocket:"Pokeballs",category:"Ball",cost:"600",oneUse:true},
+    {name:"Ultra Ball",description:"High-quality ball.",pocket:"Pokeballs",category:"Ball",cost:"1200",oneUse:true},
+  ] as ItemData[];
+  const ballOptions=thrower?(balls.length>0?balls:STANDARD_BALLS):STANDARD_BALLS;
+  const isBallAvailable=(b:ItemData)=>!thrower||balls.some(bl=>bl.name===b.name);
+
+  const SEAL_POTENCY:Record<string,number>={"Pokéball":4,"Great Ball":6,"Ultra Ball":8};
+  const getSealDice=(name:string)=>SEAL_POTENCY[name]||4;
+  const selectedBall=ballOptions.find(b=>b.name===ballKey);
+  const sealDice=selectedBall?getSealDice(selectedBall.name):4;
+
+  // Throw pool: SPC/DEX + Channel (skill 2)
+  const throwPool=thrower?Math.max(1,(thrower.attributes?.special||1)+(thrower.skills?.channel||0)+2):4;
+
+  // Catch requirements
+  const CATCH_REQ:Record<Rank,number>={Starter:3,Rookie:4,Standard:6,Advanced:8,Expert:9,Ace:10,Master:12,Champion:14};
+  const required=target?CATCH_REQ[target.pokemon.suggestedRank]??6:6;
+  const atHalf=target&&target.currentHp<=target.maxHp/2&&target.currentHp>1;
+  const atOne=target&&target.currentHp===1;
+  const hpBonus=atOne?2:atHalf?1:0;
+  const statusBonus=target&&primaryStatus(target)!=="Healthy"?1:0;
+  const totalBonus=hpBonus+statusBonus;
+  const totalSuccesses=(throwRoll?.successes??0)+(sealRoll?.successes??0)+totalBonus;
+  const caught=!!(throwRoll&&sealRoll&&totalSuccesses>=required);
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
+      <div style={{background:"#1e2235",border:"1px solid #3a4060",borderRadius:10,width:480,maxHeight:"88vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+        <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#ffd32a",margin:0}}>🎯 Capture Pokémon</h3>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        <div style={{padding:16,display:"flex",flexDirection:"column",gap:12}}>
+
+          {/* Step 1: Select Thrower */}
+          <div>
+            <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>1. Select Thrower</div>
+            <select value={throwerId} onChange={e=>setThrowerId(e.target.value)} style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:4,color:"#e8eaf0",fontSize:12,padding:"5px 8px"}}>
+              <option value="">— choose trainer —</option>
+              {trainers.map(t=><option key={t.id} value={t.id}>{t.name} ({t.rank})</option>)}
+            </select>
+            {thrower&&<div style={{background:"#13151f",borderRadius:5,padding:"8px 10px",marginTop:6,fontSize:11}}>
+              <span style={{color:"#5a6080"}}>SPC: </span><strong style={{color:"#e8eaf0"}}>{thrower.attributes?.special||1}</strong>
+              <span style={{color:"#5a6080",marginLeft:10}}>Channel skill: </span><strong style={{color:"#e8eaf0"}}>{thrower.skills?.channel||0}</strong>
+              <span style={{color:"#5a6080",marginLeft:10}}>Throw pool: </span><strong style={{color:"#3d8bff"}}>{throwPool}d</strong>
+            </div>}
+          </div>
+
+          {/* Step 2: Select Target */}
+          <div>
+            <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>2. Select Target Pokémon</div>
+            <select value={targetId} onChange={e=>setTargetId(e.target.value)} style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:4,color:"#e8eaf0",fontSize:12,padding:"5px 8px"}}>
+              <option value="">— choose target —</option>
+              {enemies.map(e=><option key={e.id} value={e.id}>{e.nickname||e.pokemon.name} ({e.currentHp}/{e.maxHp} HP, {e.pokemon.suggestedRank})</option>)}
+              {allEntries.filter(e=>e.side!=="enemy").map(e=><option key={e.id} value={e.id}>[{e.side}] {e.nickname||e.pokemon.name}</option>)}
+            </select>
+            {target&&<div style={{background:"#13151f",borderRadius:5,padding:"8px 10px",marginTop:6,fontSize:11}}>
+              <span style={{color:"#5a6080"}}>Rank: </span><strong style={{color:"#ffd32a"}}>{target.pokemon.suggestedRank}</strong>
+              <span style={{color:"#5a6080",marginLeft:10}}>Needs: </span><strong style={{color:"#ffd32a"}}>{required} successes</strong>
+              <span style={{color:"#5a6080",marginLeft:10}}>HP: </span><strong style={{color:atOne?"#ff4757":atHalf?"#ffd32a":"#00d4aa"}}>{target.currentHp}/{target.maxHp}</strong>
+              <span style={{color:"#5a6080",marginLeft:10}}>Status: </span><strong style={{color:"#a040a0"}}>{primaryStatus(target)}</strong>
+              {totalBonus>0&&<div style={{marginTop:4,color:"#00d4aa",fontWeight:700}}>Bonus +{totalBonus}: {hpBonus>0?`HP +${hpBonus} `:""}{statusBonus>0?`Status +${statusBonus}`:""}</div>}
+            </div>}
+          </div>
+
+          {/* Step 3: Select Ball */}
+          <div>
+            <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>3. Select Pokéball {thrower&&balls.length===0?"(no balls in inventory — using defaults)":""}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {ballOptions.map(b=>{const avail=isBallAvailable(b);return<button key={b.name} onClick={()=>avail&&setBallKey(b.name)} disabled={!avail} style={{flex:1,minWidth:80,padding:"7px 6px",borderRadius:5,border:`1px solid ${ballKey===b.name?"#ffd32a":avail?"#3a4060":"#2a2f45"}`,background:!avail?"#0a0c14":ballKey===b.name?"rgba(255,211,42,0.15)":"#13151f",color:!avail?"#3a4060":ballKey===b.name?"#ffd32a":"#8b90a8",fontSize:11,fontWeight:ballKey===b.name?700:400,cursor:avail?"pointer":"not-allowed",textAlign:"center",opacity:avail?1:0.5}}>
+                {b.name}{!avail&&thrower?<div style={{fontSize:8,color:"#3a4060"}}>Not in inventory</div>:<div style={{fontSize:9,color:"#5a6080"}}>{getSealDice(b.name)}d seal</div>}
+              </button>;})}
+            </div>
+          </div>
+
+          {/* Step 4: Throw Roll */}
+          {throwerId&&targetId&&ballKey&&(
+            <div>
+              <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>4. Throw Roll: SPC + Channel + 2 Skill = {throwPool}d · Need {required} total successes</div>
+              {throwPool<required&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Throw pool ({throwPool}d) is less than required successes ({required}) — bonus from sealing and target condition needed</div>}
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setThrowRoll(rollDice(throwPool))} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Throw ({throwPool}d)</button>
+                {throwRoll&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:throwRoll.successes>0?"#00d4aa":"#ff4757"}}>[{throwRoll.rolls.join(",")}] = {throwRoll.successes} hits {throwRoll.successes===0?"✗ Miss — ball fails to reach":"✓ Ball lands"}</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Seal Potency */}
+          {throwRoll&&throwRoll.successes>0&&(
+            <div>
+              <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>5. Seal Potency: {selectedBall?.name} = {sealDice}d</div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <button onClick={()=>setSealRoll(rollDice(sealDice))} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:"#f08030",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Seal ({sealDice}d)</button>
+                {sealRoll&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700}}>[{sealRoll.rolls.join(",")}] = {sealRoll.successes}</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Result */}
+          {throwRoll&&sealRoll&&target&&(
+            <div style={{background:caught?"rgba(0,212,170,0.15)":"rgba(255,71,87,0.15)",border:`1px solid ${caught?"#00d4aa":"#ff4757"}40`,borderRadius:6,padding:"14px",textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:800,fontFamily:"'Exo 2'",color:caught?"#00d4aa":"#ff4757",marginBottom:6}}>{caught?"✓ Caught!":"✗ Broke Free!"}</div>
+              <div style={{fontSize:12,color:"#8b90a8"}}>{throwRoll.successes} throw + {sealRoll.successes} seal + {totalBonus} bonus = <strong style={{color:caught?"#00d4aa":"#ff4757"}}>{totalSuccesses}</strong> / {required} needed</div>
+              {!caught&&<div style={{fontSize:11,color:"#5a6080",marginTop:4}}>Need {required-totalSuccesses} more success{required-totalSuccesses!==1?"es":""}. Weaken further or use a better ball.</div>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── EOR Popup ─────────────────────────────────────────────────────────────────
+function EORPopup({entries,weather,round,onApply,onClose}:{entries:BattleEntry[];weather:WeatherData;round:number;onApply:(id:string,hp:number)=>void;onClose:()=>void;}){
+  const effects:{entry:BattleEntry;desc:string;hp:number}[]=[];
+  entries.filter(e=>e.currentHp>0).forEach(e=>{
+    const sts=e.statuses||[primaryStatus(e)];
+    if(sts.includes("Burned"))effects.push({entry:e,desc:"Burn −1 HP",hp:-1});
+    if(sts.includes("Poisoned"))effects.push({entry:e,desc:"Poison −1 HP",hp:-1});
+    if(sts.includes("Badly Poisoned"))effects.push({entry:e,desc:"Bad Poison −2 HP",hp:-2});
+    if(weather.endOfRoundDmg&&!e.weatherImmune&&!(weather.immuneTypes??[]).some((t:string)=>e.pokemon.types.includes(t as PokemonType)))effects.push({entry:e,desc:`${weather.name} chip`,hp:-weather.endOfRoundDmg});
+    // Hold item passive EOR effects
+    const trainers_eor=loadFromStorage<any[]>("trainers",[]);
+    const held=getHeldItem(e,trainers_eor);
+    if(held){
+      const hn=held.toLowerCase();
+      if(hn.includes("leftovers"))effects.push({entry:e,desc:`Leftovers +1 HP`,hp:1});
+      if((hn.includes("black sludge"))&&e.pokemon.types.includes("Poison"))effects.push({entry:e,desc:`Black Sludge +1 HP`,hp:1});
+      if((hn.includes("black sludge"))&&!e.pokemon.types.includes("Poison"))effects.push({entry:e,desc:`Black Sludge −1 HP`,hp:-1});
+    }
+  });
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1e2235",border:"1px solid #3a4060",borderRadius:10,width:440,maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",justifyContent:"space-between"}}><h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#ffd32a",margin:0}}>🔄 End of Round {round}</h3><button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button></div>
+        <div style={{padding:16,overflowY:"auto"}}>
+          {effects.length===0?<div style={{color:"#5a6080",textAlign:"center",padding:20}}>No end-of-round effects.</div>:effects.map((ef,i)=>(
+            <div key={i} style={{background:"#13151f",borderRadius:6,padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+              <div><div style={{fontSize:12,fontWeight:700,color:"#e8eaf0"}}>{ef.entry.nickname||ef.entry.pokemon.name}</div><div style={{fontSize:11,color:"#8b90a8",marginTop:2}}>{ef.desc}</div></div>
+              <button onClick={()=>onApply(ef.entry.id,ef.hp)} style={{background:"#ff475720",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>Apply {ef.hp}</button>
+            </div>
+          ))}
+          {effects.length>0&&<button onClick={()=>{effects.forEach(ef=>onApply(ef.entry.id,ef.hp));onClose();}} style={{width:"100%",background:"#ff4757",color:"#fff",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer",marginTop:8}}>Apply All & Close</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Priority Popup ────────────────────────────────────────────────────────────
+function PriorityPopup({entries,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial}:{
+  entries:BattleEntry[];allEntries:BattleEntry[];weather:WeatherData;onClose:()=>void;
+  onApplyDmg:(id:string,dmg:number)=>void;
+  onApplyEffect:(id:string,attr:string,amount:number,src:string,appliedBy?:string)=>void;
+  onIncrementAction:(id:string,isReaction?:boolean)=>void;
+  onSpendWP:(id:string,amt:number)=>void;
+  onApplySpecial?:(id:string,u:Partial<BattleEntry>)=>void;
+}){
+  const [activeMove,setActiveMove]=useState<{entry:BattleEntry;move:Move}|null>(null);
+  const pri=useMemo(()=>{const r:{entry:BattleEntry;move:Move}[]=[];entries.filter(e=>e.currentHp>0&&!e.reactionUsed).forEach(e=>{const pm=e.moves.filter(m=>(m.priority??0)>0);if(pm.length>0)r.push({entry:e,move:pm.sort((a,b)=>(b.priority??0)-(a.priority??0))[0]});});return r.sort((a,b)=>(b.move.priority??0)-(a.move.priority??0));},[entries]);
+  if(pri.length===0)return null;
+  return(
+    <>
+    {activeMove&&<MovePopup move={activeMove.move} attacker={activeMove.entry} allEntries={allEntries} weather={weather} onClose={()=>setActiveMove(null)} onApplyDmg={onApplyDmg} onApplyEffect={onApplyEffect} onIncrementAction={onIncrementAction} onSpendWP={onSpendWP} onApplySpecial={onApplySpecial} fromPriorityPhase={true}/>}
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:1999,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1e2235",border:"2px solid #00d4aa40",borderRadius:10,width:480,maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",justifyContent:"space-between"}}><h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:15,color:"#00d4aa",margin:0}}>⚡ Priority Phase — Declare Reactions</h3><button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button></div>
+        <div style={{padding:16,overflowY:"auto"}}>
+          <p style={{fontSize:11,color:"#8b90a8",marginBottom:12}}>Click a move to use it now. Priority order: highest first. Reactions use 1 WP each.</p>
+          {pri.map(({entry,move})=>(
+            <div key={entry.id} style={{background:"#13151f",border:`1px solid ${TYPE_COLORS[move.type as PokemonType]||"#2a2f45"}40`,borderRadius:6,padding:"10px 12px",marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:TYPE_COLORS[entry.pokemon.types[0]],flexShrink:0}}/>
+                <span style={{fontSize:13,fontWeight:700,color:"#e8eaf0",flex:1}}>{entry.nickname||entry.pokemon.name}</span>
+                <span style={{fontSize:9,color:"#5a6080"}}>HP</span>
+                <span style={{fontSize:11,color:entry.currentHp/entry.maxHp>0.5?"#00d4aa":entry.currentHp/entry.maxHp>0.25?"#ffd32a":"#ff4757"}}>{entry.currentHp}/{entry.maxHp}</span>
+                <span style={{fontSize:9,color:"#5a6080",marginLeft:6}}>WP</span>
+                <span style={{fontSize:11,color:"#6890f0"}}>{entry.currentWill}/{entry.maxWill}</span>
+              </div>
+              {/* Show all priority moves for this entry as clickable */}
+              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                {entry.moves.filter(m=>(m.priority??0)>0).sort((a,b)=>(b.priority??0)-(a.priority??0)).map((m,i)=>(
+                  <button key={i} onClick={()=>setActiveMove({entry,move:m})} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:4,border:`1px solid ${TYPE_COLORS[m.type as PokemonType]||"#00d4aa"}40`,background:`${TYPE_COLORS[m.type as PokemonType]||"#00d4aa"}12`,cursor:"pointer"}}>
+                    <TypeBadge type={m.type as PokemonType} small/>
+                    <span style={{fontSize:11,color:"#e8eaf0"}}>{m.name}</span>
+                    <span style={{fontSize:9,fontWeight:700,color:"#00d4aa"}}>P{m.priority}</span>
+                    <span style={{fontSize:9,color:"#5a6080"}}>▶ Use</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <button onClick={onClose} style={{width:"100%",background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer",marginTop:4}}>Continue to Normal Turn Order ▶</button>
+        </div>
+      </div>
+    </div>
+    </>
+  );
+}
+
+// ── Battle Card (HORIZONTAL COLUMN) ──────────────────────────────────────────
+/* ── Move Edit with Search ───────────────────────────────────────────────────── */
+function MoveSearchEdit({entry,onUpdate}:{entry:BattleEntry;onUpdate:(u:Partial<BattleEntry>)=>void}){
+  const [q,setQ]=useState("");
+  const learnableMoves=useMemo(()=>{
+    const learned=entry.pokemon.moves.map(pm=>MOVES.find(m=>m.name===pm.name)).filter(Boolean) as Move[];
+    // De-dupe: put already-equipped moves first
+    const equipped=entry.moves;
+    const rest=learned.filter(m=>!equipped.some(em=>em.name===m.name));
+    return [...equipped,...rest];
+  },[entry.pokemon.moves,entry.moves]);
+  const filtered=useMemo(()=>{
+    if(!q)return learnableMoves;
+    const ql=q.toLowerCase();
+    return MOVES.filter(m=>m.name.toLowerCase().includes(ql)||m.type.toLowerCase().includes(ql)).slice(0,80);
+  },[q,learnableMoves]);
+  return(
+    <div>
+      <input type="text" placeholder="🔍 Search all 894 moves…" value={q} onChange={e=>setQ(e.target.value)}
+        style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:3,padding:"3px 6px",color:"#e8eaf0",fontSize:10,marginBottom:4,outline:"none"}}/>
+      {!q&&<div style={{fontSize:8,color:"#5a6080",marginBottom:3}}>Showing all learnable moves ({learnableMoves.length}). Search to find any move.</div>}
+      <div style={{maxHeight:180,overflowY:"auto"}}>
+        {filtered.map(m=>{const has=entry.moves.some(em=>em.name===m.name);return(
+          <div key={m.name} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 0",borderBottom:"1px solid #1a1d2710"}}>
+            <input type="checkbox" checked={has} onChange={()=>onUpdate({moves:has?entry.moves.filter(em=>em.name!==m.name):[...entry.moves,m]})}/>
+            <TypeBadge type={m.type as PokemonType} small/>
+            <span style={{fontSize:9,color:"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</span>
+            {(m.priority??0)>0&&<span style={{fontSize:7,color:"#00d4aa"}}>P{m.priority}</span>}
+            <span style={{fontSize:7,color:"#5a6080"}}>{m.category.slice(0,3)}</span>
+          </div>
+        );})}
+        {filtered.length===0&&q&&<div style={{fontSize:9,color:"#5a6080",fontStyle:"italic",padding:"4px 0"}}>No moves match &quot;{q}&quot;</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ── Trainer Card (full card view, replaces pokemon card when toggled) ────────── */
+function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementAction,onUpdate}:{
+  trainer:any;entry:BattleEntry;allEntries:BattleEntry[];
+  onSpendWP:(id:string,amt:number)=>void;
+  onIncrementAction:(id:string,isReaction?:boolean)=>void;
+  onUpdate?:(id:string,u:Partial<BattleEntry>)=>void;
+}){
+  const [selSkill,setSelSkill]=useState<string|null>(null);
+  const [roll,setRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [targets,setTargets]=useState<string[]>([]);
+  const [showBag,setShowBag]=useState(false);
+  const attrs=trainer?.attributes||{strength:1,dexterity:1,vitality:1,insight:1};
+  const standardSkills=trainer?.skills||{};
+  const customSkills:Record<string,number>=Object.fromEntries((trainer?.customSkills||[]).map((cs:any)=>[cs.name,cs.points]));
+  const allSkills={...standardSkills,...customSkills};
+  const others=allEntries.filter(e=>e.id!==entry.id&&e.currentHp>0);
+  const av=(k:string)=>(attrs as any)[k]??1;
+  const actReq=[1,2,3,4,5][Math.min(entry.actionCount,4)];
+  // Trainer HP/WP derived from attributes
+  const trainerMaxHp=4+(attrs.vitality||1);
+  const trainerMaxWp=(attrs.insight||1)+3;
+  const trainerCurHp=entry.trainerCurrentHp??trainerMaxHp;
+  const trainerCurWp=entry.trainerCurrentWp??trainerMaxWp;
+  const inventory:any[]=(trainer?.inventory||[]);
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:0,padding:0}}>
+      {/* HP + WP bars with inline ± buttons */}
+      <div style={{padding:"5px 8px 5px",background:"#0f1117"}}>
+        {/* HP row */}
+        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+          <span style={{fontSize:9,color:"#5a6080",width:16}}>HP</span>
+          <button onClick={()=>onUpdate&&onUpdate(entry.id,{trainerCurrentHp:Math.max(0,trainerCurHp-1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(255,71,87,0.15)",color:"#ff4757",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>−</button>
+          <span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:trainerCurHp/trainerMaxHp>0.5?"#3d8bff":trainerCurHp/trainerMaxHp>0.25?"#ffd32a":"#ff4757",minWidth:28,textAlign:"center"}}>{trainerCurHp}/{trainerMaxHp}</span>
+          <button onClick={()=>onUpdate&&onUpdate(entry.id,{trainerCurrentHp:Math.min(trainerMaxHp,trainerCurHp+1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(61,139,255,0.15)",color:"#3d8bff",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>+</button>
+        </div>
+        <div style={{background:"#2a2f45",borderRadius:3,height:5,overflow:"hidden",marginBottom:4}}>
+          <div style={{width:`${Math.max(0,Math.min(1,trainerCurHp/trainerMaxHp))*100}%`,height:"100%",background:trainerCurHp/trainerMaxHp>0.5?"#3d8bff":trainerCurHp/trainerMaxHp>0.25?"#ffd32a":"#ff4757",transition:"width 0.3s"}}/>
+        </div>
+        {/* WP row */}
+        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+          <span style={{fontSize:9,color:"#5a6080",width:16}}>WP</span>
+          <button onClick={()=>onUpdate&&onUpdate(entry.id,{trainerCurrentWp:Math.max(0,trainerCurWp-1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(255,71,87,0.15)",color:"#ff4757",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>−</button>
+          <span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0",minWidth:28,textAlign:"center"}}>{trainerCurWp}/{trainerMaxWp}</span>
+          <button onClick={()=>onUpdate&&onUpdate(entry.id,{trainerCurrentWp:Math.min(trainerMaxWp,trainerCurWp+1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(61,139,255,0.15)",color:"#3d8bff",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>+</button>
+        </div>
+        <div style={{background:"#0f1117",borderRadius:3,height:4,overflow:"hidden"}}>
+          <div style={{width:`${trainerMaxWp>0?Math.max(0,Math.min(1,trainerCurWp/trainerMaxWp))*100:0}%`,height:"100%",background:"#6890f0",transition:"width 0.3s"}}/>
+        </div>
+      </div>
+
+      {/* Attribute grid — mirrors Pokémon card quick-stats style */}
+      <div style={{padding:"4px 8px",background:"#13151f",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4}}>
+        {[["STR","strength"],["DEX","dexterity"],["VIT","vitality"],["INS","insight"]].map(([l,k])=>(
+          <div key={k} style={{textAlign:"center",background:"#0f1117",borderRadius:3,padding:"4px 0"}}>
+            <div style={{fontSize:7,color:"#5a6080",textTransform:"uppercase",letterSpacing:"0.5px"}}>{l}</div>
+            <div style={{fontSize:14,fontFamily:"'Exo 2'",fontWeight:700,color:"#3d8bff"}}>{av(k)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{padding:"6px 8px",display:"flex",flexDirection:"column",gap:6}}>
+
+      {/* Skills as Moves */}
+      <div>
+        <div style={{fontSize:8,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Skills</div>
+        {Object.entries(allSkills).filter(([,v])=>(v as number)>0).map(([sk,v])=>{
+          const def=TRAINER_SKILL_DEFS[sk];
+          const pool=def?av(def.attr)+(v as number):(v as number);
+          const isSel=selSkill===sk;
+          return(
+            <div key={sk} style={{marginBottom:3}}>
+              <button onClick={()=>{setSelSkill(isSel?null:sk);setRoll(null);setTargets([]);}} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 7px",background:isSel?"rgba(61,139,255,0.15)":"#13151f",border:`1px solid ${isSel?"#3d8bff":"#3d8bff20"}`,borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%"}}>
+                <span style={{fontSize:9,color:"#3d8bff",background:"rgba(61,139,255,0.1)",padding:"1px 5px",borderRadius:2,textTransform:"capitalize",flexShrink:0,minWidth:60}}>{sk}</span>
+                <span style={{fontSize:10,color:"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{def?.desc||sk}</span>
+                <span style={{fontSize:10,color:"#3d8bff",fontFamily:"'Exo 2'",fontWeight:700,flexShrink:0}}>{pool}d</span>
+                <span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>▶</span>
+              </button>
+              {isSel&&(
+                <div style={{background:"#0f1117",borderRadius:"0 0 4px 4px",padding:"6px 8px",border:"1px solid #3d8bff20",borderTop:"none",marginTop:-1}}>
+                  {def&&<div style={{fontSize:9,color:"#8b90a8",marginBottom:5,lineHeight:1.4}}>{def.combat}</div>}
+                  <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
+                    {others.map(t=><button key={t.id} onClick={()=>setTargets(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])} style={{padding:"2px 6px",borderRadius:3,fontSize:9,cursor:"pointer",border:`1px solid ${targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:targets.includes(t.id)?"#e8eaf0":"#8b90a8"}}>{t.nickname||t.pokemon.name}</button>)}
+                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                    <button onClick={()=>setRoll(rollDice(Math.max(1,pool)))} style={{background:"#3d8bff20",border:"1px solid #3d8bff50",borderRadius:3,color:"#3d8bff",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll {sk} ({pool}d)</button>
+                    {roll&&<span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>[{roll.rolls.join(",")}]={roll.successes} {roll.successes>=actReq?"✓":"✗"} (need {actReq})</span>}
+                    {roll&&roll.successes>=actReq&&<button onClick={()=>{onIncrementAction(entry.id);setRoll(null);setSelSkill(null);}} style={{background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:3,padding:"3px 6px",fontSize:9,fontWeight:700,cursor:"pointer"}}>✓ +Action</button>}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {Object.entries(allSkills).filter(([,v])=>(v as number)>0).length===0&&<div style={{fontSize:9,color:"#5a6080",fontStyle:"italic"}}>No skills trained.</div>}
+      </div>
+
+      {/* Bag / Inventory */}
+      <div>
+        <button onClick={()=>setShowBag(!showBag)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",background:"#13151f",border:"1px solid #ffd32a20",borderRadius:4,padding:"5px 8px",cursor:"pointer",textAlign:"left"}}>
+          <span style={{fontSize:10,fontWeight:700,color:"#ffd32a",flex:1}}>🎒 Bag ({inventory.length} items)</span>
+          <span style={{fontSize:8,color:"#5a6080"}}>{showBag?"▲":"▼"}</span>
+        </button>
+        {showBag&&(
+          <div style={{background:"#0f1117",borderRadius:"0 0 4px 4px",padding:"6px 8px",border:"1px solid #ffd32a20",borderTop:"none"}}>
+            {inventory.length===0&&<div style={{fontSize:9,color:"#5a6080",fontStyle:"italic"}}>Empty.</div>}
+            {inventory.map((item:any,ii:number)=>{
+              const n=item.name.toLowerCase();
+              const healAmt=n.includes("max potion")||n.includes("max revive")?entry.maxHp:n.includes("hyper potion")?50:n.includes("super potion")?20:n==="potion"||n.includes(" potion")?10:n.includes("oran berry")?10:n.includes("sitrus berry")?Math.floor(entry.maxHp/4):n.includes("moomoo milk")?100:n.includes("lemonade")?70:n.includes("fresh water")?30:n.includes("soda pop")?50:null;
+              const isRevive=n.includes("revive");
+              const healRevive=n.includes("max revive")?entry.maxHp:isRevive?Math.floor(entry.maxHp/2):null;
+              const statusCure=n.includes("antidote")?"Poisoned":n.includes("burn heal")?"Burned":n.includes("ice heal")?"Frozen":(n.includes("paralyze heal")||n.includes("parlyzheal"))?"Paralyzed":(n.includes("awakening")||n.includes("chesto berry"))?"Asleep":(n.includes("full heal")||n.includes("full restore"))?"all":n.includes("pecha berry")?"Poisoned":n.includes("rawst berry")?"Burned":n.includes("aspear berry")?"Frozen":n.includes("cheri berry")?"Paralyzed":n.includes("lum berry")?"all":null;
+              const xBoost=n.includes("x attack")?"strength":n.includes("x defense")?"vitality":(n.includes("x sp. atk")||n.includes("x spatk"))?"special":(n.includes("x sp. def")||n.includes("x spdef"))?"insight":n.includes("x speed")?"dexterity":null;
+              const holdNote=n.includes("leftovers")?"🔮 +1 HP/round (EOR)":n.includes("choice band")?"🔮 STR+2/locked":n.includes("choice specs")?"🔮 SPC+2/locked":n.includes("choice scarf")?"🔮 DEX+2/locked":n.includes("life orb")?"🔮 +2dmg/recoil":n.includes("focus sash")?"🔮 Survive 1-hit":n.includes("rocky helmet")?"🔮 Contact→1dmg":n.includes("assault vest")?"🔮 VIT+2/no support":n.includes("eviolite")?"🔮 VIT+INS+2":null;
+              const canUse=!!(healAmt||healRevive||statusCure||xBoost);
+              return(
+                <div key={ii} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 0",borderBottom:"1px solid #1a1d27"}}>
+                  <span style={{fontSize:9,color:"#ffd32a",flex:1}}>{item.name}</span>
+                  {holdNote&&<span style={{fontSize:7,color:"#8b90a8"}} title={holdNote}>{holdNote.slice(0,12)}</span>}
+                  <span style={{fontSize:8,color:"#5a6080"}}>×{item.quantity}</span>
+                  {onUpdate&&canUse&&<button onClick={()=>{
+                    if(healAmt!==null)onUpdate(entry.id,{currentHp:Math.min(entry.maxHp,entry.currentHp+(healAmt as number))});
+                    else if(healRevive)onUpdate(entry.id,{currentHp:healRevive as number,statuses:["Healthy"]});
+                    else if(statusCure==="all")onUpdate(entry.id,{statuses:["Healthy"],currentHp:entry.maxHp});
+                    else if(statusCure)onUpdate(entry.id,{statuses:removeStatus(entry.statuses||[],statusCure as string)});
+                    else if(xBoost){const nm=[...entry.statMods];nm.push({source:item.name,attr:xBoost as string,amount:1,appliedBy:"Item"});onUpdate(entry.id,{statMods:nm});}
+                    alert(`Used ${item.name} on ${entry.nickname||entry.pokemon.name}!`);
+                  }} style={{background:"rgba(255,211,42,0.15)",border:"1px solid #ffd32a40",borderRadius:3,color:"#ffd32a",padding:"2px 6px",fontSize:8,fontWeight:700,cursor:"pointer"}}>Use</button>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+  );
+}
+
+// ── Advanced Battle Mechanics ────────────────────────────────────────────────
+const ALL_TYPES_LIST=["Normal","Fire","Water","Grass","Electric","Ice","Fighting","Poison","Ground","Flying","Psychic","Bug","Rock","Ghost","Dragon","Dark","Steel","Fairy"] as const;
+
+function MegaEvolutionPopup({entry,allEntries,onClose,onApply}:{
+  entry:BattleEntry;allEntries:BattleEntry[];onClose:()=>void;
+  onApply:(id:string,u:Partial<BattleEntry>)=>void;
+}){
+  // Rules: Costs 1 WP. Restores full HP + full WP + clears all statuses.
+  // Pokémon must have Mega-Stone held + Trainer has Key Stone.
+  // Attrs may be redistributed. Lasts whole battle. Only one per trainer.
+  const canMega=!entry.isMegaEvolved&&entry.currentWill>=1;
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1e2235",border:"2px solid #f08030",borderRadius:10,width:460,padding:24,fontFamily:"'Exo 2'"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h3 style={{color:"#f08030",margin:0,fontSize:16}}>⚡ Mega Evolution</h3>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        {entry.isMegaEvolved?(
+          <div>
+            <div style={{color:"#f08030",fontWeight:700,marginBottom:12}}>🔶 {entry.nickname||entry.pokemon.name} is Mega-Evolved!</div>
+            <div style={{fontSize:11,color:"#8b90a8",marginBottom:16}}>Mega Evolution lasts the whole battle. It will revert when the battle ends.</div>
+            <button onClick={()=>{
+              onApply(entry.id,{isMegaEvolved:false,attrs:entry.megaOriginalAttrs||entry.attrs,megaOriginalAttrs:undefined});
+              onClose();
+            }} style={{width:"100%",background:"#5a6080",color:"#fff",border:"none",borderRadius:6,padding:10,fontWeight:700,cursor:"pointer"}}>
+              Revert to Original Form
+            </button>
+          </div>
+        ):(
+          <div>
+            <div style={{background:"rgba(240,128,48,0.08)",border:"1px solid #f0803030",borderRadius:6,padding:12,marginBottom:16,fontSize:11,color:"#e8eaf0",lineHeight:1.6}}>
+              <strong style={{color:"#f08030"}}>Requirements:</strong><br/>
+              • Pokémon holds a Mega-Stone (Held Item slot)<br/>
+              • Trainer wears a Key Stone<br/>
+              • Costs <strong>1 WP</strong> on Pokémon&apos;s turn<br/>
+              • Only one Mega-Evolution per Trainer per battle<br/><br/>
+              <strong style={{color:"#f08030"}}>On Mega-Evolving:</strong><br/>
+              • Restores <strong>full HP</strong>, all <strong>WP</strong>, heals <strong>all statuses</strong><br/>
+              • Attributes may be redistributed at your convenience<br/>
+              • Can have a different moveset<br/>
+              • Attributes may exceed the cap of 10<br/>
+              • Buffs/Debuffs on original form carry over
+            </div>
+            {!canMega&&<div style={{color:"#ff4757",fontSize:11,marginBottom:12}}>⚠ Not enough WP (need 1)</div>}
+            <button onClick={()=>{
+              if(!canMega)return;
+              onApply(entry.id,{
+                isMegaEvolved:true,
+                megaOriginalAttrs:{...entry.attrs},
+                currentHp:entry.maxHp,
+                currentWill:entry.maxWill,
+                statuses:["Healthy"],
+              });
+              onClose();
+            }} disabled={!canMega} style={{width:"100%",background:canMega?"#f08030":"#3a4060",color:"#fff",border:"none",borderRadius:6,padding:10,fontWeight:700,cursor:canMega?"pointer":"default",marginBottom:8}}>
+              ⚡ Mega Evolve! (−1 WP, +Full HP/WP, −All Status)
+            </button>
+            <div style={{fontSize:9,color:"#5a6080",textAlign:"center"}}>Manually update the Pokémon&apos;s stats/moves to reflect its Mega form</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DynamaxPopup({entry,onClose,onApply}:{
+  entry:BattleEntry;onClose:()=>void;
+  onApply:(id:string,u:Partial<BattleEntry>)=>void;
+}){
+  // Rules: Trainer has Dynamax Band + Dynamax-Ball. Happens start of round.
+  // Dynamax: +6 extra HP. Gigamax: +12 extra HP + STR/SPC/DEX/DEF/SPDEF +2.
+  // Lasts 3 rounds. Cannot evade/clash. Cannot be copied.
+  // All moves become Max Moves (same type/category). Support→Max Guard.
+  const [isGiga,setIsGiga]=useState(false);
+  const extraHp=isGiga?12:6;
+  const isDynaxActive=entry.isDynamaxed;
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1e2235",border:"2px solid #ff4757",borderRadius:10,width:460,padding:24,fontFamily:"'Exo 2'"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h3 style={{color:"#ff4757",margin:0,fontSize:16}}>💫 {isGiga?"Gigamax":"Dynamax"}</h3>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        {isDynaxActive?(
+          <div>
+            <div style={{color:"#ff4757",fontWeight:700,fontSize:14,marginBottom:8}}>💫 {entry.nickname||entry.pokemon.name} is {entry.isGigamax?"Gigamaxed":"Dynamaxed"}!</div>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <div style={{background:"rgba(255,71,87,0.1)",borderRadius:5,padding:"8px 12px",textAlign:"center",flex:1}}>
+                <div style={{fontSize:10,color:"#5a6080"}}>Extra HP</div>
+                <div style={{fontSize:20,fontWeight:700,color:"#ff4757",fontFamily:"'Exo 2'"}}>{entry.dynamaxExtraHpCur??0}/{entry.isGigamax?12:6}</div>
+              </div>
+              <div style={{background:"rgba(255,71,87,0.1)",borderRadius:5,padding:"8px 12px",textAlign:"center",flex:1}}>
+                <div style={{fontSize:10,color:"#5a6080"}}>Rounds Left</div>
+                <div style={{fontSize:20,fontWeight:700,color:"#ffd32a",fontFamily:"'Exo 2'"}}>{entry.dynamaxRoundsLeft??0}</div>
+              </div>
+            </div>
+            <div style={{fontSize:10,color:"#8b90a8",marginBottom:12}}>
+              All moves are Max Moves. Cannot evade or clash. Immune to Flinch, Infatuation, OHKO moves, Destiny Bond.
+            </div>
+            {/* Extra HP adjuster */}
+            <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:12}}>
+              <span style={{fontSize:11,color:"#e8eaf0"}}>Extra HP:</span>
+              <button onClick={()=>onApply(entry.id,{dynamaxExtraHpCur:Math.max(0,(entry.dynamaxExtraHpCur??0)-1)})} style={{background:"#ff4757",border:"none",borderRadius:3,color:"#fff",width:24,height:24,cursor:"pointer",fontWeight:700}}>−</button>
+              <span style={{fontSize:13,fontWeight:700,color:"#ff4757",fontFamily:"'Exo 2'",minWidth:30,textAlign:"center"}}>{entry.dynamaxExtraHpCur??0}</span>
+              <button onClick={()=>onApply(entry.id,{dynamaxExtraHpCur:Math.min(entry.isGigamax?12:6,(entry.dynamaxExtraHpCur??0)+1)})} style={{background:"#3a4060",border:"none",borderRadius:3,color:"#fff",width:24,height:24,cursor:"pointer",fontWeight:700}}>+</button>
+            </div>
+            <button onClick={()=>{
+              onApply(entry.id,{isDynamaxed:false,dynamaxRoundsLeft:0,dynamaxExtraHpCur:0,isGigamax:false});
+              onClose();
+            }} style={{width:"100%",background:"#5a6080",color:"#fff",border:"none",borderRadius:6,padding:10,fontWeight:700,cursor:"pointer"}}>
+              End Dynamax (revert to normal form)
+            </button>
+          </div>
+        ):(
+          <div>
+            <div style={{background:"rgba(255,71,87,0.06)",border:"1px solid #ff475730",borderRadius:6,padding:12,marginBottom:16,fontSize:11,color:"#e8eaf0",lineHeight:1.6}}>
+              <strong style={{color:"#ff4757"}}>Requirements:</strong><br/>
+              • Trainer wears Dynamax Band + owns Dynamax-Ball<br/>
+              • Transformation at <strong>start of a Round</strong><br/>
+              • Only one per Trainer per battle. Lasts <strong>3 Rounds</strong><br/><br/>
+              <strong style={{color:"#ff4757"}}>Effects:</strong><br/>
+              • <strong>Dynamax:</strong> +6 Extra HP (absorbs damage first)<br/>
+              • <strong>Gigamax:</strong> +12 Extra HP + STR/SPC/DEX +2 (buff rules apply)<br/>
+              • All moves become Max Moves (same type/category)<br/>
+              • Support moves → "Max Guard" (Protect effect)<br/>
+              • <strong>Cannot evade or clash</strong><br/>
+              • Immune to: Flinch, Infatuation, weight moves, OHKO, Destiny Bond
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <button onClick={()=>setIsGiga(false)} style={{flex:1,background:!isGiga?"#ff4757":"rgba(255,71,87,0.1)",border:"1px solid #ff4757",borderRadius:5,color:!isGiga?"#fff":"#ff4757",padding:"8px",fontWeight:700,cursor:"pointer"}}>Dynamax (+6 HP)</button>
+              <button onClick={()=>setIsGiga(true)} style={{flex:1,background:isGiga?"#ff4757":"rgba(255,71,87,0.1)",border:"1px solid #ff4757",borderRadius:5,color:isGiga?"#fff":"#ff4757",padding:"8px",fontWeight:700,cursor:"pointer"}}>Gigamax (+12 HP +attrs)</button>
+            </div>
+            <button onClick={()=>{
+              const updates:Partial<BattleEntry>={isDynamaxed:true,dynamaxRoundsLeft:3,dynamaxExtraHpCur:extraHp,isGigamax:isGiga};
+              if(isGiga){// Apply +2 to STR/SPC/DEX as stat mods
+                updates.statMods=[...entry.statMods,
+                  {source:"Gigamax",attr:"strength",amount:2},
+                  {source:"Gigamax",attr:"special",amount:2},
+                  {source:"Gigamax",attr:"dexterity",amount:2},
+                ];
+              }
+              onApply(entry.id,updates);onClose();
+            }} style={{width:"100%",background:"#ff4757",color:"#fff",border:"none",borderRadius:6,padding:10,fontWeight:700,cursor:"pointer",marginBottom:8}}>
+              💫 {isGiga?"Gigamax":"Dynamax"}! (+{extraHp} Extra HP, 3 rounds)
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TerastallizationPopup({entry,onClose,onApply}:{
+  entry:BattleEntry;onClose:()=>void;
+  onApply:(id:string,u:Partial<BattleEntry>)=>void;
+}){
+  // Rules: Tera Jewel/Shard held + Trainer has Tera Orb. Used as Reaction 10. Costs 1 WP.
+  // Type changes to Stellar-Type → choose any of 18 type affinities.
+  // Keeps original STAB + gains chosen type STAB.
+  // First move same type as affinity: +3 extra dice (if matches original), +2 (if different).
+  // After that: +1 dice to all moves. Tera-vs-Tera = always super effective.
+  const [selType,setSelType]=useState<string>(entry.teraType||entry.pokemon.types[0]);
+  const isSameAsOriginal=entry.pokemon.types.includes(selType as PokemonType);
+  const bonusDice=isSameAsOriginal?3:2;
+  const isTeraActive=entry.isTerastallized;
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1e2235",border:"2px solid #a040a0",borderRadius:10,width:480,padding:24,fontFamily:"'Exo 2'"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h3 style={{color:"#a040a0",margin:0,fontSize:16}}>💎 Terastallization</h3>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        {isTeraActive?(
+          <div>
+            <div style={{color:"#a040a0",fontWeight:700,marginBottom:8}}>💎 {entry.nickname||entry.pokemon.name} is Terastallized! ({entry.teraType}-Type)</div>
+            <div style={{background:"rgba(160,64,160,0.08)",border:"1px solid #a040a040",borderRadius:5,padding:10,fontSize:11,color:"#e8eaf0",marginBottom:12,lineHeight:1.6}}>
+              • Type is now: <strong style={{color:"#a040a0"}}>{entry.teraType}</strong> (removes dual-type, keeps original STAB)<br/>
+              • First {entry.teraType}-type move: {entry.teraFirstMoveBonusUsed?<span style={{color:"#5a6080"}}>✓ Bonus used</span>:<span style={{color:"#00d4aa"}}>+{bonusDice} Extra Dice (pending)</span>}<br/>
+              • All subsequent moves: +1 Damage Die<br/>
+              • vs other Tera Pokémon: always Super Effective (both ways)
+            </div>
+            {!entry.teraFirstMoveBonusUsed&&(
+              <button onClick={()=>{onApply(entry.id,{teraFirstMoveBonusUsed:true});onClose();}} style={{width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:5,padding:8,fontWeight:700,cursor:"pointer",marginBottom:8}}>
+                ✓ Mark First-Move Bonus Used (+{bonusDice} dice for first {entry.teraType} move)
+              </button>
+            )}
+            <button onClick={()=>{onApply(entry.id,{isTerastallized:false,teraType:undefined,teraFirstMoveBonusUsed:false});onClose();}} style={{width:"100%",background:"#5a6080",color:"#fff",border:"none",borderRadius:6,padding:10,fontWeight:700,cursor:"pointer"}}>
+              Revert (Terastallization lasts whole battle — only do this between battles)
+            </button>
+          </div>
+        ):(
+          <div>
+            <div style={{background:"rgba(160,64,160,0.06)",border:"1px solid #a040a030",borderRadius:6,padding:12,marginBottom:16,fontSize:11,color:"#e8eaf0",lineHeight:1.6}}>
+              <strong style={{color:"#a040a0"}}>Requirements:</strong><br/>
+              • Pokémon holds a <strong>Tera Jewel/Shard</strong><br/>
+              • Trainer owns and uses a <strong>Tera Orb</strong><br/>
+              • Used as <strong>Reaction 10</strong> (high priority reaction)<br/>
+              • Costs <strong>1 WP</strong>. One per Trainer per battle<br/><br/>
+              <strong style={{color:"#a040a0"}}>Effects:</strong><br/>
+              • Type becomes <strong>Stellar-Type</strong> → choose any affinity<br/>
+              • Keeps original type STAB + gains new type STAB<br/>
+              • Removes Dual-Type while active<br/>
+              • First move (matching affinity): <strong>+3 dice</strong> (same as original) or <strong>+2 dice</strong> (different)<br/>
+              • All other moves: <strong>+1 Damage Die</strong><br/>
+              • Tera vs Tera: always Super Effective (both directions)
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,color:"#a040a0",marginBottom:6}}>Select Tera Affinity Type</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {ALL_TYPES_LIST.map(t=>(
+                  <button key={t} onClick={()=>setSelType(t)} style={{padding:"3px 8px",borderRadius:3,fontSize:10,cursor:"pointer",fontWeight:700,border:`1px solid ${TYPE_COLORS[t as PokemonType]||"#3a4060"}`,background:selType===t?TYPE_COLORS[t as PokemonType]||"#a040a0":"transparent",color:selType===t?"#fff":TYPE_COLORS[t as PokemonType]||"#8b90a8"}}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{fontSize:10,color:"#8b90a8",marginBottom:12}}>
+              Chosen: <strong style={{color:"#a040a0"}}>{selType}</strong> — {entry.pokemon.types.includes(selType as PokemonType)?"Matches original type!":"Different from original type"} → First-move bonus: <strong style={{color:"#00d4aa"}}>+{isSameAsOriginal?3:2} Extra Dice</strong>
+            </div>
+            <button onClick={()=>{
+              if(entry.currentWill<1)return;
+              onApply(entry.id,{isTerastallized:true,teraType:selType,teraFirstMoveBonusUsed:false,currentWill:entry.currentWill-1});
+              onClose();
+            }} disabled={entry.currentWill<1} style={{width:"100%",background:entry.currentWill>=1?"#a040a0":"#3a4060",color:"#fff",border:"none",borderRadius:6,padding:10,fontWeight:700,cursor:entry.currentWill>=1?"pointer":"default",marginBottom:8}}>
+              💎 Terastallize as {selType}-Type! (−1 WP, Reaction 10)
+            </button>
+            {entry.currentWill<1&&<div style={{fontSize:9,color:"#ff4757",textAlign:"center"}}>Not enough WP</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
+  entry:BattleEntry;allEntries:BattleEntry[];onClose:()=>void;
+  onApply:(id:string,u:Partial<BattleEntry>)=>void;
+  onApplyDmg:(id:string,dmg:number)=>void;
+}){
+  // Rules: Z-Crystal in Held Item + Trainer wears Z-Ring.
+  // Power = base move Power + Happiness + Loyalty. Cannot be evaded/clashed.
+  // Cannot deal Lethal Damage. Once per battle (repeat costs 3 WP each).
+  // Z-Crystal type must match base move type.
+  const [selMove,setSelMove]=useState<Move|null>(null);
+  const [selTarget,setSelTarget]=useState<string|null>(null);
+  const [rolled,setRolled]=useState<{rolls:number[];successes:number}|null>(null);
+  const others=allEntries.filter(e=>e.id!==entry.id&&e.currentHp>0);
+  const eligibleMoves=entry.moves; // should filter by Z-Crystal type, but we let GM decide
+  const zPower=(selMove?parseInt(selMove.power)||1:1)+(entry.loyalty||0)+(entry.happiness||0);
+  const attrs=getEffectiveAttrs(entry);
+  const dmgBase=selMove?.category==="Physical"?attrs.strength:attrs.special;
+  const totalDmgPool=dmgBase+zPower;
+  const alreadyUsed=entry.zMoveUsed;
+  const repeatCost=3;
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1e2235",border:"2px solid #ffd32a",borderRadius:10,width:480,maxHeight:"90vh",display:"flex",flexDirection:"column",padding:24,fontFamily:"'Exo 2'"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h3 style={{color:"#ffd32a",margin:0,fontSize:16}}>⭐ Z-Move</h3>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1}}>
+          {alreadyUsed&&<div style={{background:"rgba(255,71,87,0.1)",border:"1px solid #ff475730",borderRadius:5,padding:8,marginBottom:12,fontSize:11,color:"#ff4757"}}>⚠ Z-Move already used this battle. Using again costs <strong>3 WP</strong> from both Trainer and Pokémon.</div>}
+          <div style={{background:"rgba(255,211,42,0.06)",border:"1px solid #ffd32a30",borderRadius:6,padding:12,marginBottom:16,fontSize:11,color:"#e8eaf0",lineHeight:1.6}}>
+            <strong style={{color:"#ffd32a"}}>Rules:</strong><br/>
+            • Z-Crystal must match move type • Cannot be Evaded, Clashed, or used to Clash<br/>
+            • Cannot deal Lethal Damage • Once per day (repeat = −3 WP each)<br/>
+            • Power = Base Move Power + <strong>Happiness ({entry.happiness||0}) + Loyalty ({entry.loyalty||0})</strong>
+          </div>
+          {/* Base Move Picker */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:"#ffd32a",marginBottom:5}}>① Select Base Move (must match Z-Crystal type)</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {eligibleMoves.map((m,i)=>(
+                <button key={i} onClick={()=>setSelMove(m)} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",border:`1px solid ${TYPE_COLORS[m.type as PokemonType]}`,background:selMove?.name===m.name?TYPE_COLORS[m.type as PokemonType]:"transparent",color:selMove?.name===m.name?"#fff":TYPE_COLORS[m.type as PokemonType]}}>
+                  {m.name} ({m.type})
+                </button>
+              ))}
+            </div>
+          </div>
+          {selMove&&(
+            <>
+              <div style={{background:"rgba(255,211,42,0.08)",borderRadius:5,padding:10,marginBottom:12,fontSize:11,color:"#e8eaf0"}}>
+                <strong style={{color:"#ffd32a"}}>Z-Move damage pool:</strong> {dmgBase} ({selMove.category==="Physical"?"STR":"SPC"}) + {parseInt(selMove.power)||1} (base power) + {(entry.happiness||0)+(entry.loyalty||0)} (H+L) = <strong style={{color:"#ffd32a",fontSize:13}}>{totalDmgPool}d</strong>
+                <br/><span style={{color:"#8b90a8"}}>Category: {selMove.category} · Cannot be evaded or clashed</span>
+              </div>
+              {/* Target picker */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:10,color:"#ffd32a",marginBottom:5}}>② Select Target</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {others.map(t=>(
+                    <button key={t.id} onClick={()=>setSelTarget(t.id)} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",border:`1px solid ${selTarget===t.id?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:selTarget===t.id?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:selTarget===t.id?"#e8eaf0":"#8b90a8"}}>
+                      {t.nickname||t.pokemon.name} ({t.currentHp}/{t.maxHp})
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Roll + Apply */}
+              <button onClick={()=>setRolled(rollDice(totalDmgPool))} style={{background:"#ffd32a",color:"#0f1117",border:"none",borderRadius:5,padding:"8px 16px",fontWeight:700,cursor:"pointer",marginBottom:8}}>
+                🎲 Roll Z-Move Damage ({totalDmgPool}d)
+              </button>
+              {rolled&&(
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#ffd32a"}}>[{rolled.rolls.join(",")}] = {rolled.successes} successes</div>
+                  {selTarget&&(()=>{
+                    const t=allEntries.find(e=>e.id===selTarget);
+                    if(!t)return null;
+                    const def=selMove.category==="Physical"?t.attrs.vitality:t.attrs.insight;
+                    const finalDmg=Math.max(1,rolled.successes-def);
+                    return(
+                      <button onClick={()=>{
+                        onApplyDmg(selTarget,finalDmg);
+                        onApply(entry.id,{zMoveUsed:true,currentWill:alreadyUsed?Math.max(0,entry.currentWill-repeatCost):entry.currentWill});
+                        onClose();
+                      }} style={{width:"100%",background:"#ffd32a",color:"#0f1117",border:"none",borderRadius:5,padding:"8px",fontWeight:700,cursor:"pointer",marginTop:6}}>
+                        ⭐ Apply {finalDmg} damage to {t.nickname||t.pokemon.name}{alreadyUsed?` (−${repeatCost} WP)`:""}
+                      </button>
+                    );
+                  })()}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AttrModBadge({mod}:{mod:number}){
+  if(mod===0)return null;
+  const up=mod>0;
+  const clr=up?"#00d4aa":"#ff4757";
+  const bg=up?"rgba(0,212,170,0.15)":"rgba(255,71,87,0.15)";
+  const bdr=up?"#00d4aa40":"#ff475740";
+  return<div style={{marginTop:2,fontSize:7,fontWeight:700,color:clr,background:bg,border:`1px solid ${bdr}`,borderRadius:2,padding:"0 3px",display:"inline-block"}}>
+    {up?"▲":"▼"}{Math.abs(mod)}
+  </div>;
+}
+
+function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextTurn,onDragStart,onDragOver,onDrop}:{
+  entry:BattleEntry;allEntries:BattleEntry[];weather:WeatherData;isActive:boolean;
+  onUpdate:(id:string,u:Partial<BattleEntry>)=>void;onRemove:(id:string)=>void;
+  onNextTurn?:()=>void;
+  onDragStart?:()=>void;onDragOver?:(e:React.DragEvent)=>void;onDrop?:()=>void;
+}){
+  const [movePopup,setMovePopup]=useState<Move|null>(null);
+  const [showEditMoves,setShowEditMoves]=useState(false);
+  const [showCapture,setShowCapture]=useState(false);
+  const [showMega,setShowMega]=useState(false);
+  const [showDynamax,setShowDynamax]=useState(false);
+  const [showTera,setShowTera]=useState(false);
+  const [showZMove,setShowZMove]=useState(false);
+  const [showTrainerSkills,setShowTrainerSkills]=useState(false);
+  const upd=(u:Partial<BattleEntry>)=>onUpdate(entry.id,u);
+  const sc=STATUS_CONDITIONS[primaryStatus(entry)];
+  const sideColor={player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[entry.side];
+  const painPenalty=getPainPenalty(entry.currentHp,entry.maxHp);
+  const linkedTrainer=useMemo(()=>{if(!entry.linkedTrainerId)return null;return loadFromStorage<any[]>("trainers",[]).find((t:any)=>t.id===entry.linkedTrainerId)||null;},[entry.linkedTrainerId]);
+  const attrModSummary=(attr:keyof AttrSet)=>entry.statMods.filter(m=>m.attr===attr).reduce((s,m)=>s+m.amount,0);
+  const applyDmg=(tid:string,dmg:number)=>{const t=allEntries.find(e=>e.id===tid)||entry;onUpdate(t.id,{currentHp:Math.max(0,t.currentHp-dmg)});};
+  const applyEffect=(tid:string,attr:string,amount:number,src:string,appliedBy?:string)=>{const t=allEntries.find(e=>e.id===tid);if(!t)return;const nm=[...t.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0){nm[idx]={...nm[idx],amount:nm[idx].amount+amount,appliedBy:appliedBy??nm[idx].appliedBy};}else nm.push({source:src,attr,amount,appliedBy});onUpdate(tid,{statMods:nm});};
+  const incrementAction=(id:string,isReaction?:boolean)=>{
+    const t=allEntries.find(e=>e.id===id)||entry;
+    if(isReaction){onUpdate(id,{reactionUsed:true});}
+    else{onUpdate(id,{actionCount:Math.min(5,(allEntries.find(e=>e.id===id)||entry).actionCount+1)});}
+  };
+  const spendWP=(id:string,amt:number)=>{const t=allEntries.find(e=>e.id===id)||entry;onUpdate(id,{currentWill:Math.max(0,t.currentWill-amt)});};
+
+  return(
+    <>
+      {movePopup&&<MovePopup move={movePopup} attacker={entry} allEntries={allEntries} weather={weather} onClose={()=>setMovePopup(null)} onApplyDmg={applyDmg} onApplyEffect={applyEffect} onIncrementAction={incrementAction} onSpendWP={spendWP} onApplySpecial={(id,u)=>onUpdate(id,u)} onEndTurn={onNextTurn}/>}
+      {showCapture&&<CapturePopup allEntries={allEntries} defaultTargetId={entry.id} onClose={()=>setShowCapture(false)}/>}
+      {showMega&&<MegaEvolutionPopup entry={entry} allEntries={allEntries} onClose={()=>setShowMega(false)} onApply={onUpdate}/>}
+      {showDynamax&&<DynamaxPopup entry={entry} onClose={()=>setShowDynamax(false)} onApply={onUpdate}/>}
+      {showTera&&<TerastallizationPopup entry={entry} onClose={()=>setShowTera(false)} onApply={onUpdate}/>}
+      {showZMove&&<ZMovePopup entry={entry} allEntries={allEntries} onClose={()=>setShowZMove(false)} onApply={onUpdate} onApplyDmg={(id,dmg)=>onUpdate(id,{currentHp:Math.max(0,(allEntries.find(e=>e.id===id)?.currentHp??0)-dmg)})}/>}
+      {showTrainerSkills&&linkedTrainer&&<TrainerSkillPopup trainerData={linkedTrainer} entry={entry} allEntries={allEntries} onClose={()=>setShowTrainerSkills(false)}/>}
+
+      {/* HORIZONTAL CARD — fixed width column */}
+      {/* Fainted visual treatment */}
+      <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}
+        style={{width:280,flexShrink:0,background:entry.currentHp<=0?"#0a0c12":"#1e2235",border:`2px solid ${entry.currentHp<=0?"#3a3040":isActive?sideColor:sideColor+"50"}`,borderRadius:8,display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)",overflowX:"hidden",overflowY:"auto",opacity:entry.currentHp<=0?0.45:1,boxShadow:isActive?`0 0 0 2px ${sideColor}40,0 4px 20px rgba(0,0,0,0.4)`:undefined,cursor:"default"}}>
+
+        {/* Card header — switches to trainer name/colour when trainer view active */}
+        {(()=>{
+          const trainerView=!!(entry.showTrainerView&&linkedTrainer);
+          const headerBg=trainerView?"rgba(61,139,255,0.15)":isActive?sideColor+"18":"#0f1117";
+          const dotBg=trainerView?"#3d8bff":TYPE_COLORS[entry.pokemon.types[0]];
+          const displayName=trainerView?(linkedTrainer.name||"Trainer"):entry.nickname;
+          const displayPlaceholder=trainerView?(linkedTrainer.name||"Trainer"):entry.pokemon.name;
+          return(
+            <div style={{padding:"6px 8px",background:headerBg,borderRadius:"6px 6px 0 0",display:"flex",alignItems:"center",gap:5}}>
+              <span style={{color:"#5a6080",cursor:"grab",fontSize:13,flexShrink:0,userSelect:"none"}} title="Drag to reorder">⠿</span>
+              <div style={{width:7,height:7,borderRadius:"50%",background:dotBg,flexShrink:0}}/>
+              {trainerView
+                ? <><span style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:12,color:"#3d8bff",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{displayName}</span>
+                  {linkedTrainer?.rank&&<span style={{fontSize:8,color:"#3d8bff",background:"rgba(61,139,255,0.15)",border:"1px solid #3d8bff30",borderRadius:3,padding:"1px 5px",flexShrink:0}}>{linkedTrainer.rank}</span>}
+                  {linkedTrainer?.age&&<span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>{linkedTrainer.age}</span>}
+                  <span style={{flex:1}}/></>
+                : <input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={displayPlaceholder} style={{flex:1,background:"transparent",border:"none",color:"#e8eaf0",fontFamily:"'Exo 2'",fontWeight:700,fontSize:12,outline:"none",minWidth:0}}/>
+              }
+              {entry.currentHp<=0&&<span style={{fontSize:9,fontWeight:700,color:"#705898",background:"rgba(112,88,152,0.2)",padding:"1px 4px",borderRadius:2,flexShrink:0}}>💀 FAINTED</span>}
+              {isActive&&entry.currentHp>0&&<span style={{fontSize:8,fontWeight:700,color:sideColor,background:sideColor+"20",padding:"1px 4px",borderRadius:2,flexShrink:0}}>ACTIVE</span>}
+              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} style={{background:trainerView?"rgba(61,139,255,0.3)":"rgba(61,139,255,0.1)",border:`1px solid ${trainerView?"#3d8bff":"#3d8bff30"}`,borderRadius:3,color:"#3d8bff",cursor:"pointer",fontSize:8,padding:"1px 4px",flexShrink:0}} title="Toggle Trainer/Pokémon card">{trainerView?"🐾 Pokémon":"👤 Trainer"}</button>}
+              <button onClick={()=>upd({isExpanded:!entry.isExpanded})} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:10,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
+              <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:11,flexShrink:0}}>✕</button>
+            </div>
+          );
+        })()}
+
+        {/* Action economy + Reaction — shared between Pokémon and linked Trainer, always visible */}
+        <div style={{padding:"3px 8px",background:"#13151f",display:"flex",gap:3,alignItems:"center",borderBottom:"1px solid #1e2235"}}>
+          <span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>Act:</span>
+          {[0,1,2,3,4].map(i=><button key={i} onClick={()=>upd({actionCount:entry.actionCount===i+1?i:i+1})} style={{width:16,height:16,borderRadius:3,border:`1px solid ${i<entry.actionCount?"#f08030":"#3a4060"}`,background:i<entry.actionCount?"#f0803020":"transparent",cursor:"pointer",fontSize:7,color:i<entry.actionCount?"#f08030":"#5a6080",fontWeight:700}}>{i+1}</button>)}
+          {entry.actionCount>0&&<span style={{fontSize:7,color:"#ff4757",marginLeft:2}}>→{Math.min(entry.actionCount+1,5)}+ needed</span>}
+          <span style={{width:1,height:12,background:"#2a2f45",flexShrink:0,margin:"0 3px"}}/>
+          <span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>React:</span>
+          <button onClick={()=>upd({reactionUsed:!entry.reactionUsed})} title={entry.reactionUsed?"Reaction used (click to reset)":"Reaction available (click to mark used)"} style={{width:16,height:16,borderRadius:3,border:`1px solid ${entry.reactionUsed?"#a040a0":"#3a4060"}`,background:entry.reactionUsed?"#a040a020":"transparent",cursor:"pointer",fontSize:8,color:entry.reactionUsed?"#a040a0":"#5a6080",fontWeight:700}}>R</button>
+          {entry.reactionUsed&&<span style={{fontSize:7,color:"#a040a0"}}>used</span>}
+        </div>
+
+        {/* When trainer view active: show trainer card replacing everything below header */}
+        {entry.showTrainerView&&linkedTrainer?(
+          <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
+            <TrainerSkillsInline trainer={linkedTrainer} entry={entry} allEntries={allEntries} onSpendWP={spendWP} onIncrementAction={incrementAction} onUpdate={onUpdate}/>
+          </div>
+        ):<>
+
+        {/* HP + WP bars with inline ± buttons */}
+        <div style={{padding:"5px 8px 5px",background:"#0f1117"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+            <span style={{fontSize:9,color:"#5a6080",width:16}}>HP</span>
+            <button onClick={()=>upd({currentHp:Math.max(0,entry.currentHp-1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(255,71,87,0.15)",color:"#ff4757",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>−</button>
+            <span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#00d4aa":entry.currentHp/entry.maxHp>0.25?"#ffd32a":"#ff4757",minWidth:28,textAlign:"center"}}>{entry.currentHp}/{entry.maxHp}</span>
+            <button onClick={()=>upd({currentHp:Math.min(entry.maxHp,entry.currentHp+1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(0,212,170,0.15)",color:"#00d4aa",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>+</button>
+          </div>
+          <HpBar cur={entry.currentHp} max={entry.maxHp}/>
+          <div style={{display:"flex",alignItems:"center",gap:4,marginTop:4,marginBottom:2}}>
+            <span style={{fontSize:9,color:"#5a6080",width:16}}>WP</span>
+            <button onClick={()=>upd({currentWill:Math.max(0,entry.currentWill-1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(255,71,87,0.15)",color:"#ff4757",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>−</button>
+            <span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0",minWidth:28,textAlign:"center"}}>{entry.currentWill}/{entry.maxWill}</span>
+            <button onClick={()=>upd({currentWill:Math.min(entry.maxWill,entry.currentWill+1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(104,144,240,0.15)",color:"#6890f0",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>+</button>
+          </div>
+          <div style={{background:"#0f1117",borderRadius:3,height:4,overflow:"hidden"}}><div style={{width:`${entry.maxWill>0?Math.max(0,Math.min(1,entry.currentWill/entry.maxWill))*100:0}%`,height:"100%",background:"#6890f0",transition:"width 0.3s"}}/></div>
+        </div>
+
+        {/* Quick stats row */}
+        <div style={{padding:"4px 8px",background:"#13151f",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:3,alignItems:"center"}}>
+            <span style={{fontSize:8,color:"#5a6080"}}>INI</span>
+            <input type="number" value={entry.initiative} onChange={e=>upd({initiative:+e.target.value})} style={{width:24,background:"transparent",border:"none",color:"#6890f0",fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,textAlign:"center",outline:"none"}}/>
+          </div>
+          <select value={entry.side} onChange={e=>upd({side:e.target.value as BattleEntry["side"]})} style={{background:"#0f1117",border:"none",color:sideColor,fontSize:8,borderRadius:2,padding:"1px 2px"}}>
+            <option value="player">Player</option><option value="enemy">Enemy</option><option value="neutral">Neutral</option>
+          </select>
+          {entry.pokemon.types.map(t=><span key={t} style={{fontSize:8,fontWeight:700,color:TYPE_COLORS[t as PokemonType],background:TYPE_COLORS[t as PokemonType]+"20",padding:"0 3px",borderRadius:2}}>{t}</span>)}
+          {entry.side==="enemy"&&<button onClick={()=>setShowCapture(true)} style={{background:"none",border:"none",color:"#ffd32a",cursor:"pointer",fontSize:11,padding:0}} title="Capture">🎯</button>}
+          {/* Advanced mechanic indicator badges */}
+          {entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"rgba(240,128,48,0.2)",border:"1px solid #f0803060",borderRadius:3,color:"#f08030",cursor:"pointer",fontSize:7,padding:"0 4px",fontWeight:700}} title="Mega Evolved">MEGA</button>}
+          {entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"rgba(255,71,87,0.2)",border:"1px solid #ff475760",borderRadius:3,color:"#ff4757",cursor:"pointer",fontSize:7,padding:"0 4px",fontWeight:700}} title={`Dynamaxed — ${entry.dynamaxRoundsLeft} rounds left`}>MAX{entry.dynamaxRoundsLeft}</button>}
+          {entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"rgba(160,64,160,0.2)",border:"1px solid #a040a060",borderRadius:3,color:"#a040a0",cursor:"pointer",fontSize:7,padding:"0 4px",fontWeight:700}} title={`Terastallized (${entry.teraType})`}>TERA</button>}
+          {entry.zMoveUsed&&<span style={{background:"rgba(255,211,42,0.15)",border:"1px solid #ffd32a40",borderRadius:3,color:"#ffd32a",fontSize:7,padding:"0 4px",fontWeight:700}}>Z✓</span>}
+          {/* Advanced mechanic activation buttons — gated by trainer's battle item + one-per-trainer rule */}
+          {(()=>{
+            const trainerBattleItem:string=(linkedTrainer as any)?.battleItem??"";
+            const isLinked=!!entry.linkedTrainerId;
+            // another of this trainer's pokemon already has an active transform?
+            const trainerTransformActive=isLinked&&allEntries.some(e=>e.id!==entry.id&&e.linkedTrainerId===entry.linkedTrainerId&&(e.isMegaEvolved||e.isDynamaxed||e.isTerastallized||e.zMoveUsed));
+            // this pokemon itself has an active transform
+            const thisHasTransform=entry.isMegaEvolved||entry.isDynamaxed||entry.isTerastallized||(entry.zMoveUsed??false);
+            // for each mechanic: show if (unlinked enemy) OR (trainer has the right item AND (this is already in that state OR no other pokemon used it))
+            const canAccessMega=!isLinked||(trainerBattleItem==="Key Stone"&&(entry.isMegaEvolved||(!trainerTransformActive&&!thisHasTransform)));
+            const canAccessDyna=!isLinked||(trainerBattleItem==="Dynamax Band"&&(entry.isDynamaxed||(!trainerTransformActive&&!thisHasTransform)));
+            const canAccessTera=!isLinked||(trainerBattleItem==="Tera Orb"&&(entry.isTerastallized||(!trainerTransformActive&&!thisHasTransform)));
+            const canAccessZ=!isLinked||(trainerBattleItem==="Z-Power Ring"&&(!entry.zMoveUsed&&!trainerTransformActive));
+            if(!canAccessMega&&!canAccessDyna&&!canAccessTera&&!canAccessZ)return null;
+            return(
+              <div style={{display:"flex",gap:2,marginLeft:"auto"}}>
+                {canAccessMega&&<button onClick={()=>setShowMega(true)} style={{background:"none",border:"none",color:"#f08030",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Mega Evolution">⚡</button>}
+                {canAccessDyna&&<button onClick={()=>setShowDynamax(true)} style={{background:"none",border:"none",color:"#ff4757",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Dynamax / Gigamax">💫</button>}
+                {canAccessTera&&<button onClick={()=>setShowTera(true)} style={{background:"none",border:"none",color:"#a040a0",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Terastallization">💎</button>}
+                {canAccessZ&&<button onClick={()=>setShowZMove(true)} style={{background:"none",border:"none",color:"#ffd32a",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Z-Move">⭐</button>}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Loyalty/Happiness */}
+        <div style={{padding:"4px 8px",background:"#0f1117",display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",gap:3,alignItems:"center"}}>
+            <span style={{fontSize:8,color:"#ffd32a"}}>❤ Loyalty</span>
+            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({loyalty:entry.loyalty===i?i-1:i})} style={{width:10,height:10,borderRadius:"50%",border:"none",cursor:"pointer",background:i<=entry.loyalty?"#ffd32a":"#2a2f45",padding:0}}/>)}</div>
+            <span style={{fontSize:8,color:"#ffd32a",fontFamily:"'Exo 2'",fontWeight:700}}>{entry.loyalty}</span>
+          </div>
+          <div style={{display:"flex",gap:3,alignItems:"center"}}>
+            <span style={{fontSize:8,color:"#f85888"}}>♡ Happy</span>
+            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({happiness:entry.happiness===i?i-1:i})} style={{width:10,height:10,borderRadius:"50%",border:"none",cursor:"pointer",background:i<=entry.happiness?"#f85888":"#2a2f45",padding:0}}/>)}</div>
+            <span style={{fontSize:8,color:"#f85888",fontFamily:"'Exo 2'",fontWeight:700}}>{entry.happiness}</span>
+          </div>
+        </div>
+
+        {/* Status — multi-status chips */}
+        <div style={{padding:"3px 8px",background:"#0f1117",display:"flex",gap:3,alignItems:"center",flexWrap:"wrap"}}>
+          {(entry.statuses||[]).filter(s=>s!=="Healthy").map(s=>{const sc2=STATUS_CONDITIONS[s];return<span key={s} title={sc2?.fullDesc||sc2?.battleEffect} style={{fontSize:8,color:sc2?.color??"#5a6080",background:(sc2?.color??"#5a6080")+"15",border:`1px solid ${sc2?.color??"#5a6080"}40`,borderRadius:3,padding:"0 4px",display:"flex",alignItems:"center",gap:2}}>{s}<button onClick={()=>upd({statuses:removeStatus(entry.statuses||[],s)})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:9,padding:0}}>×</button></span>;})}
+          <select onChange={e=>{if(e.target.value&&e.target.value!=="＋")upd({statuses:addStatus(entry.statuses||[],e.target.value),statusTurnsLeft:e.target.value==="Asleep"?3:entry.statusTurnsLeft});e.target.value="＋";}} defaultValue="＋"
+            style={{background:"#13151f",border:"1px solid #2a2f45",borderRadius:3,color:"#5a6080",fontSize:8,padding:"1px 2px"}}>
+            <option value="＋">＋</option>
+            {Object.keys(STATUS_CONDITIONS).filter(s=>s!=="Healthy"&&!(entry.statuses||[]).includes(s)).map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+          {painPenalty>0&&(()=>{const hpPct=entry.maxHp>0?entry.currentHp/entry.maxHp:1;const label=hpPct>0.25?"Badly Hurt":"Critical";const tooltip=`Pain Penalization (${label}): −${painPenalty} die to all dice pools.\nHP below ${hpPct>0.25?"50%":"25%"} causes this penalty. Applies to accuracy, damage, and all rolls.`;return<span title={tooltip} style={{fontSize:8,color:"#ff4757",background:"rgba(255,71,87,0.1)",padding:"0 3px",borderRadius:2,cursor:"help"}}>Pain−{painPenalty}</span>;})()}
+          {!entry.weatherImmune&&weather.name!=="Clear"&&<span style={{fontSize:8,color:"#ffd32a"}}>{weather.emoji?.split(" ")[0]}</span>}
+          {entry.isProtected&&<span style={{fontSize:8,color:"#6890f0",background:"rgba(104,144,240,0.15)",borderRadius:3,padding:"0 4px"}}>🛡</span>}
+          {(entry.statuses||[]).includes("Asleep")&&entry.statusTurnsLeft>0&&<span style={{fontSize:8,color:"#705898"}}>⏱{entry.statusTurnsLeft}</span>}
+          {entry.abilityOverride&&<span title={`Ability overridden by ${entry.abilityOverride}`} style={{fontSize:8,color:"#f8d030",background:"rgba(248,216,48,0.12)",border:"1px solid #f8d03030",borderRadius:3,padding:"0 4px",cursor:"help"}}>✨ {entry.abilityOverride}</span>}
+          {entry.abilitySuppressed&&<span title="Ability suppressed (Gastro Acid / Simple Beam / Worry Seed)" style={{fontSize:8,color:"#5a6080",background:"rgba(90,96,128,0.12)",border:"1px solid #5a608030",borderRadius:3,padding:"0 4px",cursor:"help"}}>⊘ Ability</span>}
+          {entry.typeOverride&&<span title={`Type changed to: ${entry.typeOverride.join("/")}`} style={{fontSize:8,color:"#00d4aa",background:"rgba(0,212,170,0.1)",border:"1px solid #00d4aa30",borderRadius:3,padding:"0 4px",cursor:"help"}}>✦ {entry.typeOverride.join("/")}<button onClick={()=>upd({typeOverride:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
+          {entry.heldItem&&<span title={`Held item: ${entry.heldItem}`} style={{fontSize:8,color:"#f08030",background:"rgba(240,128,48,0.1)",border:"1px solid #f0803030",borderRadius:3,padding:"0 4px",cursor:"help"}}>🎒 {entry.heldItem}<button onClick={()=>upd({heldItem:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
+          {entry.itemEmbargoed&&<span title="Cannot use held items (Embargo)" style={{fontSize:8,color:"#ff4757",background:"rgba(255,71,87,0.1)",border:"1px solid #ff475730",borderRadius:3,padding:"0 4px",cursor:"help"}}>🚫 Item<button onClick={()=>upd({itemEmbargoed:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
+          {entry.isFollowMeTarget&&<span title="All single-target moves must target this Pokémon (Follow Me / Spotlight)" style={{fontSize:8,color:"#00d4aa",background:"rgba(0,212,170,0.12)",border:"1px solid #00d4aa30",borderRadius:3,padding:"0 4px",cursor:"help"}}>🎯 Focus<button onClick={()=>upd({isFollowMeTarget:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
+          {entry.chargeActive&&<span title="Charged: next Electric move deals +2 damage dice" style={{fontSize:8,color:"#f8d030",background:"rgba(248,216,48,0.12)",border:"1px solid #f8d03030",borderRadius:3,padding:"0 4px",cursor:"help"}}>⚡ Charged<button onClick={()=>upd({chargeActive:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
+        </div>
+
+
+        {/* Moves list */}
+        <div style={{padding:"5px 8px",display:"flex",flexDirection:"column",gap:3}}>
+          {/* TRAINER VIEW: show trainer skills like moves */}
+          {entry.showTrainerView&&linkedTrainer?(
+            <TrainerSkillsInline trainer={linkedTrainer} entry={entry} allEntries={allEntries} onSpendWP={spendWP} onIncrementAction={incrementAction} onUpdate={onUpdate}/>
+          ):(
+            <>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+              <span style={{fontSize:8,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase"}}>{entry.morphedTo?"🔄 Transformed":"Moves"}{entry.hasSubstitute?" 🛡️ Sub":""}</span>
+              <div style={{display:"flex",gap:4}}>
+                {entry.morphedTo&&<button onClick={()=>upd({morphedTo:undefined,moves:entry.originalMoves||entry.moves,attrs:entry.originalAttrs||entry.attrs,originalAttrs:undefined,originalMoves:undefined})} style={{fontSize:7,color:"#a040a0",background:"none",border:"1px solid #a040a040",borderRadius:2,cursor:"pointer",padding:"0 4px"}}>Revert</button>}
+                <button onClick={()=>setShowEditMoves(!showEditMoves)} style={{fontSize:8,color:"#00d4aa",background:"none",border:"none",cursor:"pointer"}}>{showEditMoves?"Done":"Edit"}</button>
+              </div>
+            </div>
+            {showEditMoves?(
+              <MoveSearchEdit entry={entry} onUpdate={upd}/>
+            ):(
+              <>
+                {entry.moves.map((m,i)=>{
+                  const stab=(entry.morphedTo||entry.pokemon).types.includes(m.type as PokemonType);
+                  const abilMods=calcAbilityBonus(entry,m,weather);
+                  return(
+                    <button key={i} onClick={()=>setMovePopup(m)} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",background:"#13151f",border:`1px solid ${TYPE_COLORS[m.type as PokemonType]||"#2a2f45"}30`,borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%"}}
+                      onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.borderColor=TYPE_COLORS[m.type as PokemonType]||"#00d4aa"}
+                      onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.borderColor=`${TYPE_COLORS[m.type as PokemonType]||"#2a2f45"}30`}>
+                      <TypeBadge type={m.type as PokemonType} small/>
+                      <span style={{fontSize:11,color:"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</span>
+                      {stab&&<span style={{fontSize:7,color:"#ffd32a",fontWeight:700,flexShrink:0}}>STAB</span>}
+                      {(m.priority??0)>0&&<span style={{fontSize:7,color:"#00d4aa",fontWeight:700,flexShrink:0}}>P{m.priority}</span>}
+                      {abilMods.bonus>0&&<span style={{fontSize:7,color:"#00d4aa",flexShrink:0}}>+{abilMods.bonus}</span>}
+                      <span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>▶</span>
+                    </button>
+                  );
+                })}
+                {entry.moves.length===0&&<div style={{fontSize:9,color:"#5a6080",fontStyle:"italic"}}>No moves — click Edit{entry.currentWill>0?" or use Struggle":""}</div>}
+                {entry.moves.length===0&&entry.currentWill>0&&(
+                  <button onClick={()=>{const s=MOVES.find(m=>m.name==="Struggle")||{name:"Struggle",type:"Normal" as PokemonType,category:"Physical" as const,power:"1",accuracy:"Strength + Brawl",damagePool:"Strength + 1",effect:"Target Foe. No WP cost. User takes recoil equal to half damage dealt.",description:"A desperate thrashing attack used when no other moves are available."} as Move;setMovePopup(s);}} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%"}}>
+                    <span style={{fontSize:9,color:"#ff4757",fontWeight:700,flex:1}}>💢 Struggle (1 WP)</span>
+                    <span style={{fontSize:8,color:"#5a6080"}}>▶</span>
+                  </button>
+                )}
+              </>
+            )}
+            </>
+          )}
+        </div>
+
+        {/* Expanded section: attrs, abilities, notes */}
+        {entry.isExpanded&&(
+          <div style={{borderTop:"1px solid #2a2f45",padding:"8px 8px",display:"flex",flexDirection:"column",gap:8}}>
+            {/* Attributes */}
+            <div>
+              <div style={{fontSize:8,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Attributes</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:3}}>
+                {(["strength","dexterity","vitality","special","insight"] as const).map(attr=>{
+                  const labels={strength:"STR",dexterity:"DEX",vitality:"VIT",special:"SPC",insight:"INS"};
+                  const base=entry.attrs[attr];const mod=attrModSummary(attr);
+                  const statusPen=attr==="dexterity"?(STATUS_CONDITIONS[primaryStatus(entry)]?.accuracyPenalty??0):0;
+                  const final=Math.max(0,base+mod-statusPen);
+                  return<div key={attr} style={{textAlign:"center"}}>
+                    <div style={{fontSize:7,color:"#5a6080"}}>{labels[attr]}</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:1}}>
+                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:Math.max(0,base-1)}})} style={{...adjBtn,width:12,height:12,fontSize:9}}>−</button>
+                      <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:final<base?"#ff4757":mod>0?"#00d4aa":"#e8eaf0",minWidth:14,textAlign:"center"}}>{final}</span>
+                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:base+1}})} style={{...adjBtn,width:12,height:12,fontSize:9}}>+</button>
+                    </div>
+                    {/* Temp mod +/- buttons */}
+                    <div style={{display:"flex",justifyContent:"center",gap:1,marginTop:1}}>
+                      <button onClick={()=>applyEffect(entry.id,attr,-1,"Manual")} title={`-1 temp ${labels[attr]}`} style={{width:12,height:10,background:"rgba(255,71,87,0.15)",border:"1px solid #ff475730",borderRadius:1,color:"#ff4757",cursor:"pointer",fontSize:7,lineHeight:1}}>▼</button>
+                      <button onClick={()=>applyEffect(entry.id,attr,1,"Manual")} title={`+1 temp ${labels[attr]}`} style={{width:12,height:10,background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa30",borderRadius:1,color:"#00d4aa",cursor:"pointer",fontSize:7,lineHeight:1}}>▲</button>
+                    </div>
+                    {/* Net mod badge under this attribute */}
+                    <AttrModBadge mod={mod}/>
+                    {statusPen>0&&<div title={`${primaryStatus(entry)}: −${statusPen} to accuracy dice`} style={{marginTop:2,fontSize:7,fontWeight:700,color:"#f8d030",background:"rgba(248,208,48,0.15)",border:"1px solid #f8d03040",borderRadius:2,padding:"0 3px",display:"inline-block"}}>▼{statusPen}</div>}
+                  </div>;
+                })}
+              </div>
+              {/* Removable stat mod chips */}
+              {entry.statMods.length>0&&<div style={{marginTop:4,display:"flex",flexWrap:"wrap",gap:2}}>
+                {entry.statMods.map((m,i)=><div key={i} title={m.appliedBy?`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source} used by ${m.appliedBy}`:`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source}`} style={{fontSize:8,display:"flex",alignItems:"center",gap:2,background:m.amount>0?"rgba(0,212,170,0.1)":"rgba(255,71,87,0.1)",border:`1px solid ${m.amount>0?"#00d4aa30":"#ff475730"}`,borderRadius:2,padding:"0 4px",cursor:"help"}}>
+                  <span style={{color:m.amount>0?"#00d4aa":"#ff4757"}}>{m.amount>0?"▲":"▼"}{Math.abs(m.amount)} {m.attr}</span>
+                  <button onClick={()=>upd({statMods:entry.statMods.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:9,padding:0}}>×</button>
+                </div>)}
+              </div>}
+            </div>
+
+            {/* Abilities */}
+            <div>
+              <div style={{fontSize:8,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Abilities</div>
+              {entry.abilities.map((ab,i)=>{const abData=ABILITIES.find(a=>a.name===ab.name);return<div key={i} style={{marginBottom:5,borderRadius:4,border:`1px solid ${ab.active?"#00d4aa20":"#2a2f45"}`,background:ab.active?"rgba(0,212,170,0.04)":"transparent",padding:"4px 6px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <button onClick={()=>{const abs=[...entry.abilities];abs[i]={...abs[i],active:!abs[i].active};upd({abilities:abs});}} style={{width:12,height:12,borderRadius:2,border:`1px solid ${ab.active?"#00d4aa":"#3a4060"}`,background:ab.active?"#00d4aa":"transparent",cursor:"pointer",flexShrink:0}}/>
+                  <span style={{fontSize:10,fontWeight:700,color:ab.active?"#e8eaf0":"#5a6080"}}>{ab.name}</span>
+                </div>
+                {abData&&<div style={{fontSize:9,color:"#5a6080",lineHeight:1.4,marginTop:2}}>{abData.effect}</div>}
+              </div>;})}
+            </div>
+
+            {/* HP/WP editors + notes */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+              {[{l:"HP",c:entry.currentHp,m:entry.maxHp,col:"#00d4aa",f:"currentHp" as const},{l:"WP",c:entry.currentWill,m:entry.maxWill,col:"#6890f0",f:"currentWill" as const}].map(f=><div key={f.l}>
+                <div style={{fontSize:8,color:"#5a6080",marginBottom:2}}>{f.l}</div>
+                <div style={{display:"flex",gap:2,alignItems:"center"}}>
+                  <button onClick={()=>upd({[f.f]:Math.max(0,f.c-1)})} style={{...adjBtn,width:16,height:16,fontSize:12}}>−</button>
+                  <input type="number" value={f.c} onChange={e=>upd({[f.f]:Math.max(0,Math.min(f.m,+e.target.value||0))})} style={{width:28,textAlign:"center",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:2,color:f.col,fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,padding:"0 1px"}}/>
+                  <span style={{fontSize:8,color:"#5a6080"}}>/{f.m}</span>
+                  <button onClick={()=>upd({[f.f]:Math.min(f.m,f.c+1)})} style={{...adjBtn,width:16,height:16,fontSize:12}}>+</button>
+                </div>
+              </div>)}
+            </div>
+
+            <textarea value={entry.notes} onChange={e=>upd({notes:e.target.value})} placeholder="Notes…" style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:3,color:"#8b90a8",fontSize:9,padding:4,resize:"none",minHeight:28,fontFamily:"inherit",outline:"none"}}/>
+            <label style={{fontSize:9,color:"#8b90a8",display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+              <input type="checkbox" checked={entry.weatherImmune} onChange={e=>upd({weatherImmune:e.target.checked})}/>Weather immune
+            </label>
+          </div>
+        )}
+        </>}
+      </div>
+    </>
+  );
+}
+
+// ── Character Party Sidebar ───────────────────────────────────────────────────
+function CharactersSidebar({onAddPokemon}:{onAddPokemon:(pokemon:PokemonEntry,trainerId:string,nickname:string,loyalty:number,happiness:number,moves:Move[],sheetKey?:string,trainerRank?:string)=>void}){
+  const trainers=useMemo(()=>loadFromStorage<any[]>("trainers",[]),[]);
+  const pokemonSheets=useMemo(()=>loadFromStorage<Record<string,any>>("pokemon_sheets",{}),[]);
+  const [selId,setSelId]=useState<string|null>(null);
+  const sel=trainers.find(t=>t.id===selId);
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {trainers.length===0&&<div style={{fontSize:11,color:"#5a6080",fontStyle:"italic"}}>No saved characters. Create them in the Characters page.</div>}
+      {trainers.map(t=>(
+        <div key={t.id} style={{borderRadius:5,border:`1px solid ${selId===t.id?"#00d4aa":"#2a2f45"}`,overflow:"hidden"}}>
+          <div onClick={()=>setSelId(selId===t.id?null:t.id)} style={{padding:"6px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:6,background:selId===t.id?"rgba(0,212,170,0.08)":"#13151f"}}>
+            <span style={{fontSize:12,fontWeight:700,color:"#e8eaf0",flex:1}}>{t.name}</span>
+            <span style={{fontSize:9,color:RANK_COLORS[t.rank as Rank]}}>{t.rank}</span>
+            <span style={{fontSize:10,color:"#5a6080"}}>{selId===t.id?"▲":"▼"}</span>
+          </div>
+          {selId===t.id&&<div style={{padding:"6px 8px",background:"#0f1117"}}>
+            {(t.pokemon||[]).map((key:string)=>{
+              const sheet=pokemonSheets[key];if(!sheet)return null;
+              const p=POKEMON.find(x=>x.number===sheet.number);if(!p)return null;
+              const activeMovs=((sheet.moves||[]) as string[]).map((mn:string)=>MOVES.find(m=>m.name===mn)).filter(Boolean) as Move[];
+              return(
+                <div key={key} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #1a1d27"}}>
+                  <div style={{width:6,height:6,borderRadius:"50%",background:TYPE_COLORS[p.types[0]],flexShrink:0}}/>
+                  <span style={{fontSize:11,color:"#e8eaf0",flex:1}}>{sheet.nickname||p.name}</span>
+                  <button onClick={()=>onAddPokemon(p,t.id,sheet.nickname||"",sheet.loyalty??1,sheet.happiness??1,activeMovs,key,t.rank)} style={{background:"#00d4aa20",border:"1px solid #00d4aa40",borderRadius:3,color:"#00d4aa",padding:"2px 7px",fontSize:9,fontWeight:700,cursor:"pointer"}}>+</button>
+                </div>
+              );
+            })}
+            <button onClick={()=>{
+              // Add trainer as combatant
+              const fakePoke:PokemonEntry={...MISSINGNO,name:t.name,number:-1,attributes:t.attributes||{strength:1,dexterity:1,vitality:1,special:1,insight:1},abilities:[],moves:[]};
+              onAddPokemon(fakePoke,t.id,t.name,0,0,[]);
+            }} style={{marginTop:5,background:"rgba(61,139,255,0.1)",border:"1px solid #3d8bff30",borderRadius:3,color:"#3d8bff",padding:"3px 8px",fontSize:9,cursor:"pointer"}}>+ Add Trainer to Battle</button>
+          </div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Search bar ────────────────────────────────────────────────────────────────
+function SearchBar({onAdd}:{onAdd:(p:PokemonEntry)=>void}){
+  const [q,setQ]=useState("");
+  const [open,setOpen]=useState(false);
+  const filtered=useMemo(()=>{
+    const ql=q.toLowerCase();
+    if(!ql)return POKEMON;
+    return POKEMON.filter(p=>p.name.toLowerCase().includes(ql)||String(p.number).includes(q));
+  },[q]);
+  return(
+    <div style={{position:"relative"}}>
+      <input type="text" placeholder="Search or click to browse all…" value={q} onChange={e=>setQ(e.target.value)}
+        onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)}
+        style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:5,padding:"6px 8px",color:"#e8eaf0",fontSize:12,outline:"none"}}/>
+      {open&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#1e2235",border:"1px solid #3a4060",borderRadius:5,zIndex:100,maxHeight:280,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.6)"}}>
+          <div onClick={()=>{onAdd(MISSINGNO);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #2a2f45",background:"#13151f"}}>
+            <span style={{fontSize:10,color:"#ffd32a",fontWeight:700}}>✦ Custom (blank card)</span>
+          </div>
+          {filtered.map(p=>(
+            <div key={`${p.number}-${p.name}`} onClick={()=>{onAdd(p);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 8px",cursor:"pointer"}}
+              onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="#242842"}
+              onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background="transparent"}>
+              <span style={{fontSize:9,color:"#3a4060",width:26,fontFamily:"'Exo 2'",fontWeight:700,flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
+              <span style={{fontSize:11,color:"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+              {p.types.slice(0,2).map(t=><TypeBadge key={t} type={t as PokemonType} small/>)}
+              <span style={{fontSize:9,color:RANK_COLORS[p.suggestedRank],flexShrink:0}}>{p.suggestedRank.slice(0,3)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function BattleTrackerPage(){
+  const [entries,setEntries]=useState<BattleEntry[]>(()=>loadFromStorage("bt_entries",[]));
+  const [weather,setWeather]=useState<WeatherData>(WEATHER_DATA[0]);
+  const [terrain,setTerrain]=useState<string>("None");
+  const [turn,setTurn]=useState(0);
+  const [round,setRound]=useState(1);
+  const [showEOR,setShowEOR]=useState(false);
+  const [showPriority,setShowPriority]=useState(false);
+  const [battleType,setBattleType]=useState<"default"|"gym"|"boss"|"raid"|"danger">("default");
+  const [dragId,setDragId]=useState<string|null>(null);
+  const [sidebarTab,setSidebarTab]=useState<"search"|"characters">("search");
+  const scrollRef=useRef<HTMLDivElement>(null);
+  const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
+
+  useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
+
+  // Sync with GM Screen battle tracker (and other tabs) via storage events
+  useEffect(()=>{
+    const onStorage=(e:StorageEvent)=>{
+      if(e.key==="bt_entries"&&e.newValue){
+        try{
+          const updated=JSON.parse(e.newValue);
+          setEntries(updated);
+        }catch{}
+      }
+    };
+    window.addEventListener("storage",onStorage);
+    return()=>window.removeEventListener("storage",onStorage);
+  },[]);
+
+  useEffect(()=>{
+    const queue=loadFromStorage<number[]>("encounter_queue",[]);
+    if(queue.length>0){saveToStorage("encounter_queue",[]);queue.forEach(num=>{const p=POKEMON.find(x=>x.number===num);if(p)addPokemon(p);});}
+    const pending=loadFromStorage<{pokemonNumber:number;trainerId:string;nickname:string}|null>("pending_link",null);
+    if(pending){saveToStorage("pending_link",null);setTimeout(()=>setEntries(prev=>{const idx=[...prev].reverse().findIndex(e=>e.pokemon.number===pending.pokemonNumber&&!e.linkedTrainerId);if(idx<0)return prev;const ri=prev.length-1-idx;const u=[...prev];u[ri]={...u[ri],linkedTrainerId:pending.trainerId,side:"player",nickname:pending.nickname||u[ri].nickname};return u;}),100);}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  const sorted=useMemo(()=>[...entries].sort((a,b)=>b.initiative-a.initiative),[entries]);
+  const activeEntry=sorted[turn%Math.max(1,sorted.length)];
+
+  const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string)=>{
+    const hp=pokemon.number<=0?10:pokemon.baseHp+pokemon.attributes.vitality;
+    const will=pokemon.number<=0?5:pokemon.attributes.insight+3;
+    const ini=Math.floor(Math.random()*6)+1+(pokemon.attributes?.dexterity??1);
+    const defaultMoves=pokemon.moves.slice(0,4).map(m=>MOVES.find(mv=>mv.name===m.name)||{name:m.name,type:m.type,category:"Physical" as const,power:"-",accuracy:"-",damagePool:"-",effect:"",description:""} as Move);
+    // Load skills from the character sheet if linked
+    const sheetSkills=sheetKey?(()=>{const s=loadFromStorage<Record<string,any>>("pokemon_sheets",{});return s[sheetKey]?.skills??null;})():null;
+    setEntries(prev=>[...prev,{
+      id:`${pokemon.number}-${Date.now()}`,pokemon,nickname:nickname||"",
+      initiative:ini,currentHp:hp,maxHp:hp,currentWill:will,maxWill:will,
+      loyalty,happiness,
+      statuses:["Healthy"],statusTurnsLeft:0,notes:"",isExpanded:false,hasTakenTurn:false,
+      side:trainerId?"player":"enemy",trainerRank:(trainerRank||"Rookie") as any,
+      abilities:pokemon.abilities.map(a=>({name:a,active:true})),
+      moves:moves||defaultMoves,
+      attrs:{...pokemon.attributes},statMods:[],weatherImmune:false,actionCount:0,
+      reactionUsed:false,isProtected:false,linkedTrainerId:trainerId,linkedPokemonSheetKey:sheetKey,
+      pokemonSkills:sheetSkills??{brawl:1,channel:1,clash:1,evasion:1,alert:1,athletic:1,nature:1,stealth:1,intimidate:1,perform:1},
+    }]);
+    if(trainerId){
+      saveToStorage("pending_link",{pokemonNumber:pokemon.number,trainerId,nickname:nickname||""});
+    }
+  },[]);
+
+  const syncSheetHappinessLoyalty=(entry:BattleEntry,happiness:number,loyalty:number)=>{
+    if(!entry.linkedPokemonSheetKey)return;
+    const sheets=loadFromStorage<Record<string,any>>("pokemon_sheets",{});
+    if(!sheets[entry.linkedPokemonSheetKey])return;
+    sheets[entry.linkedPokemonSheetKey]={...sheets[entry.linkedPokemonSheetKey],happiness,loyalty};
+    saveToStorage("pokemon_sheets",sheets);
+  };
+
+  const upd=useCallback((id:string,u:Partial<BattleEntry>)=>setEntries(prev=>{
+    const next=prev.map(e=>{
+      if(e.id!==id)return e;
+      let merged={...e,...u};
+      // Faint: HP just hit 0 for the first time this update → happiness −1
+      if(u.currentHp!==undefined&&u.currentHp<=0&&e.currentHp>0){
+        const newHappy=Math.max(0,merged.happiness-1);
+        merged={...merged,happiness:newHappy};
+        // Sync faint penalty back to character sheet
+        if(e.linkedPokemonSheetKey){
+          const sheets=loadFromStorage<Record<string,any>>("pokemon_sheets",{});
+          if(sheets[e.linkedPokemonSheetKey]){
+            sheets[e.linkedPokemonSheetKey]={...sheets[e.linkedPokemonSheetKey],happiness:newHappy,loyalty:merged.loyalty};
+            saveToStorage("pokemon_sheets",sheets);
+          }
+        }
+      }
+      // Sync manual loyalty/happiness edits back to sheet
+      if((u.loyalty!==undefined||u.happiness!==undefined)&&e.linkedPokemonSheetKey){
+        setTimeout(()=>syncSheetHappinessLoyalty({...e,...u,...merged},merged.happiness,merged.loyalty),0);
+      }
+      return merged;
+    });
+    return next;
+  }),[]);
+
+  const endBattle=useCallback(()=>{
+    const isMajor=battleType!=="default";
+    if(isMajor){
+      // Give +1 loyalty to surviving player Pokémon with a sheet key
+      const sheets=loadFromStorage<Record<string,any>>("pokemon_sheets",{});
+      let changed=false;
+      entries.forEach(e=>{
+        if(e.side==="player"&&e.currentHp>0&&e.linkedPokemonSheetKey&&sheets[e.linkedPokemonSheetKey]){
+          const s=sheets[e.linkedPokemonSheetKey];
+          sheets[e.linkedPokemonSheetKey]={...s,loyalty:Math.min(5,(s.loyalty??1)+1)};
+          changed=true;
+        }
+      });
+      if(changed)saveToStorage("pokemon_sheets",sheets);
+    }
+    const msg=isMajor?"Battle ended! Surviving party Pokémon gained +1 Loyalty.":"Battle ended.";
+    alert(msg);
+    // Clear battle entries
+    setEntries([]);setTurn(0);setRound(1);setBattleType("default");
+  },[battleType,entries]);
+  const remove=useCallback((id:string)=>setEntries(prev=>prev.filter(e=>e.id!==id)),[]);
+  const applyEOR=(id:string,hp:number)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp+hp)}:e));
+
+  const startNewRound=(newRound:number)=>{
+    // Reset all entries for new round
+    setEntries(prev=>prev.map(e=>({...e,hasTakenTurn:false,actionCount:0,reactionUsed:false,isProtected:false})));
+    setShowEOR(true);
+    // Priority fires at start of new round — after EOR closes
+    const hasPri=entries.some(e=>e.currentHp>0&&e.moves.some(m=>(m.priority??0)>0));
+    if(hasPri)setTimeout(()=>setShowPriority(true),600);
+  };
+
+  const prevTurn=()=>{
+    const prev=(turn-1+Math.max(1,sorted.length))%Math.max(1,sorted.length);
+    setTurn(prev);
+    // Re-activate the previous entry
+    if(sorted[prev]){
+      setEntries(p=>p.map(e=>e.id===sorted[prev].id?{...e,hasTakenTurn:false,actionCount:0}:e));
+    }
+  };
+
+  const nextTurn=()=>{
+    if(activeEntry){
+      setEntries(prev=>prev.map(e=>{
+        if(e.id!==activeEntry.id)return e;
+        let sts=[...(e.statuses||[])];
+        let nt=e.statusTurnsLeft;
+        // Clear Flinch at end of turn
+        sts=sts.filter(s=>s!=="Flinched");
+        if(sts.length===0)sts=["Healthy"];
+        // Tick sleep countdown
+        if(sts.includes("Asleep")){nt=Math.max(0,e.statusTurnsLeft-1);if(nt===0)sts=removeStatus(sts,"Asleep");}
+        // Decrement Dynamax rounds
+        let dynRounds=e.dynamaxRoundsLeft??0;
+        let isDynaxed=e.isDynamaxed;
+        if(isDynaxed&&dynRounds>0){dynRounds--;if(dynRounds===0){isDynaxed=false;// Remove Gigamax stat mods
+        }}
+        return{...e,hasTakenTurn:true,statuses:sts,statusTurnsLeft:nt,dynamaxRoundsLeft:dynRounds,isDynamaxed:isDynaxed};
+      }));
+    }
+    const next=(turn+1)%Math.max(1,sorted.length);
+    if(next===0){
+      const newRound=round+1;
+      setRound(newRound);
+      startNewRound(newRound);
+    }
+    setTurn(next);
+    // Scroll to next active card
+    setTimeout(()=>{
+      const nextActive=sorted[(next)%Math.max(1,sorted.length)];
+      if(nextActive&&scrollRef.current&&cardRefs.current[nextActive.id]){
+        const container=scrollRef.current;
+        const card=cardRefs.current[nextActive.id]!;
+        const cardLeft=card.offsetLeft;
+        const cardWidth=card.offsetWidth;
+        const containerWidth=container.offsetWidth;
+        container.scrollTo({left:cardLeft-containerWidth/2+cardWidth/2,behavior:"smooth"});
+      }
+    },50);
+  };
+
+  // Trigger priority popup on first load if there are entries with priority moves
+  useEffect(()=>{
+    if(entries.length>0&&entries.some(e=>e.currentHp>0&&e.moves.some(m=>(m.priority??0)>0))){
+      setShowPriority(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  const rollAllIni=()=>{
+    setEntries(prev=>prev.map(e=>({
+      ...e,
+      initiative:Math.floor(Math.random()*6)+1+(e.attrs?.dexterity??1),
+      // Restore HP/WP
+      currentHp:e.maxHp,currentWill:e.maxWill,
+      // Clear statuses and stat mods
+      statuses:["Healthy"],statusTurnsLeft:0,statMods:[],
+      // Clear battle-turn state
+      actionCount:0,reactionUsed:false,hasTakenTurn:false,
+      // Clear round effects
+      isProtected:false,hasSubstitute:false,substituteHp:0,
+      // Clear mega/dynamax/tera forms
+      isMegaEvolved:false,megaOriginalAttrs:undefined,
+      isDynamaxed:false,dynamaxRoundsLeft:0,dynamaxExtraHpCur:0,isGigamax:false,
+      isTerastallized:false,teraFirstMoveBonusUsed:false,
+      // Clear transform
+      morphedTo:undefined,originalAttrs:undefined,originalMoves:undefined,
+      // Clear notes
+      notes:"",
+      // Clear support move effects
+      abilityOverride:undefined,abilitySuppressed:false,
+      typeOverride:undefined,heldItem:undefined,itemEmbargoed:false,
+      isFollowMeTarget:false,chargeActive:false,
+    })));
+    setTurn(0);setRound(1);
+  };
+  const handleDrop=(targetId:string)=>{if(!dragId||dragId===targetId){setDragId(null);return;}setEntries(prev=>{const a=[...prev];const fi=a.findIndex(e=>e.id===dragId);const ti=a.findIndex(e=>e.id===targetId);const [item]=a.splice(fi,1);a.splice(ti,0,item);return a;});setDragId(null);};
+
+  const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#0f1117",color:"#e8eaf0",overflow:"hidden"}}>
+      {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
+      {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
+
+      {/* Nav */}
+      <nav style={{background:"#13151f",borderBottom:"1px solid #2a2f45",padding:"0 12px",height:48,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <Link href="/" style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:15,color:"#e8eaf0",textDecoration:"none"}}>PokeRole<span style={{color:"#00d4aa"}}> Tools</span></Link>
+        <span style={{color:"#3a4060"}}>/</span>
+        <span style={{fontSize:13,color:"#ff4757",fontWeight:700}}>⚔️ Battle Tracker</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+          <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)} style={{background:"#1e2235",border:"1px solid #2a2f45",borderRadius:4,color:"#ffd32a",fontSize:11,padding:"3px 6px"}}>{WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}</select>
+          <select value={terrain} onChange={e=>setTerrain(e.target.value)} title="Active Terrain" style={{background:"#1e2235",border:"1px solid #2a2f45",borderRadius:4,color:terrain==="None"?"#5a6080":"#00d4aa",fontSize:11,padding:"3px 6px"}}>
+            <option value="None">🌍 No Terrain</option>
+            <option value="Electric Terrain">⚡ Electric Terrain</option>
+            <option value="Grassy Terrain">🌿 Grassy Terrain</option>
+            <option value="Misty Terrain">🌫 Misty Terrain</option>
+            <option value="Psychic Terrain">🔮 Psychic Terrain</option>
+          </select>
+          <div style={{display:"flex",alignItems:"center",gap:4,background:"#1e2235",border:"1px solid #2a2f45",borderRadius:4,padding:"3px 8px"}}>
+            <span style={{fontSize:10,color:"#5a6080"}}>Rnd {round} ·</span>
+            <span style={{fontSize:10,color:sideColor,fontWeight:600,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeEntry?.nickname||activeEntry?.pokemon.name||"—"}</span>
+          </div>
+          <button onClick={prevTurn} style={{background:"#1e2235",color:"#8b90a8",border:"1px solid #3a4060",borderRadius:4,padding:"4px 8px",fontWeight:700,fontSize:11,cursor:"pointer"}}>◀ Prev</button>
+          <button onClick={nextTurn} style={{background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:4,padding:"4px 10px",fontWeight:700,fontSize:11,cursor:"pointer"}}>Next ▶</button>
+          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);}}} style={{background:"rgba(255,71,87,0.1)",color:"#ff4757",border:"1px solid #ff475740",borderRadius:4,padding:"4px 8px",fontSize:11,cursor:"pointer"}}>⟳ Reset</button>
+          <button onClick={rollAllIni} style={{background:"#6890f015",border:"1px solid #6890f040",borderRadius:4,color:"#6890f0",padding:"3px 8px",fontSize:11,cursor:"pointer"}}>🎲 INI</button>
+          <button onClick={()=>setShowPriority(true)} style={{background:"#00d4aa10",border:"1px solid #00d4aa30",borderRadius:4,color:"#00d4aa",padding:"3px 8px",fontSize:11,cursor:"pointer"}} title="Declare priority moves (reaction phase)">⚡ Priority</button>
+          <button onClick={()=>setShowEOR(true)} style={{background:"#ffd32a10",border:"1px solid #ffd32a30",borderRadius:4,color:"#ffd32a",padding:"3px 8px",fontSize:11,cursor:"pointer"}} title="Apply end-of-round effects (Burn, Poison, Weather)">🔄 End of Round</button>
+          <select value={battleType} onChange={e=>setBattleType(e.target.value as any)}
+            style={{background:"#13151f",border:"1px solid #3a4060",borderRadius:4,color:"#e8eaf0",padding:"3px 6px",fontSize:11,cursor:"pointer"}}>
+            <option value="default">Default Battle</option>
+            <option value="gym">🏅 Gym Battle</option>
+            <option value="boss">💀 Major Boss</option>
+            <option value="raid">⚡ Raid</option>
+            <option value="danger">☠️ Dangerous Situation</option>
+          </select>
+          <button onClick={endBattle} style={{background:"#ff475715",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",padding:"3px 8px",fontSize:11,cursor:"pointer",fontWeight:700}} title="End battle and apply loyalty rewards">⚔️ End Battle</button>
+          <Link href="/gm-screen" style={{fontSize:11,color:"#a040a0",textDecoration:"none",background:"rgba(160,64,160,0.1)",border:"1px solid rgba(160,64,160,0.3)",borderRadius:4,padding:"3px 8px"}}>🖥️</Link>
+        </div>
+      </nav>
+
+      {/* Weather banner */}
+      {weather.name!=="Clear"&&<div style={{background:weather.color+"12",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:11,flexShrink:0,borderBottom:`1px solid ${weather.color}20`}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#e8eaf0"}}>{weather.name}</span><span style={{color:"#8b90a8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{weather.description}</span></div>}
+
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+        {/* Left sidebar */}
+        <div style={{width:230,background:"#13151f",borderRight:"1px solid #2a2f45",display:"flex",flexDirection:"column",flexShrink:0}}>
+          {/* Sidebar tabs */}
+          <div style={{display:"flex",borderBottom:"1px solid #2a2f45",flexShrink:0}}>
+            {[{k:"search" as const,l:"Search"},{ k:"characters" as const,l:"Party 👤"}].map(t=>(
+              <button key={t.k} onClick={()=>setSidebarTab(t.k)} style={{flex:1,padding:"7px",background:"none",border:"none",borderBottom:`2px solid ${sidebarTab===t.k?"#00d4aa":"transparent"}`,color:sidebarTab===t.k?"#00d4aa":"#5a6080",cursor:"pointer",fontSize:11,fontWeight:700}}>{t.l}</button>
+            ))}
+          </div>
+          <div style={{padding:"8px 8px 4px",flexShrink:0}}>
+            {sidebarTab==="search"&&<SearchBar onAdd={p=>addPokemon(p)}/>}
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"4px 8px"}}>
+            {sidebarTab==="search"&&(
+              <>
+                {sorted.map((e,idx)=>(
+                  <div key={e.id} onClick={()=>upd(e.id,{isExpanded:!e.isExpanded})} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 4px",borderRadius:4,cursor:"pointer",background:activeEntry?.id===e.id?"rgba(0,212,170,0.08)":"transparent",borderLeft:`2px solid ${activeEntry?.id===e.id?sideColor:"transparent"}`,opacity:e.currentHp<=0?0.5:1}}>
+                    <span style={{fontSize:8,color:"#3a4060",fontFamily:"'Exo 2'",fontWeight:700,width:14,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
+                    <div style={{width:6,height:6,borderRadius:"50%",background:e.currentHp<=0?"#3a3040":TYPE_COLORS[e.pokemon.types[0]],flexShrink:0}}/>
+                    <span style={{fontSize:11,color:e.currentHp<=0?"#5a6080":"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none"}}>{e.nickname||e.pokemon.name}</span>
+                    <span style={{fontSize:9,color:"#6890f0",fontFamily:"'Exo 2'",fontWeight:700,flexShrink:0}}>{e.initiative}</span>
+                    <span style={{fontSize:10,color:e.currentHp<=0?"#705898":e.currentHp/e.maxHp>0.5?"#00d4aa":e.currentHp/e.maxHp>0.25?"#ffd32a":"#ff4757",fontFamily:"'Exo 2'",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
+                  </div>
+                ))}
+                {entries.length===0&&<div style={{textAlign:"center",color:"#5a6080",padding:16,fontSize:11}}>Search to add Pokémon</div>}
+              </>
+            )}
+            {sidebarTab==="characters"&&(
+              <>
+                <div style={{fontSize:9,color:"#5a6080",padding:"4px 4px 8px",lineHeight:1.4}}>
+                  Expand a trainer below to see their party. Click <strong style={{color:"#00d4aa"}}>+</strong> to add to battle.
+                </div>
+                <CharactersSidebar onAddPokemon={(p,tid,nick,loy,hap,movs,sk)=>addPokemon(p,tid,nick,loy,hap,movs,sk)}/>
+              </>
+            )}
+          </div>
+          <div style={{padding:"6px 8px",borderTop:"1px solid #2a2f45",flexShrink:0}}>
+            <button onClick={()=>setEntries([])} style={{width:"100%",background:"rgba(255,71,87,0.1)",border:"1px solid rgba(255,71,87,0.3)",borderRadius:4,color:"#ff4757",padding:"5px",fontSize:11,cursor:"pointer"}}>Clear All</button>
+          </div>
+        </div>
+
+        {/* HORIZONTAL TRACKER AREA — scrolls left-right, edge-fades show there is more */}
+        <div style={{flex:1,position:"relative",overflow:"hidden"}}>
+          <div ref={scrollRef} style={{position:"absolute",inset:0,overflowX:"auto",overflowY:"hidden",padding:"10px 10px"}}
+            onWheel={e=>{e.preventDefault();if(scrollRef.current)scrollRef.current.scrollLeft+=e.deltaY;}}>
+          {/* Status summary strip — quick view of all combatant conditions */}
+          {entries.length>0&&(()=>{
+            const active=sorted.filter(e=>e.currentHp>0);
+            const withStatus=active.filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
+            if(withStatus.length===0)return null;
+            return(
+              <div style={{position:"sticky",top:0,zIndex:10,background:"#0f1117cc",backdropFilter:"blur(4px)",borderBottom:"1px solid #2a2f45",padding:"4px 10px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0}}>
+                <span style={{fontSize:8,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",flexShrink:0}}>Status</span>
+                {withStatus.map(e=>{
+                  const sc2={player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[e.side];
+                  const sts=(e.statuses||[]).filter(s=>s!=="Healthy");
+                  return(
+                    <div key={e.id} style={{display:"flex",alignItems:"center",gap:3,background:"#1e2235",borderRadius:4,padding:"2px 6px",border:`1px solid ${sc2}30`}}>
+                      <span style={{fontSize:9,fontWeight:700,color:sc2}}>{e.nickname||e.pokemon.name}</span>
+                      {sts.map(s=>{const sc=STATUS_CONDITIONS[s];return<span key={s} style={{fontSize:8,color:sc?.color,background:(sc?.color||"#555")+"20",borderRadius:2,padding:"0 3px"}}>{s.slice(0,3)}</span>;})}
+                      {e.isProtected&&<span style={{fontSize:8,color:"#6890f0"}}>🛡</span>}
+                      {(e.statMods||[]).length>0&&<span style={{fontSize:8,color:"#8b90a8"}}>+{e.statMods.length}mod</span>}
+                      <span style={{fontSize:8,color:e.currentHp/e.maxHp>0.5?"#00d4aa":e.currentHp/e.maxHp>0.25?"#ffd32a":"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{e.currentHp}/{e.maxHp}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          {entries.length===0?(
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#5a6080",fontSize:14,flexDirection:"column",gap:16,padding:40}}>
+              <span style={{fontSize:48}}>⚔️</span>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontWeight:700,color:"#e8eaf0",marginBottom:6}}>No combatants yet</div>
+                <div style={{fontSize:12}}>← Use the sidebar search or Party tab to add Pokémon</div>
+                <div style={{fontSize:11,color:"#3a4060",marginTop:4}}>Tip: Click any Pokémon in the left list to expand their card</div>
+              </div>
+            </div>
+          ):(
+            <div style={{display:"flex",gap:10,height:"100%",alignItems:"flex-start"}}>
+              {sorted.map(e=>(
+                <div key={e.id} ref={el=>{cardRefs.current[e.id]=el;}} style={{opacity:dragId===e.id?0.4:1,flexShrink:0}}>
+                  <BattleCard entry={e} allEntries={entries} weather={weather} isActive={activeEntry?.id===e.id} onUpdate={upd} onRemove={remove} onNextTurn={nextTurn}
+                    onDragStart={()=>setDragId(e.id)}
+                    onDragOver={(ev)=>{ev.preventDefault();}}
+                    onDrop={()=>handleDrop(e.id)}/>
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
+          {/* Right edge fade indicating more cards */}
+          <div style={{position:"absolute",top:0,right:0,bottom:0,width:32,background:"linear-gradient(to right, transparent, #0f1117)",pointerEvents:"none"}}/>
+        </div>
+      </div>
+    </div>
+  );
+}
