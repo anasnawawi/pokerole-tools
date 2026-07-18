@@ -86,10 +86,14 @@ function removeStatus(statuses:string[],s:string):string[]{
 
 function HpBar({cur,max,isWp}:{cur:number;max:number;isWp?:boolean}){
   const pct=max>0?Math.max(0,Math.min(1,cur/max)):0;
-  const barColor=isWp?"#3060D0":pct>0.5?"#18C840":pct>0.25?"#E8B018":"#D82808";
+  const barColor=isWp?"#4878F8":pct>0.5?"#58D838":pct>0.25?"#F8C800":"#F82000";
+  const hlColor=isWp?"#80A8FF":pct>0.5?"#A0F060":pct>0.25?"#FFE840":"#FF6040";
   return(
-    <div style={{background:"#404030",border:"1px solid #181818",height:8,overflow:"hidden",imageRendering:"pixelated"}}>
-      <div style={{width:`${pct*100}%`,height:"100%",background:barColor,transition:"width 0.3s",boxShadow:`inset 0 2px 0 ${isWp?"#6090F8":pct>0.5?"#50F870":pct>0.25?"#F8D048":"#F85040"}50`}}/>
+    <div style={{background:"#303030",border:"1px solid #181818",height:7,overflow:"hidden",position:"relative"}}>
+      <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,#505050 0%,#282828 100%)"}}/>
+      <div style={{position:"relative",width:`${pct*100}%`,height:"100%",background:barColor,transition:"width 0.3s"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:hlColor,opacity:0.6}}/>
+      </div>
     </div>
   );
 }
@@ -2537,46 +2541,43 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
       {showZMove&&<ZMovePopup entry={entry} allEntries={allEntries} onClose={()=>setShowZMove(false)} onApply={onUpdate} onApplyDmg={(id,dmg)=>onUpdate(id,{currentHp:Math.max(0,(allEntries.find(e=>e.id===id)?.currentHp??0)-dmg)})}/>}
       {showTrainerSkills&&linkedTrainer&&<TrainerSkillPopup trainerData={linkedTrainer} entry={entry} allEntries={allEntries} onClose={()=>setShowTrainerSkills(false)}/>}
 
-      {/* HORIZONTAL CARD — FireRed HP panel style */}
+      {/* HORIZONTAL CARD — FireRed party-panel style */}
       <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}
-        style={{width:280,flexShrink:0,background:entry.currentHp<=0?"#C8C8B0":"#F8F8E8",border:`3px solid #181818`,boxShadow:isActive?`4px 4px 0 ${entry.side==="player"?"#2858C0":"#D82808"},2px 2px 0 #787878`:"3px 3px 0 #787878",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)",overflowX:"hidden",overflowY:"auto",opacity:entry.currentHp<=0?0.5:1,cursor:"default"}}>
+        style={{width:290,flexShrink:0,background:entry.currentHp<=0?"linear-gradient(180deg,#808898 0%,#606878 100%)":"linear-gradient(180deg,#7898E0 0%,#4868C0 60%,#3858A8 100%)",border:"3px solid #181818",boxShadow:isActive?`5px 5px 0 ${entry.side==="player"?"#183088":"#980808"}`:"4px 4px 0 #283060",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)",overflowX:"hidden",overflowY:"auto",opacity:entry.currentHp<=0?0.6:1,cursor:"default"}}>
 
-        {/* Card header — switches to trainer name/colour when trainer view active */}
+        {/* Card header — blue panel top strip */}
         {(()=>{
           const trainerView=!!(entry.showTrainerView&&linkedTrainer);
-          const sideStr=entry.side==="player"?"#2858C0":"#D82808";
-          const headerBg=trainerView?"#D8E8F8":isActive?(entry.side==="player"?"#C8D8F0":"#F8D8D8"):"#E8E8D0";
+          const sideAccent=entry.side==="player"?"#A8C8F8":"#F8A8A8";
           const displayName=trainerView?(linkedTrainer.name||"Trainer"):entry.nickname;
           const displayPlaceholder=trainerView?(linkedTrainer.name||"Trainer"):entry.pokemon.name;
           return(
-            <div style={{padding:"5px 7px",background:headerBg,borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:4}}>
-              <span style={{color:"#C8C8A8",cursor:"grab",fontSize:11,flexShrink:0,userSelect:"none"}} title="Drag to reorder">≡</span>
-              {/* Side-colour bar like FR type icons */}
-              <div style={{width:4,alignSelf:"stretch",background:sideStr,flexShrink:0,marginRight:2}}/>
+            <div style={{padding:"5px 8px",background:"rgba(0,0,0,0.25)",borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:4}}>
+              <span style={{color:"#B0C0E8",cursor:"grab",fontSize:11,flexShrink:0,userSelect:"none"}} title="Drag to reorder">≡</span>
               {trainerView
-                ? <><span style={{fontFamily:"'Press Start 2P',monospace",fontSize:8,color:"#2858C0",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{displayName.toUpperCase()}</span>
-                  {linkedTrainer?.rank&&<span style={{fontSize:6,color:"#2858C0",border:"1px solid #2858C080",padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{linkedTrainer.rank}</span>}
+                ? <><span style={{fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#F8F8E8",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,textShadow:"1px 1px 0 #181818"}}>{displayName.toUpperCase()}</span>
+                  {linkedTrainer?.rank&&<span style={{fontSize:6,color:sideAccent,border:`1px solid ${sideAccent}80`,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{linkedTrainer.rank}</span>}
                   <span style={{flex:1}}/></>
-                : <input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={displayPlaceholder} style={{flex:1,background:"transparent",border:"none",color:"#181818",fontFamily:"'Press Start 2P',monospace",fontSize:8,outline:"none",minWidth:0,textTransform:"uppercase"}}/>
+                : <input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={displayPlaceholder} style={{flex:1,background:"transparent",border:"none",color:"#F8F8E8",fontFamily:"'Press Start 2P',monospace",fontSize:9,outline:"none",minWidth:0,textTransform:"uppercase",textShadow:"1px 1px 0 #181818"}}/>
               }
-              {entry.currentHp<=0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:"#705898",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>FNT</span>}
-              {isActive&&entry.currentHp>0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:sideStr,padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>▶</span>}
-              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#2858C0",cursor:"pointer",fontSize:7,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{trainerView?"PKM":"TRN"}</button>}
-              <button onClick={()=>upd({isExpanded:!entry.isExpanded})} style={{background:"none",border:"none",color:"#888870",cursor:"pointer",fontSize:9,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
-              <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#D82808",cursor:"pointer",fontSize:12,flexShrink:0,fontWeight:700}}>×</button>
+              {entry.currentHp<=0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:"#705898",border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>FNT</span>}
+              {isActive&&entry.currentHp>0&&<span style={{fontSize:7,fontWeight:700,color:"#181818",background:sideAccent,border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>▶</span>}
+              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{trainerView?"PKM":"TRN"}</button>}
+              <button onClick={()=>upd({isExpanded:!entry.isExpanded})} style={{background:"none",border:"none",color:"#B0C0E8",cursor:"pointer",fontSize:9,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
+              <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#F8A8A8",cursor:"pointer",fontSize:12,flexShrink:0,fontWeight:700}}>×</button>
             </div>
           );
         })()}
 
         {/* Action economy + Reaction */}
-        <div style={{padding:"3px 7px",background:"#E8E8D0",display:"flex",gap:3,alignItems:"center",borderBottom:"1px solid #C8C8A8"}}>
-          <span style={{fontSize:7,color:"#888870",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>ACT</span>
-          {[0,1,2,3,4].map(i=><button key={i} onClick={()=>upd({actionCount:entry.actionCount===i+1?i:i+1})} style={{width:15,height:15,border:`2px solid ${i<entry.actionCount?"#181818":"#C8C8A8"}`,background:i<entry.actionCount?"#E8B018":"#F8F8E8",cursor:"pointer",fontSize:7,color:i<entry.actionCount?"#181818":"#C8C8A8",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{i+1}</button>)}
-          {entry.actionCount>0&&<span style={{fontSize:6,color:"#D82808",marginLeft:2,fontFamily:"'Press Start 2P',monospace"}}>→{Math.min(entry.actionCount+1,5)}+</span>}
-          <span style={{width:1,height:10,background:"#C8C8A8",flexShrink:0,margin:"0 2px"}}/>
-          <span style={{fontSize:7,color:"#888870",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>RXN</span>
-          <button onClick={()=>upd({reactionUsed:!entry.reactionUsed})} title={entry.reactionUsed?"Reaction used":"Reaction available"} style={{width:15,height:15,border:`2px solid ${entry.reactionUsed?"#181818":"#C8C8A8"}`,background:entry.reactionUsed?"#705898":"#F8F8E8",cursor:"pointer",fontSize:7,color:entry.reactionUsed?"#F8F8E8":"#C8C8A8",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>R</button>
-          {entry.reactionUsed&&<span style={{fontSize:6,color:"#705898",fontFamily:"'Press Start 2P',monospace"}}>used</span>}
+        <div style={{padding:"3px 7px",background:"rgba(0,0,0,0.18)",display:"flex",gap:3,alignItems:"center",borderBottom:"1px solid rgba(0,0,0,0.3)"}}>
+          <span style={{fontSize:7,color:"#C8D8F8",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>ACT</span>
+          {[0,1,2,3,4].map(i=><button key={i} onClick={()=>upd({actionCount:entry.actionCount===i+1?i:i+1})} style={{width:14,height:14,border:`2px solid ${i<entry.actionCount?"#F8C800":"rgba(255,255,255,0.3)"}`,background:i<entry.actionCount?"#E8A800":"rgba(0,0,0,0.2)",cursor:"pointer",fontSize:6,color:i<entry.actionCount?"#181818":"rgba(255,255,255,0.4)",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{i+1}</button>)}
+          {entry.actionCount>0&&<span style={{fontSize:6,color:"#F8C800",marginLeft:2,fontFamily:"'Press Start 2P',monospace"}}>→{Math.min(entry.actionCount+1,5)}+</span>}
+          <span style={{width:1,height:10,background:"rgba(255,255,255,0.2)",flexShrink:0,margin:"0 2px"}}/>
+          <span style={{fontSize:7,color:"#C8D8F8",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>RXN</span>
+          <button onClick={()=>upd({reactionUsed:!entry.reactionUsed})} title={entry.reactionUsed?"Reaction used":"Reaction available"} style={{width:14,height:14,border:`2px solid ${entry.reactionUsed?"#C8A8F8":"rgba(255,255,255,0.3)"}`,background:entry.reactionUsed?"#9060D8":"rgba(0,0,0,0.2)",cursor:"pointer",fontSize:7,color:entry.reactionUsed?"#F8F8E8":"rgba(255,255,255,0.4)",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>R</button>
+          {entry.reactionUsed&&<span style={{fontSize:6,color:"#C8A8F8",fontFamily:"'Press Start 2P',monospace"}}>used</span>}
         </div>
 
         {/* When trainer view active: show trainer card replacing everything below header */}
@@ -2586,43 +2587,41 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
           </div>
         ):<>
 
-        {/* HP + WP — classic FireRed HP panel layout */}
-        <div style={{padding:"6px 8px 5px",background:"#F8F8E8",borderBottom:"1px solid #C8C8A8"}}>
+        {/* HP + WP — cream FR nameplate floating on blue panel */}
+        <div style={{margin:"6px 7px 4px",background:"#F0ECD4",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"5px 8px"}}>
           {/* HP row */}
-          <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
-            <span style={{fontSize:8,color:"#181818",width:18,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>HP</span>
-            <button onClick={()=>upd({currentHp:Math.max(0,entry.currentHp-1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#D82808",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>−</button>
-            <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#18C840":entry.currentHp/entry.maxHp>0.25?"#E8B018":"#D82808",minWidth:34,textAlign:"center"}}>{entry.currentHp}/{entry.maxHp}</span>
-            <button onClick={()=>upd({currentHp:Math.min(entry.maxHp,entry.currentHp+1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#18C840",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>+</button>
+          <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
+            <span style={{fontSize:8,color:"#E07800",width:16,fontFamily:"'Press Start 2P',monospace",flexShrink:0,fontWeight:700}}>HP</span>
+            <div style={{flex:1}}><HpBar cur={entry.currentHp} max={entry.maxHp}/></div>
+            <button onClick={()=>upd({currentHp:Math.max(0,entry.currentHp-1)})} style={{width:14,height:14,border:"2px solid #181818",background:"#E8E8D0",color:"#D82808",cursor:"pointer",fontSize:10,lineHeight:"10px",flexShrink:0,fontWeight:700}}>−</button>
+            <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#907000":"#A81000",minWidth:40,textAlign:"right",flexShrink:0}}>{entry.currentHp}/{entry.maxHp}</span>
+            <button onClick={()=>upd({currentHp:Math.min(entry.maxHp,entry.currentHp+1)})} style={{width:14,height:14,border:"2px solid #181818",background:"#E8E8D0",color:"#18A830",cursor:"pointer",fontSize:10,lineHeight:"10px",flexShrink:0,fontWeight:700}}>+</button>
           </div>
-          <HpBar cur={entry.currentHp} max={entry.maxHp}/>
           {/* WP row */}
-          <div style={{display:"flex",alignItems:"center",gap:4,marginTop:5,marginBottom:3}}>
-            <span style={{fontSize:8,color:"#181818",width:18,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>WP</span>
-            <button onClick={()=>upd({currentWill:Math.max(0,entry.currentWill-1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#D82808",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>−</button>
-            <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:"#3060D0",minWidth:34,textAlign:"center"}}>{entry.currentWill}/{entry.maxWill}</span>
-            <button onClick={()=>upd({currentWill:Math.min(entry.maxWill,entry.currentWill+1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#3060D0",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>+</button>
+          <div style={{display:"flex",alignItems:"center",gap:3}}>
+            <span style={{fontSize:8,color:"#2040C0",width:16,fontFamily:"'Press Start 2P',monospace",flexShrink:0,fontWeight:700}}>WP</span>
+            <div style={{flex:1}}><HpBar cur={entry.currentWill} max={entry.maxWill} isWp/></div>
+            <button onClick={()=>upd({currentWill:Math.max(0,entry.currentWill-1)})} style={{width:14,height:14,border:"2px solid #181818",background:"#E8E8D0",color:"#D82808",cursor:"pointer",fontSize:10,lineHeight:"10px",flexShrink:0,fontWeight:700}}>−</button>
+            <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:"#2040C0",minWidth:40,textAlign:"right",flexShrink:0}}>{entry.currentWill}/{entry.maxWill}</span>
+            <button onClick={()=>upd({currentWill:Math.min(entry.maxWill,entry.currentWill+1)})} style={{width:14,height:14,border:"2px solid #181818",background:"#E8E8D0",color:"#2858C0",cursor:"pointer",fontSize:10,lineHeight:"10px",flexShrink:0,fontWeight:700}}>+</button>
           </div>
-          <HpBar cur={entry.currentWill} max={entry.maxWill} isWp/>
         </div>
 
         {/* Quick stats row */}
-        <div style={{padding:"4px 7px",background:"#E8E8D0",display:"flex",gap:5,alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid #C8C8A8"}}>
-          <div style={{display:"flex",gap:2,alignItems:"center",border:"1px solid #181818",background:"#F8F8E8",padding:"1px 4px"}}>
-            <span style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace"}}>INI</span>
-            <input type="number" value={entry.initiative} onChange={e=>upd({initiative:+e.target.value})} style={{width:22,background:"transparent",border:"none",color:"#2858C0",fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,textAlign:"center",outline:"none"}}/>
+        <div style={{padding:"3px 7px",background:"rgba(0,0,0,0.18)",display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid rgba(0,0,0,0.3)"}}>
+          <div style={{display:"flex",gap:2,alignItems:"center",border:"1px solid rgba(255,255,255,0.3)",background:"rgba(0,0,0,0.2)",padding:"1px 4px"}}>
+            <span style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace"}}>INI</span>
+            <input type="number" value={entry.initiative} onChange={e=>upd({initiative:+e.target.value})} style={{width:22,background:"transparent",border:"none",color:"#F8F800",fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,textAlign:"center",outline:"none"}}/>
           </div>
-          <select value={entry.side} onChange={e=>upd({side:e.target.value as BattleEntry["side"]})} style={{background:"#F8F8E8",border:"1px solid #181818",color:entry.side==="player"?"#2858C0":"#D82808",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
+          <select value={entry.side} onChange={e=>upd({side:e.target.value as BattleEntry["side"]})} style={{background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.3)",color:entry.side==="player"?"#A8C8F8":"#F8A8A8",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
             <option value="player">PLAYER</option><option value="enemy">ENEMY</option><option value="neutral">NEUT</option>
           </select>
           {(entry.typeOverride||entry.pokemon.types).map(t=><span key={t} style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:TYPE_COLORS[t as PokemonType]||"#888",padding:"1px 4px",border:"1px solid #181818",fontFamily:"'Press Start 2P',monospace"}}>{t.slice(0,3).toUpperCase()}</span>)}
-          {entry.side==="enemy"&&<button onClick={()=>setShowCapture(true)} style={{background:"#F8F8E8",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Capture">CATCH</button>}
-          {/* Advanced mechanic indicator badges */}
-          {entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"#F8D8B8",border:"1px solid #181818",color:"#B85808",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Mega Evolved">MEGA</button>}
-          {entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"#F8C8C8",border:"1px solid #181818",color:"#A00808",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title={`Dynamaxed — ${entry.dynamaxRoundsLeft} rounds left`}>MAX{entry.dynamaxRoundsLeft}</button>}
-          {entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"#E8D8F8",border:"1px solid #181818",color:"#780878",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title={`Terastallized (${entry.teraType})`}>TERA</button>}
-          {entry.zMoveUsed&&<span style={{background:"#F8F0B8",border:"1px solid #181818",color:"#807008",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>Z✓</span>}
-          {/* Advanced mechanic activation buttons */}
+          {entry.side==="enemy"&&<button onClick={()=>setShowCapture(true)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title="Capture">CATCH</button>}
+          {entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"#E8A840",border:"1px solid #181818",color:"#181818",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title="Mega Evolved">MEGA</button>}
+          {entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"#E84040",border:"1px solid #181818",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title={`Dynamaxed — ${entry.dynamaxRoundsLeft} rounds left`}>MAX{entry.dynamaxRoundsLeft}</button>}
+          {entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"#B040C0",border:"1px solid #181818",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title={`Terastallized (${entry.teraType})`}>TERA</button>}
+          {entry.zMoveUsed&&<span style={{background:"#C8A800",border:"1px solid #181818",color:"#181818",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>Z✓</span>}
           {(()=>{
             const trainerBattleItem:string=(linkedTrainer as any)?.battleItem??"";
             const isLinked=!!entry.linkedTrainerId;
@@ -2635,34 +2634,34 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
             if(!canAccessMega&&!canAccessDyna&&!canAccessTera&&!canAccessZ)return null;
             return(
               <div style={{display:"flex",gap:2,marginLeft:"auto"}}>
-                {canAccessMega&&!entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#B85808",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Mega Evolution">⚡</button>}
-                {canAccessDyna&&!entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#A00808",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Dynamax / Gigamax">💫</button>}
-                {canAccessTera&&!entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#780878",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Terastallization">💎</button>}
-                {canAccessZ&&<button onClick={()=>setShowZMove(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#807008",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Z-Move">⭐</button>}
+                {canAccessMega&&!entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E860",color:"#F8D8A8",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace"}} title="Mega Evolution">⚡</button>}
+                {canAccessDyna&&!entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E860",color:"#F8A8A8",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace"}} title="Dynamax">💫</button>}
+                {canAccessTera&&!entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E860",color:"#D8A8F8",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace"}} title="Tera">💎</button>}
+                {canAccessZ&&<button onClick={()=>setShowZMove(true)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E860",color:"#F8F0A8",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace"}} title="Z-Move">⭐</button>}
               </div>
             );
           })()}
         </div>
 
         {/* Loyalty/Happiness */}
-        <div style={{padding:"3px 7px",background:"#F0EFD8",display:"flex",gap:10,alignItems:"center",borderBottom:"1px solid #C8C8A8",borderTop:"1px solid #C8C8A8"}}>
+        <div style={{padding:"3px 7px",background:"rgba(0,0,0,0.15)",display:"flex",gap:10,alignItems:"center",borderBottom:"1px solid rgba(0,0,0,0.25)"}}>
           <div style={{display:"flex",gap:3,alignItems:"center"}}>
-            <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>LYL</span>
-            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({loyalty:entry.loyalty===i?i-1:i})} style={{width:9,height:9,border:"1px solid #181818",cursor:"pointer",background:i<=entry.loyalty?"#D84848":"#E8E8D0",padding:0}}/>)}</div>
-            <span style={{fontSize:7,color:"#D84848",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{entry.loyalty}</span>
+            <span style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace"}}>LYL</span>
+            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({loyalty:entry.loyalty===i?i-1:i})} style={{width:9,height:9,border:`1px solid ${i<=entry.loyalty?"#F85050":"rgba(255,255,255,0.3)"}`,cursor:"pointer",background:i<=entry.loyalty?"#D83030":"rgba(0,0,0,0.2)",padding:0}}/>)}</div>
+            <span style={{fontSize:7,color:"#F89090",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{entry.loyalty}</span>
           </div>
           <div style={{display:"flex",gap:3,alignItems:"center"}}>
-            <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>HPY</span>
-            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({happiness:entry.happiness===i?i-1:i})} style={{width:9,height:9,border:"1px solid #181818",cursor:"pointer",background:i<=entry.happiness?"#E85888":"#E8E8D0",padding:0}}/>)}</div>
-            <span style={{fontSize:7,color:"#E85888",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{entry.happiness}</span>
+            <span style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace"}}>HPY</span>
+            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({happiness:entry.happiness===i?i-1:i})} style={{width:9,height:9,border:`1px solid ${i<=entry.happiness?"#F890C8":"rgba(255,255,255,0.3)"}`,cursor:"pointer",background:i<=entry.happiness?"#D85898":"rgba(0,0,0,0.2)",padding:0}}/>)}</div>
+            <span style={{fontSize:7,color:"#F8B8D8",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{entry.happiness}</span>
           </div>
         </div>
 
         {/* Status chip row */}
-        <div style={{padding:"3px 7px",background:"#F8F8E8",display:"flex",gap:3,alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid #C8C8A8"}}>
+        <div style={{padding:"3px 7px",background:"rgba(0,0,0,0.12)",display:"flex",gap:3,alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid rgba(0,0,0,0.25)"}}>
           {(entry.statuses||[]).filter(s=>s!=="Healthy").map(s=>{const sc2=STATUS_CONDITIONS[s];return<span key={s} title={sc2?.fullDesc||sc2?.battleEffect} style={{fontSize:7,color:"#F8F8E8",background:sc2?.color??"#888870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",display:"flex",alignItems:"center",gap:2}}>{s.slice(0,3).toUpperCase()}<button onClick={()=>upd({statuses:removeStatus(entry.statuses||[],s)})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>;})}
           <select onChange={e=>{if(e.target.value&&e.target.value!=="＋")upd({statuses:addStatus(entry.statuses||[],e.target.value),statusTurnsLeft:e.target.value==="Asleep"?3:entry.statusTurnsLeft});e.target.value="＋";}} defaultValue="＋"
-            style={{background:"#E8E8D0",border:"1px solid #181818",color:"#484830",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
+            style={{background:"rgba(0,0,0,0.25)",border:"1px solid rgba(255,255,255,0.3)",color:"#C8D8F8",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
             <option value="＋">＋</option>
             {Object.keys(STATUS_CONDITIONS).filter(s=>s!=="Healthy"&&!(entry.statuses||[]).includes(s)).map(s=><option key={s} value={s}>{s}</option>)}
           </select>
@@ -2681,17 +2680,17 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 
 
         {/* Moves list — FireRed FIGHT menu */}
-        <div style={{padding:"5px 7px",background:"#F8F8E8",display:"flex",flexDirection:"column",gap:3}}>
+        <div style={{padding:"5px 7px",background:"transparent",display:"flex",flexDirection:"column",gap:3}}>
           {/* TRAINER VIEW: show trainer skills like moves */}
           {entry.showTrainerView&&linkedTrainer?(
             <TrainerSkillsInline trainer={linkedTrainer} entry={entry} allEntries={allEntries} onSpendWP={spendWP} onIncrementAction={incrementAction} onUpdate={onUpdate}/>
           ):(
             <>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
-              <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>{entry.morphedTo?"▶ FORM":"FIGHT"}{entry.hasSubstitute?" [SUB]":""}</span>
+              <span style={{fontSize:7,color:"#F8F8E8",fontFamily:"'Press Start 2P',monospace",textShadow:"1px 1px 0 #181818"}}>{entry.morphedTo?"▶ FORM":"FIGHT"}{entry.hasSubstitute?" [SUB]":""}</span>
               <div style={{display:"flex",gap:3}}>
-                {entry.morphedTo&&<button onClick={()=>upd({morphedTo:undefined,moves:entry.originalMoves||entry.moves,attrs:entry.originalAttrs||entry.attrs,originalAttrs:undefined,originalMoves:undefined})} style={{fontSize:7,color:"#780878",background:"#E8E8D0",border:"1px solid #181818",cursor:"pointer",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>REVERT</button>}
-                <button onClick={()=>setShowEditMoves(!showEditMoves)} style={{fontSize:7,background:"#E8E8D0",border:"1px solid #181818",color:"#484830",cursor:"pointer",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>{showEditMoves?"DONE":"EDIT"}</button>
+                {entry.morphedTo&&<button onClick={()=>upd({morphedTo:undefined,moves:entry.originalMoves||entry.moves,attrs:entry.originalAttrs||entry.attrs,originalAttrs:undefined,originalMoves:undefined})} style={{fontSize:7,color:"#F8F8E8",background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.3)",cursor:"pointer",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>REVERT</button>}
+                <button onClick={()=>setShowEditMoves(!showEditMoves)} style={{fontSize:7,background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.3)",color:"#C8D8F8",cursor:"pointer",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>{showEditMoves?"DONE":"EDIT"}</button>
               </div>
             </div>
             {showEditMoves?(
@@ -2706,9 +2705,9 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
                   const typeColor=TYPE_COLORS[m.type as PokemonType]||"#888870";
                   return(
                     <button key={i} onClick={()=>setMovePopup(m)}
-                      style={{display:"flex",flexDirection:"column",gap:1,padding:"4px 5px",background:"#F8F8E8",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #787878",position:"relative",minHeight:36}}
+                      style={{display:"flex",flexDirection:"column",gap:1,padding:"4px 5px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #181818",position:"relative",minHeight:36}}
                       onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#C8D8F0";}}
-                      onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F8F8E8";}}>
+                      onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F0ECD4";}}>
                       <span style={{fontSize:8,color:"#181818",fontFamily:"'Press Start 2P',monospace",fontWeight:700,lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{m.name}</span>
                       <div style={{display:"flex",gap:2,alignItems:"center",marginTop:1}}>
                         <span style={{fontSize:6,color:"#F8F8E8",background:typeColor,border:"1px solid #181818",padding:"0 3px",fontFamily:"'Press Start 2P',monospace"}}>{m.type.slice(0,3).toUpperCase()}</span>
@@ -2720,9 +2719,9 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
                   );
                 })}
                 </div>
-                {entry.moves.length===0&&<div style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace",padding:"8px 0"}}>No moves — press EDIT{entry.currentWill>0?" or STRUGGLE":""}</div>}
+                {entry.moves.length===0&&<div style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",padding:"8px 0",textShadow:"1px 1px 0 #181818"}}>No moves — press EDIT{entry.currentWill>0?" or STRUGGLE":""}</div>}
                 {entry.moves.length===0&&entry.currentWill>0&&(
-                  <button onClick={()=>{const s=MOVES.find(m=>m.name==="Struggle")||{name:"Struggle",type:"Normal" as PokemonType,category:"Physical" as const,power:"1",accuracy:"Strength + Brawl",damagePool:"Strength + 1",effect:"Target Foe. No WP cost. User takes recoil equal to half damage dealt.",description:"A desperate thrashing attack used when no other moves are available."} as Move;setMovePopup(s);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 6px",background:"#F8C8C8",border:"2px solid #181818",cursor:"pointer",textAlign:"left",width:"100%",boxShadow:"2px 2px 0 #787878"}}>
+                  <button onClick={()=>{const s=MOVES.find(m=>m.name==="Struggle")||{name:"Struggle",type:"Normal" as PokemonType,category:"Physical" as const,power:"1",accuracy:"Strength + Brawl",damagePool:"Strength + 1",effect:"Target Foe. No WP cost. User takes recoil equal to half damage dealt.",description:"A desperate thrashing attack used when no other moves are available."} as Move;setMovePopup(s);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 6px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",width:"100%",boxShadow:"2px 2px 0 #181818"}}>
                     <span style={{fontSize:8,color:"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flex:1}}>STRUGGLE</span>
                     <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>1 WP</span>
                   </button>
@@ -2735,22 +2734,22 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 
         {/* Expanded section: attrs, abilities, notes */}
         {entry.isExpanded&&(
-          <div style={{borderTop:"2px solid #181818",padding:"7px 7px",display:"flex",flexDirection:"column",gap:7,background:"#F0EFD8"}}>
+          <div style={{borderTop:"2px solid #181818",padding:"7px 7px",display:"flex",flexDirection:"column",gap:7,background:"rgba(0,0,0,0.2)"}}>
             {/* Attributes */}
             <div>
-              <div style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",marginBottom:5}}>STATS</div>
+              <div style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",marginBottom:5,textShadow:"1px 1px 0 #181818"}}>STATS</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:3}}>
                 {(["strength","dexterity","vitality","special","insight"] as const).map(attr=>{
                   const labels={strength:"STR",dexterity:"DEX",vitality:"VIT",special:"SPC",insight:"INS"};
                   const base=entry.attrs[attr];const mod=attrModSummary(attr);
                   const statusPen=attr==="dexterity"?(STATUS_CONDITIONS[primaryStatus(entry)]?.accuracyPenalty??0):0;
                   const final=Math.max(0,base+mod-statusPen);
-                  return<div key={attr} style={{textAlign:"center",background:"#F8F8E8",border:"1px solid #181818",padding:"3px 0"}}>
-                    <div style={{fontSize:6,color:"#888870",fontFamily:"'Press Start 2P',monospace"}}>{labels[attr]}</div>
+                  return<div key={attr} style={{textAlign:"center",background:"#F0ECD4",border:"1px solid #181818",padding:"3px 0"}}>
+                    <div style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>{labels[attr]}</div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:1,marginTop:2}}>
-                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:Math.max(0,base-1)}})} style={{width:10,height:10,background:"#E8E8D0",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:8,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>−</button>
+                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:Math.max(0,base-1)}})} style={{width:10,height:10,background:"#D8D4BC",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:8,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>−</button>
                       <span style={{fontSize:10,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:final<base?"#D82808":mod>0?"#18A870":"#181818",minWidth:12,textAlign:"center"}}>{final}</span>
-                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:base+1}})} style={{width:10,height:10,background:"#E8E8D0",border:"1px solid #181818",color:"#18A870",cursor:"pointer",fontSize:8,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>+</button>
+                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:base+1}})} style={{width:10,height:10,background:"#D8D4BC",border:"1px solid #181818",color:"#18A870",cursor:"pointer",fontSize:8,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>+</button>
                     </div>
                     <div style={{display:"flex",justifyContent:"center",gap:1,marginTop:2}}>
                       <button onClick={()=>applyEffect(entry.id,attr,-1,"Manual")} title={`-1 temp ${labels[attr]}`} style={{width:10,height:8,background:"#F8C8C8",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:6,lineHeight:1,padding:0}}>▼</button>
@@ -2771,8 +2770,8 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 
             {/* Abilities */}
             <div>
-              <div style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",marginBottom:4}}>ABILITIES</div>
-              {entry.abilities.map((ab,i)=>{const abData=ABILITIES.find(a=>a.name===ab.name);return<div key={i} style={{marginBottom:4,border:`1px solid #181818`,background:ab.active?"#C8F0C8":"#F8F8E8",padding:"4px 6px"}}>
+              <div style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",marginBottom:4,textShadow:"1px 1px 0 #181818"}}>ABILITIES</div>
+              {entry.abilities.map((ab,i)=>{const abData=ABILITIES.find(a=>a.name===ab.name);return<div key={i} style={{marginBottom:4,border:`1px solid #181818`,background:ab.active?"#C8F0C8":"#F0ECD4",padding:"4px 6px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <button onClick={()=>{const abs=[...entry.abilities];abs[i]={...abs[i],active:!abs[i].active};upd({abilities:abs});}} style={{width:10,height:10,border:"1px solid #181818",background:ab.active?"#18A870":"#E8E8D0",cursor:"pointer",flexShrink:0,padding:0}}/>
                   <span style={{fontSize:8,fontWeight:700,color:ab.active?"#187028":"#484830",fontFamily:"'Press Start 2P',monospace"}}>{ab.name}</span>
@@ -2783,18 +2782,18 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 
             {/* HP/WP max editors + notes */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-              {[{l:"MAX HP",c:entry.currentHp,m:entry.maxHp,col:"#18A870",f:"currentHp" as const,mf:"maxHp" as const},{l:"MAX WP",c:entry.currentWill,m:entry.maxWill,col:"#2858C0",f:"currentWill" as const,mf:"maxWill" as const}].map(f=><div key={f.l} style={{background:"#F8F8E8",border:"1px solid #181818",padding:"4px 5px"}}>
-                <div style={{fontSize:6,color:"#888870",fontFamily:"'Press Start 2P',monospace",marginBottom:3}}>{f.l}</div>
+              {[{l:"MAX HP",c:entry.currentHp,m:entry.maxHp,col:"#18A870",f:"currentHp" as const,mf:"maxHp" as const},{l:"MAX WP",c:entry.currentWill,m:entry.maxWill,col:"#2858C0",f:"currentWill" as const,mf:"maxWill" as const}].map(f=><div key={f.l} style={{background:"#F0ECD4",border:"1px solid #181818",padding:"4px 5px"}}>
+                <div style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace",marginBottom:3}}>{f.l}</div>
                 <div style={{display:"flex",gap:2,alignItems:"center"}}>
-                  <button onClick={()=>upd({[f.f]:Math.max(0,f.c-1)})} style={{width:14,height:14,background:"#E8E8D0",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:10,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>−</button>
-                  <input type="number" value={f.m} onChange={e=>upd({[f.mf]:Math.max(1,+e.target.value||1)})} style={{width:24,textAlign:"center",background:"#E8E8D0",border:"1px solid #181818",color:f.col,fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,padding:"0 1px",outline:"none"}}/>
-                  <button onClick={()=>upd({[f.mf]:f.m+1})} style={{width:14,height:14,background:"#E8E8D0",border:"1px solid #181818",color:"#18A870",cursor:"pointer",fontSize:10,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>+</button>
+                  <button onClick={()=>upd({[f.f]:Math.max(0,f.c-1)})} style={{width:14,height:14,background:"#D8D4BC",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:10,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>−</button>
+                  <input type="number" value={f.m} onChange={e=>upd({[f.mf]:Math.max(1,+e.target.value||1)})} style={{width:24,textAlign:"center",background:"#D8D4BC",border:"1px solid #181818",color:f.col,fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,padding:"0 1px",outline:"none"}}/>
+                  <button onClick={()=>upd({[f.mf]:f.m+1})} style={{width:14,height:14,background:"#D8D4BC",border:"1px solid #181818",color:"#18A870",cursor:"pointer",fontSize:10,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>+</button>
                 </div>
               </div>)}
             </div>
 
-            <textarea value={entry.notes} onChange={e=>upd({notes:e.target.value})} placeholder="Notes…" style={{width:"100%",background:"#F8F8E8",border:"1px solid #181818",color:"#181818",fontSize:8,padding:4,resize:"none",minHeight:28,fontFamily:"inherit",outline:"none"}}/>
-            <label style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+            <textarea value={entry.notes} onChange={e=>upd({notes:e.target.value})} placeholder="Notes…" style={{width:"100%",background:"#F0ECD4",border:"1px solid #181818",color:"#181818",fontSize:8,padding:4,resize:"none",minHeight:28,fontFamily:"inherit",outline:"none"}}/>
+            <label style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",display:"flex",alignItems:"center",gap:4,cursor:"pointer",textShadow:"1px 1px 0 #181818"}}>
               <input type="checkbox" checked={entry.weatherImmune} onChange={e=>upd({weatherImmune:e.target.checked})}/>WX IMMUNE
             </label>
           </div>
@@ -3103,7 +3102,7 @@ export default function BattleTrackerPage(){
   const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
 
   return(
-    <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"#88A040",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
+    <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"linear-gradient(180deg,#88B8E8 0%,#60A0D8 35%,#78A848 65%,#507830 100%)",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
@@ -3203,8 +3202,8 @@ export default function BattleTrackerPage(){
             const withStatus=active.filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
             if(withStatus.length===0)return null;
             return(
-              <div style={{position:"sticky",top:0,zIndex:10,background:"#F0EFD8",borderBottom:"2px solid #181818",padding:"3px 8px",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",flexShrink:0,boxShadow:"0 2px 0 #787878"}}>
-                <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>STATUS</span>
+              <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(24,16,8,0.75)",borderBottom:"2px solid #181818",padding:"3px 8px",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",flexShrink:0,boxShadow:"0 2px 0 #181818"}}>
+                <span style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",flexShrink:0,textShadow:"1px 1px 0 #181818"}}>STATUS</span>
                 {withStatus.map(e=>{
                   const sc2=e.side==="player"?"#2858C0":e.side==="enemy"?"#D82808":"#888870";
                   const sts=(e.statuses||[]).filter(s=>s!=="Healthy");
@@ -3242,7 +3241,7 @@ export default function BattleTrackerPage(){
           )}
           </div>
           {/* Right edge fade indicating more cards */}
-          <div style={{position:"absolute",top:0,right:0,bottom:0,width:32,background:"linear-gradient(to right, transparent, #88A040)",pointerEvents:"none"}}/>
+          <div style={{position:"absolute",top:0,right:0,bottom:0,width:32,background:"linear-gradient(to right, transparent, rgba(80,120,48,0.6))",pointerEvents:"none"}}/>
         </div>
       </div>
     </div>
