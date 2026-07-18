@@ -1,44 +1,85 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 :root {
-  --bg-primary: #0f1117;
-  --bg-secondary: #1a1d27;
-  --bg-card: #1e2235;
-  --bg-card-hover: #242842;
-  --bg-sidebar: #13151f;
-  --bg-detail: #161925;
-  --border-subtle: #2a2f45;
-  --border-accent: #3a4060;
-  --text-primary: #e8eaf0;
-  --text-secondary: #8b90a8;
-  --text-muted: #5a6080;
-  --accent-teal: #00d4aa;
-  --accent-teal-dim: #00a882;
-  --accent-teal-glow: rgba(0, 212, 170, 0.15);
-  --accent-red: #ff4757;
-  --accent-yellow: #ffd32a;
-  --accent-blue: #3d8bff;
+  /* FireRed/LeafGreen Theme */
+  --fr-field:       #88A040;   /* battle field grass */
+  --fr-panel:       #F8F8E8;   /* HP panel cream */
+  --fr-panel-dark:  #E8E8D0;   /* darker panel / header */
+  --fr-sidebar:     #F0EFD8;   /* sidebar cream */
+  --fr-nav:         #F8F8E8;   /* nav bar */
+  --fr-border:      #181818;   /* thick black border */
+  --fr-shadow:      #787878;   /* classic GBA panel shadow */
+  --fr-text:        #181818;   /* primary text */
+  --fr-text-dim:    #484830;   /* secondary text */
+  --fr-text-muted:  #888870;   /* muted text */
+  --fr-hp-green:    #18C840;
+  --fr-hp-yellow:   #E8B018;
+  --fr-hp-red:      #D82808;
+  --fr-hp-track:    #404030;
+  --fr-wp-blue:     #3060D0;
+  --fr-player:      #2858C0;   /* player side blue */
+  --fr-enemy:       #D02808;   /* enemy side red */
+  --fr-active-bg:   #C8D8F0;
+  --fr-select:      #60A0F8;   /* selection highlight */
+  --pixel-font: 'Press Start 2P', monospace;
+
+  /* Legacy aliases used elsewhere */
+  --bg-primary: var(--fr-field);
+  --bg-card: var(--fr-panel);
+  --bg-sidebar: var(--fr-sidebar);
+  --border-subtle: #C8C8A8;
+  --border-accent: var(--fr-border);
+  --text-primary: var(--fr-text);
+  --text-secondary: var(--fr-text-dim);
+  --text-muted: var(--fr-text-muted);
+  --accent-teal: var(--fr-hp-green);
+  --accent-red: var(--fr-enemy);
+  --accent-yellow: var(--fr-hp-yellow);
+  --accent-blue: var(--fr-player);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
   height: 100%;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
+  background: var(--fr-field);
+  color: var(--fr-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
   line-height: 1.5;
   overflow: hidden;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-primary); }
-::-webkit-scrollbar-thumb { background: var(--border-accent); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent-teal-dim); }
+/* Classic GBA-style scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--fr-panel-dark); border: 1px solid var(--fr-border); }
+::-webkit-scrollbar-thumb { background: var(--fr-shadow); border-radius: 0; border: 1px solid var(--fr-border); }
+::-webkit-scrollbar-thumb:hover { background: var(--fr-text); }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .fade-in { animation: fadeIn 0.2s ease forwards; }
+
+/* FireRed panel style — white box with thick border + drop shadow */
+.fr-panel {
+  background: var(--fr-panel);
+  border: 3px solid var(--fr-border);
+  box-shadow: 3px 3px 0 var(--fr-shadow);
+}
+
+/* FireRed button style */
+.fr-btn {
+  background: var(--fr-panel);
+  border: 2px solid var(--fr-border);
+  box-shadow: 2px 2px 0 var(--fr-shadow);
+  color: var(--fr-text);
+  font-family: var(--pixel-font);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 9px;
+}
+.fr-btn:hover { background: var(--fr-active-bg); }
+.fr-btn:active { box-shadow: none; transform: translate(2px,2px); }

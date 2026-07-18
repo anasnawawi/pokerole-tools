@@ -84,9 +84,14 @@ function removeStatus(statuses:string[],s:string):string[]{
   return r.length===0?["Healthy"]:r;
 }
 
-function HpBar({cur,max}:{cur:number;max:number}){
+function HpBar({cur,max,isWp}:{cur:number;max:number;isWp?:boolean}){
   const pct=max>0?Math.max(0,Math.min(1,cur/max)):0;
-  return <div style={{background:"#0f1117",borderRadius:3,height:5,overflow:"hidden"}}><div style={{width:`${pct*100}%`,height:"100%",background:pct>0.5?"#00d4aa":pct>0.25?"#ffd32a":"#ff4757",transition:"width 0.3s"}}/></div>;
+  const barColor=isWp?"#3060D0":pct>0.5?"#18C840":pct>0.25?"#E8B018":"#D82808";
+  return(
+    <div style={{background:"#404030",border:"1px solid #181818",height:8,overflow:"hidden",imageRendering:"pixelated"}}>
+      <div style={{width:`${pct*100}%`,height:"100%",background:barColor,transition:"width 0.3s",boxShadow:`inset 0 2px 0 ${isWp?"#6090F8":pct>0.5?"#50F870":pct>0.25?"#F8D048":"#F85040"}50`}}/>
+    </div>
+  );
 }
 const adjBtn:React.CSSProperties={width:20,height:20,background:"#1a1d27",border:"1px solid #3a4060",borderRadius:3,color:"#00d4aa",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
 
@@ -803,21 +808,22 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const statusToInflict=statusEffect;
 
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
-      <div {...popupHandlers} style={{background:"#1e2235",border:"1px solid #3a4060",borderRadius:10,width:520,maxWidth:"95vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)",transform:`translate(${popupPos.x}px,${popupPos.y}px)`,cursor:"default",userSelect:"none"}}>
-        <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",gap:8,flexShrink:0,cursor:"move"}}>
-          <TypeBadge type={move.type as PokemonType}/>
-          <span style={{fontSize:11,fontWeight:700,color:move.category==="Physical"?"#f08030":move.category==="Special"?"#6890f0":"#78c850",background:move.category==="Physical"?"rgba(240,128,48,0.15)":move.category==="Special"?"rgba(104,144,240,0.15)":"rgba(120,200,80,0.15)",padding:"2px 7px",borderRadius:3}}>{move.category}</span>
-          {stab&&<span style={{fontSize:9,color:"#ffd32a",background:"rgba(255,211,42,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>STAB +1</span>}
-          {(move.priority??0)>0&&<span style={{fontSize:9,color:"#00d4aa",background:"rgba(0,212,170,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY {move.priority}</span>}
-          {selfTarget&&<span style={{fontSize:9,color:"#a040a0",background:"rgba(160,64,160,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>TARGET: SELF</span>}
-          {selfDestruct&&<span style={{fontSize:9,color:"#ff4757",background:"rgba(255,71,87,0.12)",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SELF-DESTRUCT</span>}
-          <h3 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:16,color:"#e8eaf0",margin:0,flex:1}}>{move.name}</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+    <div style={{position:"fixed",inset:0,background:"rgba(24,24,24,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
+      <div {...popupHandlers} style={{background:"#F8F8E8",border:"3px solid #181818",width:520,maxWidth:"95vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"6px 6px 0 #787878",transform:`translate(${popupPos.x}px,${popupPos.y}px)`,cursor:"default",userSelect:"none"}}>
+        {/* Header — FireRed dialogue box style */}
+        <div style={{padding:"8px 12px",background:"#E8E8D0",borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:6,flexShrink:0,cursor:"move"}}>
+          <span style={{fontSize:7,color:"#F8F8E8",background:TYPE_COLORS[move.type as PokemonType]||"#888",border:"1px solid #181818",padding:"1px 5px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{move.type.slice(0,3).toUpperCase()}</span>
+          <span style={{fontSize:7,fontWeight:700,color:move.category==="Physical"?"#B85808":move.category==="Special"?"#2848A8":"#187028",background:move.category==="Physical"?"#F8D8B8":move.category==="Special"?"#C8D8F8":"#C8F0C8",border:"1px solid #181818",padding:"1px 5px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{move.category.slice(0,4).toUpperCase()}</span>
+          {stab&&<span style={{fontSize:7,color:"#807008",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>STAB</span>}
+          {(move.priority??0)>0&&<span style={{fontSize:7,color:"#187028",background:"#C8F0C8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>P+{move.priority}</span>}
+          {selfTarget&&<span style={{fontSize:7,color:"#780878",background:"#E8D8F8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>SELF</span>}
+          {selfDestruct&&<span style={{fontSize:7,color:"#F8F8E8",background:"#D82808",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>BOOM</span>}
+          <span style={{fontSize:11,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{move.name}</span>
+          <button onClick={onClose} style={{background:"#E8E8D0",border:"2px solid #181818",color:"#181818",cursor:"pointer",fontSize:10,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 #787878",flexShrink:0}}>×</button>
         </div>
-        <div style={{padding:14,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,flex:1}}>
-          <p style={{fontSize:12,color:"#8b90a8",lineHeight:1.5,margin:0}}>{move.description}</p>
-          <div style={{background:"#13151f",borderRadius:5,padding:"7px 10px",fontSize:11,color:"#e8eaf0"}}><strong style={{color:"#5a6080"}}>Effect: </strong>{move.effect}</div>
+        <div style={{padding:12,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,flex:1,background:"#F8F8E8"}}>
+          <p style={{fontSize:9,color:"#484830",lineHeight:1.6,margin:0,fontFamily:"inherit"}}>{move.description}</p>
+          <div style={{background:"#E8E8D0",border:"1px solid #C8C8A8",padding:"6px 8px",fontSize:9,color:"#181818",lineHeight:1.5}}><strong style={{color:"#484830"}}>Effect: </strong>{move.effect}</div>
 
           {/* Loyalty/Happiness pool info */}
           {(loyaltyInPool||happinessInPool)&&(
@@ -2531,47 +2537,46 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
       {showZMove&&<ZMovePopup entry={entry} allEntries={allEntries} onClose={()=>setShowZMove(false)} onApply={onUpdate} onApplyDmg={(id,dmg)=>onUpdate(id,{currentHp:Math.max(0,(allEntries.find(e=>e.id===id)?.currentHp??0)-dmg)})}/>}
       {showTrainerSkills&&linkedTrainer&&<TrainerSkillPopup trainerData={linkedTrainer} entry={entry} allEntries={allEntries} onClose={()=>setShowTrainerSkills(false)}/>}
 
-      {/* HORIZONTAL CARD — fixed width column */}
-      {/* Fainted visual treatment */}
+      {/* HORIZONTAL CARD — FireRed HP panel style */}
       <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}
-        style={{width:280,flexShrink:0,background:entry.currentHp<=0?"#0a0c12":"#1e2235",border:`2px solid ${entry.currentHp<=0?"#3a3040":isActive?sideColor:sideColor+"50"}`,borderRadius:8,display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)",overflowX:"hidden",overflowY:"auto",opacity:entry.currentHp<=0?0.45:1,boxShadow:isActive?`0 0 0 2px ${sideColor}40,0 4px 20px rgba(0,0,0,0.4)`:undefined,cursor:"default"}}>
+        style={{width:280,flexShrink:0,background:entry.currentHp<=0?"#C8C8B0":"#F8F8E8",border:`3px solid #181818`,boxShadow:isActive?`4px 4px 0 ${entry.side==="player"?"#2858C0":"#D82808"},2px 2px 0 #787878`:"3px 3px 0 #787878",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)",overflowX:"hidden",overflowY:"auto",opacity:entry.currentHp<=0?0.5:1,cursor:"default"}}>
 
         {/* Card header — switches to trainer name/colour when trainer view active */}
         {(()=>{
           const trainerView=!!(entry.showTrainerView&&linkedTrainer);
-          const headerBg=trainerView?"rgba(61,139,255,0.15)":isActive?sideColor+"18":"#0f1117";
-          const dotBg=trainerView?"#3d8bff":TYPE_COLORS[entry.pokemon.types[0]];
+          const sideStr=entry.side==="player"?"#2858C0":"#D82808";
+          const headerBg=trainerView?"#D8E8F8":isActive?(entry.side==="player"?"#C8D8F0":"#F8D8D8"):"#E8E8D0";
           const displayName=trainerView?(linkedTrainer.name||"Trainer"):entry.nickname;
           const displayPlaceholder=trainerView?(linkedTrainer.name||"Trainer"):entry.pokemon.name;
           return(
-            <div style={{padding:"6px 8px",background:headerBg,borderRadius:"6px 6px 0 0",display:"flex",alignItems:"center",gap:5}}>
-              <span style={{color:"#5a6080",cursor:"grab",fontSize:13,flexShrink:0,userSelect:"none"}} title="Drag to reorder">⠿</span>
-              <div style={{width:7,height:7,borderRadius:"50%",background:dotBg,flexShrink:0}}/>
+            <div style={{padding:"5px 7px",background:headerBg,borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:4}}>
+              <span style={{color:"#C8C8A8",cursor:"grab",fontSize:11,flexShrink:0,userSelect:"none"}} title="Drag to reorder">≡</span>
+              {/* Side-colour bar like FR type icons */}
+              <div style={{width:4,alignSelf:"stretch",background:sideStr,flexShrink:0,marginRight:2}}/>
               {trainerView
-                ? <><span style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:12,color:"#3d8bff",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{displayName}</span>
-                  {linkedTrainer?.rank&&<span style={{fontSize:8,color:"#3d8bff",background:"rgba(61,139,255,0.15)",border:"1px solid #3d8bff30",borderRadius:3,padding:"1px 5px",flexShrink:0}}>{linkedTrainer.rank}</span>}
-                  {linkedTrainer?.age&&<span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>{linkedTrainer.age}</span>}
+                ? <><span style={{fontFamily:"'Press Start 2P',monospace",fontSize:8,color:"#2858C0",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{displayName.toUpperCase()}</span>
+                  {linkedTrainer?.rank&&<span style={{fontSize:6,color:"#2858C0",border:"1px solid #2858C080",padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{linkedTrainer.rank}</span>}
                   <span style={{flex:1}}/></>
-                : <input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={displayPlaceholder} style={{flex:1,background:"transparent",border:"none",color:"#e8eaf0",fontFamily:"'Exo 2'",fontWeight:700,fontSize:12,outline:"none",minWidth:0}}/>
+                : <input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={displayPlaceholder} style={{flex:1,background:"transparent",border:"none",color:"#181818",fontFamily:"'Press Start 2P',monospace",fontSize:8,outline:"none",minWidth:0,textTransform:"uppercase"}}/>
               }
-              {entry.currentHp<=0&&<span style={{fontSize:9,fontWeight:700,color:"#705898",background:"rgba(112,88,152,0.2)",padding:"1px 4px",borderRadius:2,flexShrink:0}}>💀 FAINTED</span>}
-              {isActive&&entry.currentHp>0&&<span style={{fontSize:8,fontWeight:700,color:sideColor,background:sideColor+"20",padding:"1px 4px",borderRadius:2,flexShrink:0}}>ACTIVE</span>}
-              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} style={{background:trainerView?"rgba(61,139,255,0.3)":"rgba(61,139,255,0.1)",border:`1px solid ${trainerView?"#3d8bff":"#3d8bff30"}`,borderRadius:3,color:"#3d8bff",cursor:"pointer",fontSize:8,padding:"1px 4px",flexShrink:0}} title="Toggle Trainer/Pokémon card">{trainerView?"🐾 Pokémon":"👤 Trainer"}</button>}
-              <button onClick={()=>upd({isExpanded:!entry.isExpanded})} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:10,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
-              <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:11,flexShrink:0}}>✕</button>
+              {entry.currentHp<=0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:"#705898",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>FNT</span>}
+              {isActive&&entry.currentHp>0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:sideStr,padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>▶</span>}
+              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#2858C0",cursor:"pointer",fontSize:7,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{trainerView?"PKM":"TRN"}</button>}
+              <button onClick={()=>upd({isExpanded:!entry.isExpanded})} style={{background:"none",border:"none",color:"#888870",cursor:"pointer",fontSize:9,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
+              <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#D82808",cursor:"pointer",fontSize:12,flexShrink:0,fontWeight:700}}>×</button>
             </div>
           );
         })()}
 
-        {/* Action economy + Reaction — shared between Pokémon and linked Trainer, always visible */}
-        <div style={{padding:"3px 8px",background:"#13151f",display:"flex",gap:3,alignItems:"center",borderBottom:"1px solid #1e2235"}}>
-          <span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>Act:</span>
-          {[0,1,2,3,4].map(i=><button key={i} onClick={()=>upd({actionCount:entry.actionCount===i+1?i:i+1})} style={{width:16,height:16,borderRadius:3,border:`1px solid ${i<entry.actionCount?"#f08030":"#3a4060"}`,background:i<entry.actionCount?"#f0803020":"transparent",cursor:"pointer",fontSize:7,color:i<entry.actionCount?"#f08030":"#5a6080",fontWeight:700}}>{i+1}</button>)}
-          {entry.actionCount>0&&<span style={{fontSize:7,color:"#ff4757",marginLeft:2}}>→{Math.min(entry.actionCount+1,5)}+ needed</span>}
-          <span style={{width:1,height:12,background:"#2a2f45",flexShrink:0,margin:"0 3px"}}/>
-          <span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>React:</span>
-          <button onClick={()=>upd({reactionUsed:!entry.reactionUsed})} title={entry.reactionUsed?"Reaction used (click to reset)":"Reaction available (click to mark used)"} style={{width:16,height:16,borderRadius:3,border:`1px solid ${entry.reactionUsed?"#a040a0":"#3a4060"}`,background:entry.reactionUsed?"#a040a020":"transparent",cursor:"pointer",fontSize:8,color:entry.reactionUsed?"#a040a0":"#5a6080",fontWeight:700}}>R</button>
-          {entry.reactionUsed&&<span style={{fontSize:7,color:"#a040a0"}}>used</span>}
+        {/* Action economy + Reaction */}
+        <div style={{padding:"3px 7px",background:"#E8E8D0",display:"flex",gap:3,alignItems:"center",borderBottom:"1px solid #C8C8A8"}}>
+          <span style={{fontSize:7,color:"#888870",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>ACT</span>
+          {[0,1,2,3,4].map(i=><button key={i} onClick={()=>upd({actionCount:entry.actionCount===i+1?i:i+1})} style={{width:15,height:15,border:`2px solid ${i<entry.actionCount?"#181818":"#C8C8A8"}`,background:i<entry.actionCount?"#E8B018":"#F8F8E8",cursor:"pointer",fontSize:7,color:i<entry.actionCount?"#181818":"#C8C8A8",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{i+1}</button>)}
+          {entry.actionCount>0&&<span style={{fontSize:6,color:"#D82808",marginLeft:2,fontFamily:"'Press Start 2P',monospace"}}>→{Math.min(entry.actionCount+1,5)}+</span>}
+          <span style={{width:1,height:10,background:"#C8C8A8",flexShrink:0,margin:"0 2px"}}/>
+          <span style={{fontSize:7,color:"#888870",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>RXN</span>
+          <button onClick={()=>upd({reactionUsed:!entry.reactionUsed})} title={entry.reactionUsed?"Reaction used":"Reaction available"} style={{width:15,height:15,border:`2px solid ${entry.reactionUsed?"#181818":"#C8C8A8"}`,background:entry.reactionUsed?"#705898":"#F8F8E8",cursor:"pointer",fontSize:7,color:entry.reactionUsed?"#F8F8E8":"#C8C8A8",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>R</button>
+          {entry.reactionUsed&&<span style={{fontSize:6,color:"#705898",fontFamily:"'Press Start 2P',monospace"}}>used</span>}
         </div>
 
         {/* When trainer view active: show trainer card replacing everything below header */}
@@ -2581,49 +2586,48 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
           </div>
         ):<>
 
-        {/* HP + WP bars with inline ± buttons */}
-        <div style={{padding:"5px 8px 5px",background:"#0f1117"}}>
-          <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
-            <span style={{fontSize:9,color:"#5a6080",width:16}}>HP</span>
-            <button onClick={()=>upd({currentHp:Math.max(0,entry.currentHp-1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(255,71,87,0.15)",color:"#ff4757",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>−</button>
-            <span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#00d4aa":entry.currentHp/entry.maxHp>0.25?"#ffd32a":"#ff4757",minWidth:28,textAlign:"center"}}>{entry.currentHp}/{entry.maxHp}</span>
-            <button onClick={()=>upd({currentHp:Math.min(entry.maxHp,entry.currentHp+1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(0,212,170,0.15)",color:"#00d4aa",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>+</button>
+        {/* HP + WP — classic FireRed HP panel layout */}
+        <div style={{padding:"6px 8px 5px",background:"#F8F8E8",borderBottom:"1px solid #C8C8A8"}}>
+          {/* HP row */}
+          <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
+            <span style={{fontSize:8,color:"#181818",width:18,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>HP</span>
+            <button onClick={()=>upd({currentHp:Math.max(0,entry.currentHp-1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#D82808",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>−</button>
+            <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#18C840":entry.currentHp/entry.maxHp>0.25?"#E8B018":"#D82808",minWidth:34,textAlign:"center"}}>{entry.currentHp}/{entry.maxHp}</span>
+            <button onClick={()=>upd({currentHp:Math.min(entry.maxHp,entry.currentHp+1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#18C840",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>+</button>
           </div>
           <HpBar cur={entry.currentHp} max={entry.maxHp}/>
-          <div style={{display:"flex",alignItems:"center",gap:4,marginTop:4,marginBottom:2}}>
-            <span style={{fontSize:9,color:"#5a6080",width:16}}>WP</span>
-            <button onClick={()=>upd({currentWill:Math.max(0,entry.currentWill-1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(255,71,87,0.15)",color:"#ff4757",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>−</button>
-            <span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0",minWidth:28,textAlign:"center"}}>{entry.currentWill}/{entry.maxWill}</span>
-            <button onClick={()=>upd({currentWill:Math.min(entry.maxWill,entry.currentWill+1)})} style={{width:16,height:16,borderRadius:3,border:"1px solid #3a4060",background:"rgba(104,144,240,0.15)",color:"#6890f0",cursor:"pointer",fontSize:11,lineHeight:1,flexShrink:0}}>+</button>
+          {/* WP row */}
+          <div style={{display:"flex",alignItems:"center",gap:4,marginTop:5,marginBottom:3}}>
+            <span style={{fontSize:8,color:"#181818",width:18,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>WP</span>
+            <button onClick={()=>upd({currentWill:Math.max(0,entry.currentWill-1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#D82808",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>−</button>
+            <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:"#3060D0",minWidth:34,textAlign:"center"}}>{entry.currentWill}/{entry.maxWill}</span>
+            <button onClick={()=>upd({currentWill:Math.min(entry.maxWill,entry.currentWill+1)})} style={{width:16,height:16,border:"2px solid #181818",background:"#E8E8D0",color:"#3060D0",cursor:"pointer",fontSize:11,lineHeight:"12px",flexShrink:0,fontWeight:700}}>+</button>
           </div>
-          <div style={{background:"#0f1117",borderRadius:3,height:4,overflow:"hidden"}}><div style={{width:`${entry.maxWill>0?Math.max(0,Math.min(1,entry.currentWill/entry.maxWill))*100:0}%`,height:"100%",background:"#6890f0",transition:"width 0.3s"}}/></div>
+          <HpBar cur={entry.currentWill} max={entry.maxWill} isWp/>
         </div>
 
         {/* Quick stats row */}
-        <div style={{padding:"4px 8px",background:"#13151f",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-          <div style={{display:"flex",gap:3,alignItems:"center"}}>
-            <span style={{fontSize:8,color:"#5a6080"}}>INI</span>
-            <input type="number" value={entry.initiative} onChange={e=>upd({initiative:+e.target.value})} style={{width:24,background:"transparent",border:"none",color:"#6890f0",fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,textAlign:"center",outline:"none"}}/>
+        <div style={{padding:"4px 7px",background:"#E8E8D0",display:"flex",gap:5,alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid #C8C8A8"}}>
+          <div style={{display:"flex",gap:2,alignItems:"center",border:"1px solid #181818",background:"#F8F8E8",padding:"1px 4px"}}>
+            <span style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace"}}>INI</span>
+            <input type="number" value={entry.initiative} onChange={e=>upd({initiative:+e.target.value})} style={{width:22,background:"transparent",border:"none",color:"#2858C0",fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,textAlign:"center",outline:"none"}}/>
           </div>
-          <select value={entry.side} onChange={e=>upd({side:e.target.value as BattleEntry["side"]})} style={{background:"#0f1117",border:"none",color:sideColor,fontSize:8,borderRadius:2,padding:"1px 2px"}}>
-            <option value="player">Player</option><option value="enemy">Enemy</option><option value="neutral">Neutral</option>
+          <select value={entry.side} onChange={e=>upd({side:e.target.value as BattleEntry["side"]})} style={{background:"#F8F8E8",border:"1px solid #181818",color:entry.side==="player"?"#2858C0":"#D82808",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
+            <option value="player">PLAYER</option><option value="enemy">ENEMY</option><option value="neutral">NEUT</option>
           </select>
-          {entry.pokemon.types.map(t=><span key={t} style={{fontSize:8,fontWeight:700,color:TYPE_COLORS[t as PokemonType],background:TYPE_COLORS[t as PokemonType]+"20",padding:"0 3px",borderRadius:2}}>{t}</span>)}
-          {entry.side==="enemy"&&<button onClick={()=>setShowCapture(true)} style={{background:"none",border:"none",color:"#ffd32a",cursor:"pointer",fontSize:11,padding:0}} title="Capture">🎯</button>}
+          {(entry.typeOverride||entry.pokemon.types).map(t=><span key={t} style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:TYPE_COLORS[t as PokemonType]||"#888",padding:"1px 4px",border:"1px solid #181818",fontFamily:"'Press Start 2P',monospace"}}>{t.slice(0,3).toUpperCase()}</span>)}
+          {entry.side==="enemy"&&<button onClick={()=>setShowCapture(true)} style={{background:"#F8F8E8",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Capture">CATCH</button>}
           {/* Advanced mechanic indicator badges */}
-          {entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"rgba(240,128,48,0.2)",border:"1px solid #f0803060",borderRadius:3,color:"#f08030",cursor:"pointer",fontSize:7,padding:"0 4px",fontWeight:700}} title="Mega Evolved">MEGA</button>}
-          {entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"rgba(255,71,87,0.2)",border:"1px solid #ff475760",borderRadius:3,color:"#ff4757",cursor:"pointer",fontSize:7,padding:"0 4px",fontWeight:700}} title={`Dynamaxed — ${entry.dynamaxRoundsLeft} rounds left`}>MAX{entry.dynamaxRoundsLeft}</button>}
-          {entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"rgba(160,64,160,0.2)",border:"1px solid #a040a060",borderRadius:3,color:"#a040a0",cursor:"pointer",fontSize:7,padding:"0 4px",fontWeight:700}} title={`Terastallized (${entry.teraType})`}>TERA</button>}
-          {entry.zMoveUsed&&<span style={{background:"rgba(255,211,42,0.15)",border:"1px solid #ffd32a40",borderRadius:3,color:"#ffd32a",fontSize:7,padding:"0 4px",fontWeight:700}}>Z✓</span>}
-          {/* Advanced mechanic activation buttons — gated by trainer's battle item + one-per-trainer rule */}
+          {entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"#F8D8B8",border:"1px solid #181818",color:"#B85808",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Mega Evolved">MEGA</button>}
+          {entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"#F8C8C8",border:"1px solid #181818",color:"#A00808",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title={`Dynamaxed — ${entry.dynamaxRoundsLeft} rounds left`}>MAX{entry.dynamaxRoundsLeft}</button>}
+          {entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"#E8D8F8",border:"1px solid #181818",color:"#780878",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title={`Terastallized (${entry.teraType})`}>TERA</button>}
+          {entry.zMoveUsed&&<span style={{background:"#F8F0B8",border:"1px solid #181818",color:"#807008",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>Z✓</span>}
+          {/* Advanced mechanic activation buttons */}
           {(()=>{
             const trainerBattleItem:string=(linkedTrainer as any)?.battleItem??"";
             const isLinked=!!entry.linkedTrainerId;
-            // another of this trainer's pokemon already has an active transform?
             const trainerTransformActive=isLinked&&allEntries.some(e=>e.id!==entry.id&&e.linkedTrainerId===entry.linkedTrainerId&&(e.isMegaEvolved||e.isDynamaxed||e.isTerastallized||e.zMoveUsed));
-            // this pokemon itself has an active transform
             const thisHasTransform=entry.isMegaEvolved||entry.isDynamaxed||entry.isTerastallized||(entry.zMoveUsed??false);
-            // for each mechanic: show if (unlinked enemy) OR (trainer has the right item AND (this is already in that state OR no other pokemon used it))
             const canAccessMega=!isLinked||(trainerBattleItem==="Key Stone"&&(entry.isMegaEvolved||(!trainerTransformActive&&!thisHasTransform)));
             const canAccessDyna=!isLinked||(trainerBattleItem==="Dynamax Band"&&(entry.isDynamaxed||(!trainerTransformActive&&!thisHasTransform)));
             const canAccessTera=!isLinked||(trainerBattleItem==="Tera Orb"&&(entry.isTerastallized||(!trainerTransformActive&&!thisHasTransform)));
@@ -2631,90 +2635,96 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
             if(!canAccessMega&&!canAccessDyna&&!canAccessTera&&!canAccessZ)return null;
             return(
               <div style={{display:"flex",gap:2,marginLeft:"auto"}}>
-                {canAccessMega&&<button onClick={()=>setShowMega(true)} style={{background:"none",border:"none",color:"#f08030",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Mega Evolution">⚡</button>}
-                {canAccessDyna&&<button onClick={()=>setShowDynamax(true)} style={{background:"none",border:"none",color:"#ff4757",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Dynamax / Gigamax">💫</button>}
-                {canAccessTera&&<button onClick={()=>setShowTera(true)} style={{background:"none",border:"none",color:"#a040a0",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Terastallization">💎</button>}
-                {canAccessZ&&<button onClick={()=>setShowZMove(true)} style={{background:"none",border:"none",color:"#ffd32a",cursor:"pointer",fontSize:9,padding:"0 2px"}} title="Z-Move">⭐</button>}
+                {canAccessMega&&!entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#B85808",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Mega Evolution">⚡</button>}
+                {canAccessDyna&&!entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#A00808",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Dynamax / Gigamax">💫</button>}
+                {canAccessTera&&!entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#780878",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Terastallization">💎</button>}
+                {canAccessZ&&<button onClick={()=>setShowZMove(true)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#807008",cursor:"pointer",fontSize:7,padding:"1px 3px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}} title="Z-Move">⭐</button>}
               </div>
             );
           })()}
         </div>
 
         {/* Loyalty/Happiness */}
-        <div style={{padding:"4px 8px",background:"#0f1117",display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{padding:"3px 7px",background:"#F0EFD8",display:"flex",gap:10,alignItems:"center",borderBottom:"1px solid #C8C8A8",borderTop:"1px solid #C8C8A8"}}>
           <div style={{display:"flex",gap:3,alignItems:"center"}}>
-            <span style={{fontSize:8,color:"#ffd32a"}}>❤ Loyalty</span>
-            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({loyalty:entry.loyalty===i?i-1:i})} style={{width:10,height:10,borderRadius:"50%",border:"none",cursor:"pointer",background:i<=entry.loyalty?"#ffd32a":"#2a2f45",padding:0}}/>)}</div>
-            <span style={{fontSize:8,color:"#ffd32a",fontFamily:"'Exo 2'",fontWeight:700}}>{entry.loyalty}</span>
+            <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>LYL</span>
+            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({loyalty:entry.loyalty===i?i-1:i})} style={{width:9,height:9,border:"1px solid #181818",cursor:"pointer",background:i<=entry.loyalty?"#D84848":"#E8E8D0",padding:0}}/>)}</div>
+            <span style={{fontSize:7,color:"#D84848",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{entry.loyalty}</span>
           </div>
           <div style={{display:"flex",gap:3,alignItems:"center"}}>
-            <span style={{fontSize:8,color:"#f85888"}}>♡ Happy</span>
-            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({happiness:entry.happiness===i?i-1:i})} style={{width:10,height:10,borderRadius:"50%",border:"none",cursor:"pointer",background:i<=entry.happiness?"#f85888":"#2a2f45",padding:0}}/>)}</div>
-            <span style={{fontSize:8,color:"#f85888",fontFamily:"'Exo 2'",fontWeight:700}}>{entry.happiness}</span>
+            <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>HPY</span>
+            <div style={{display:"flex",gap:1}}>{[1,2,3,4,5].map(i=><button key={i} onClick={()=>upd({happiness:entry.happiness===i?i-1:i})} style={{width:9,height:9,border:"1px solid #181818",cursor:"pointer",background:i<=entry.happiness?"#E85888":"#E8E8D0",padding:0}}/>)}</div>
+            <span style={{fontSize:7,color:"#E85888",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{entry.happiness}</span>
           </div>
         </div>
 
-        {/* Status — multi-status chips */}
-        <div style={{padding:"3px 8px",background:"#0f1117",display:"flex",gap:3,alignItems:"center",flexWrap:"wrap"}}>
-          {(entry.statuses||[]).filter(s=>s!=="Healthy").map(s=>{const sc2=STATUS_CONDITIONS[s];return<span key={s} title={sc2?.fullDesc||sc2?.battleEffect} style={{fontSize:8,color:sc2?.color??"#5a6080",background:(sc2?.color??"#5a6080")+"15",border:`1px solid ${sc2?.color??"#5a6080"}40`,borderRadius:3,padding:"0 4px",display:"flex",alignItems:"center",gap:2}}>{s}<button onClick={()=>upd({statuses:removeStatus(entry.statuses||[],s)})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:9,padding:0}}>×</button></span>;})}
+        {/* Status chip row */}
+        <div style={{padding:"3px 7px",background:"#F8F8E8",display:"flex",gap:3,alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid #C8C8A8"}}>
+          {(entry.statuses||[]).filter(s=>s!=="Healthy").map(s=>{const sc2=STATUS_CONDITIONS[s];return<span key={s} title={sc2?.fullDesc||sc2?.battleEffect} style={{fontSize:7,color:"#F8F8E8",background:sc2?.color??"#888870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",display:"flex",alignItems:"center",gap:2}}>{s.slice(0,3).toUpperCase()}<button onClick={()=>upd({statuses:removeStatus(entry.statuses||[],s)})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>;})}
           <select onChange={e=>{if(e.target.value&&e.target.value!=="＋")upd({statuses:addStatus(entry.statuses||[],e.target.value),statusTurnsLeft:e.target.value==="Asleep"?3:entry.statusTurnsLeft});e.target.value="＋";}} defaultValue="＋"
-            style={{background:"#13151f",border:"1px solid #2a2f45",borderRadius:3,color:"#5a6080",fontSize:8,padding:"1px 2px"}}>
+            style={{background:"#E8E8D0",border:"1px solid #181818",color:"#484830",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
             <option value="＋">＋</option>
             {Object.keys(STATUS_CONDITIONS).filter(s=>s!=="Healthy"&&!(entry.statuses||[]).includes(s)).map(s=><option key={s} value={s}>{s}</option>)}
           </select>
-          {painPenalty>0&&(()=>{const hpPct=entry.maxHp>0?entry.currentHp/entry.maxHp:1;const label=hpPct>0.25?"Badly Hurt":"Critical";const tooltip=`Pain Penalization (${label}): −${painPenalty} die to all dice pools.\nHP below ${hpPct>0.25?"50%":"25%"} causes this penalty. Applies to accuracy, damage, and all rolls.`;return<span title={tooltip} style={{fontSize:8,color:"#ff4757",background:"rgba(255,71,87,0.1)",padding:"0 3px",borderRadius:2,cursor:"help"}}>Pain−{painPenalty}</span>;})()}
-          {!entry.weatherImmune&&weather.name!=="Clear"&&<span style={{fontSize:8,color:"#ffd32a"}}>{weather.emoji?.split(" ")[0]}</span>}
-          {entry.isProtected&&<span style={{fontSize:8,color:"#6890f0",background:"rgba(104,144,240,0.15)",borderRadius:3,padding:"0 4px"}}>🛡</span>}
-          {(entry.statuses||[]).includes("Asleep")&&entry.statusTurnsLeft>0&&<span style={{fontSize:8,color:"#705898"}}>⏱{entry.statusTurnsLeft}</span>}
-          {entry.abilityOverride&&<span title={`Ability overridden by ${entry.abilityOverride}`} style={{fontSize:8,color:"#f8d030",background:"rgba(248,216,48,0.12)",border:"1px solid #f8d03030",borderRadius:3,padding:"0 4px",cursor:"help"}}>✨ {entry.abilityOverride}</span>}
-          {entry.abilitySuppressed&&<span title="Ability suppressed (Gastro Acid / Simple Beam / Worry Seed)" style={{fontSize:8,color:"#5a6080",background:"rgba(90,96,128,0.12)",border:"1px solid #5a608030",borderRadius:3,padding:"0 4px",cursor:"help"}}>⊘ Ability</span>}
-          {entry.typeOverride&&<span title={`Type changed to: ${entry.typeOverride.join("/")}`} style={{fontSize:8,color:"#00d4aa",background:"rgba(0,212,170,0.1)",border:"1px solid #00d4aa30",borderRadius:3,padding:"0 4px",cursor:"help"}}>✦ {entry.typeOverride.join("/")}<button onClick={()=>upd({typeOverride:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
-          {entry.heldItem&&<span title={`Held item: ${entry.heldItem}`} style={{fontSize:8,color:"#f08030",background:"rgba(240,128,48,0.1)",border:"1px solid #f0803030",borderRadius:3,padding:"0 4px",cursor:"help"}}>🎒 {entry.heldItem}<button onClick={()=>upd({heldItem:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
-          {entry.itemEmbargoed&&<span title="Cannot use held items (Embargo)" style={{fontSize:8,color:"#ff4757",background:"rgba(255,71,87,0.1)",border:"1px solid #ff475730",borderRadius:3,padding:"0 4px",cursor:"help"}}>🚫 Item<button onClick={()=>upd({itemEmbargoed:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
-          {entry.isFollowMeTarget&&<span title="All single-target moves must target this Pokémon (Follow Me / Spotlight)" style={{fontSize:8,color:"#00d4aa",background:"rgba(0,212,170,0.12)",border:"1px solid #00d4aa30",borderRadius:3,padding:"0 4px",cursor:"help"}}>🎯 Focus<button onClick={()=>upd({isFollowMeTarget:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
-          {entry.chargeActive&&<span title="Charged: next Electric move deals +2 damage dice" style={{fontSize:8,color:"#f8d030",background:"rgba(248,216,48,0.12)",border:"1px solid #f8d03030",borderRadius:3,padding:"0 4px",cursor:"help"}}>⚡ Charged<button onClick={()=>upd({chargeActive:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0,marginLeft:1}}>×</button></span>}
+          {painPenalty>0&&(()=>{const hpPct=entry.maxHp>0?entry.currentHp/entry.maxHp:1;const label=hpPct>0.25?"Badly Hurt":"Critical";const tooltip=`Pain Penalization (${label}): −${painPenalty} die to all dice pools.\nHP below ${hpPct>0.25?"50%":"25%"} causes this penalty.`;return<span title={tooltip} style={{fontSize:7,color:"#F8F8E8",background:"#D82808",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help"}}>PAIN-{painPenalty}</span>;})()}
+          {!entry.weatherImmune&&weather.name!=="Clear"&&<span style={{fontSize:9,color:"#807008"}} title={weather.name}>{weather.emoji?.split(" ")[0]}</span>}
+          {entry.isProtected&&<span style={{fontSize:7,color:"#F8F8E8",background:"#2858C0",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>PROT</span>}
+          {(entry.statuses||[]).includes("Asleep")&&entry.statusTurnsLeft>0&&<span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>Z{entry.statusTurnsLeft}</span>}
+          {entry.abilityOverride&&<span title={`Ability: ${entry.abilityOverride}`} style={{fontSize:7,color:"#807008",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help"}}>✨{entry.abilityOverride.slice(0,6).toUpperCase()}</span>}
+          {entry.abilitySuppressed&&<span title="Ability suppressed" style={{fontSize:7,color:"#F8F8E8",background:"#888870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help"}}>NO-ABL</span>}
+          {entry.typeOverride&&<span title={`Type: ${entry.typeOverride.join("/")}`} style={{fontSize:7,color:"#F8F8E8",background:"#18A870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>{entry.typeOverride.map(t=>t.slice(0,3).toUpperCase()).join("/")}<button onClick={()=>upd({typeOverride:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.heldItem&&<span title={`Item: ${entry.heldItem}`} style={{fontSize:7,color:"#181818",background:"#F8E8C8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>🎒{entry.heldItem.slice(0,5).toUpperCase()}<button onClick={()=>upd({heldItem:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.itemEmbargoed&&<span title="Cannot use held items (Embargo)" style={{fontSize:7,color:"#F8F8E8",background:"#D82808",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>NO-ITM<button onClick={()=>upd({itemEmbargoed:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.isFollowMeTarget&&<span title="All moves redirect here (Follow Me)" style={{fontSize:7,color:"#F8F8E8",background:"#2858C0",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>🎯FOCUS<button onClick={()=>upd({isFollowMeTarget:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.chargeActive&&<span title="Charged: +2 to next Electric move" style={{fontSize:7,color:"#181818",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>⚡CHG<button onClick={()=>upd({chargeActive:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
         </div>
 
 
-        {/* Moves list */}
-        <div style={{padding:"5px 8px",display:"flex",flexDirection:"column",gap:3}}>
+        {/* Moves list — FireRed FIGHT menu */}
+        <div style={{padding:"5px 7px",background:"#F8F8E8",display:"flex",flexDirection:"column",gap:3}}>
           {/* TRAINER VIEW: show trainer skills like moves */}
           {entry.showTrainerView&&linkedTrainer?(
             <TrainerSkillsInline trainer={linkedTrainer} entry={entry} allEntries={allEntries} onSpendWP={spendWP} onIncrementAction={incrementAction} onUpdate={onUpdate}/>
           ):(
             <>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
-              <span style={{fontSize:8,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase"}}>{entry.morphedTo?"🔄 Transformed":"Moves"}{entry.hasSubstitute?" 🛡️ Sub":""}</span>
-              <div style={{display:"flex",gap:4}}>
-                {entry.morphedTo&&<button onClick={()=>upd({morphedTo:undefined,moves:entry.originalMoves||entry.moves,attrs:entry.originalAttrs||entry.attrs,originalAttrs:undefined,originalMoves:undefined})} style={{fontSize:7,color:"#a040a0",background:"none",border:"1px solid #a040a040",borderRadius:2,cursor:"pointer",padding:"0 4px"}}>Revert</button>}
-                <button onClick={()=>setShowEditMoves(!showEditMoves)} style={{fontSize:8,color:"#00d4aa",background:"none",border:"none",cursor:"pointer"}}>{showEditMoves?"Done":"Edit"}</button>
+              <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>{entry.morphedTo?"▶ FORM":"FIGHT"}{entry.hasSubstitute?" [SUB]":""}</span>
+              <div style={{display:"flex",gap:3}}>
+                {entry.morphedTo&&<button onClick={()=>upd({morphedTo:undefined,moves:entry.originalMoves||entry.moves,attrs:entry.originalAttrs||entry.attrs,originalAttrs:undefined,originalMoves:undefined})} style={{fontSize:7,color:"#780878",background:"#E8E8D0",border:"1px solid #181818",cursor:"pointer",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>REVERT</button>}
+                <button onClick={()=>setShowEditMoves(!showEditMoves)} style={{fontSize:7,background:"#E8E8D0",border:"1px solid #181818",color:"#484830",cursor:"pointer",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>{showEditMoves?"DONE":"EDIT"}</button>
               </div>
             </div>
             {showEditMoves?(
               <MoveSearchEdit entry={entry} onUpdate={upd}/>
             ):(
               <>
+                {/* 2×2 grid like FireRed FIGHT menu */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
                 {entry.moves.map((m,i)=>{
                   const stab=(entry.morphedTo||entry.pokemon).types.includes(m.type as PokemonType);
                   const abilMods=calcAbilityBonus(entry,m,weather);
+                  const typeColor=TYPE_COLORS[m.type as PokemonType]||"#888870";
                   return(
-                    <button key={i} onClick={()=>setMovePopup(m)} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",background:"#13151f",border:`1px solid ${TYPE_COLORS[m.type as PokemonType]||"#2a2f45"}30`,borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%"}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.borderColor=TYPE_COLORS[m.type as PokemonType]||"#00d4aa"}
-                      onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.borderColor=`${TYPE_COLORS[m.type as PokemonType]||"#2a2f45"}30`}>
-                      <TypeBadge type={m.type as PokemonType} small/>
-                      <span style={{fontSize:11,color:"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</span>
-                      {stab&&<span style={{fontSize:7,color:"#ffd32a",fontWeight:700,flexShrink:0}}>STAB</span>}
-                      {(m.priority??0)>0&&<span style={{fontSize:7,color:"#00d4aa",fontWeight:700,flexShrink:0}}>P{m.priority}</span>}
-                      {abilMods.bonus>0&&<span style={{fontSize:7,color:"#00d4aa",flexShrink:0}}>+{abilMods.bonus}</span>}
-                      <span style={{fontSize:8,color:"#5a6080",flexShrink:0}}>▶</span>
+                    <button key={i} onClick={()=>setMovePopup(m)}
+                      style={{display:"flex",flexDirection:"column",gap:1,padding:"4px 5px",background:"#F8F8E8",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #787878",position:"relative",minHeight:36}}
+                      onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#C8D8F0";}}
+                      onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F8F8E8";}}>
+                      <span style={{fontSize:8,color:"#181818",fontFamily:"'Press Start 2P',monospace",fontWeight:700,lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{m.name}</span>
+                      <div style={{display:"flex",gap:2,alignItems:"center",marginTop:1}}>
+                        <span style={{fontSize:6,color:"#F8F8E8",background:typeColor,border:"1px solid #181818",padding:"0 3px",fontFamily:"'Press Start 2P',monospace"}}>{m.type.slice(0,3).toUpperCase()}</span>
+                        {stab&&<span style={{fontSize:6,color:"#807008",fontFamily:"'Press Start 2P',monospace"}}>★</span>}
+                        {(m.priority??0)>0&&<span style={{fontSize:6,color:"#18A870",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}
+                        {abilMods.bonus>0&&<span style={{fontSize:6,color:"#2858C0",fontFamily:"'Press Start 2P',monospace"}}>+{abilMods.bonus}</span>}
+                      </div>
                     </button>
                   );
                 })}
-                {entry.moves.length===0&&<div style={{fontSize:9,color:"#5a6080",fontStyle:"italic"}}>No moves — click Edit{entry.currentWill>0?" or use Struggle":""}</div>}
+                </div>
+                {entry.moves.length===0&&<div style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace",padding:"8px 0"}}>No moves — press EDIT{entry.currentWill>0?" or STRUGGLE":""}</div>}
                 {entry.moves.length===0&&entry.currentWill>0&&(
-                  <button onClick={()=>{const s=MOVES.find(m=>m.name==="Struggle")||{name:"Struggle",type:"Normal" as PokemonType,category:"Physical" as const,power:"1",accuracy:"Strength + Brawl",damagePool:"Strength + 1",effect:"Target Foe. No WP cost. User takes recoil equal to half damage dealt.",description:"A desperate thrashing attack used when no other moves are available."} as Move;setMovePopup(s);}} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%"}}>
-                    <span style={{fontSize:9,color:"#ff4757",fontWeight:700,flex:1}}>💢 Struggle (1 WP)</span>
-                    <span style={{fontSize:8,color:"#5a6080"}}>▶</span>
+                  <button onClick={()=>{const s=MOVES.find(m=>m.name==="Struggle")||{name:"Struggle",type:"Normal" as PokemonType,category:"Physical" as const,power:"1",accuracy:"Strength + Brawl",damagePool:"Strength + 1",effect:"Target Foe. No WP cost. User takes recoil equal to half damage dealt.",description:"A desperate thrashing attack used when no other moves are available."} as Move;setMovePopup(s);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 6px",background:"#F8C8C8",border:"2px solid #181818",cursor:"pointer",textAlign:"left",width:"100%",boxShadow:"2px 2px 0 #787878"}}>
+                    <span style={{fontSize:8,color:"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flex:1}}>STRUGGLE</span>
+                    <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>1 WP</span>
                   </button>
                 )}
               </>
@@ -2725,71 +2735,67 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 
         {/* Expanded section: attrs, abilities, notes */}
         {entry.isExpanded&&(
-          <div style={{borderTop:"1px solid #2a2f45",padding:"8px 8px",display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{borderTop:"2px solid #181818",padding:"7px 7px",display:"flex",flexDirection:"column",gap:7,background:"#F0EFD8"}}>
             {/* Attributes */}
             <div>
-              <div style={{fontSize:8,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Attributes</div>
+              <div style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",marginBottom:5}}>STATS</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:3}}>
                 {(["strength","dexterity","vitality","special","insight"] as const).map(attr=>{
                   const labels={strength:"STR",dexterity:"DEX",vitality:"VIT",special:"SPC",insight:"INS"};
                   const base=entry.attrs[attr];const mod=attrModSummary(attr);
                   const statusPen=attr==="dexterity"?(STATUS_CONDITIONS[primaryStatus(entry)]?.accuracyPenalty??0):0;
                   const final=Math.max(0,base+mod-statusPen);
-                  return<div key={attr} style={{textAlign:"center"}}>
-                    <div style={{fontSize:7,color:"#5a6080"}}>{labels[attr]}</div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:1}}>
-                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:Math.max(0,base-1)}})} style={{...adjBtn,width:12,height:12,fontSize:9}}>−</button>
-                      <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:final<base?"#ff4757":mod>0?"#00d4aa":"#e8eaf0",minWidth:14,textAlign:"center"}}>{final}</span>
-                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:base+1}})} style={{...adjBtn,width:12,height:12,fontSize:9}}>+</button>
+                  return<div key={attr} style={{textAlign:"center",background:"#F8F8E8",border:"1px solid #181818",padding:"3px 0"}}>
+                    <div style={{fontSize:6,color:"#888870",fontFamily:"'Press Start 2P',monospace"}}>{labels[attr]}</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:1,marginTop:2}}>
+                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:Math.max(0,base-1)}})} style={{width:10,height:10,background:"#E8E8D0",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:8,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>−</button>
+                      <span style={{fontSize:10,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:final<base?"#D82808":mod>0?"#18A870":"#181818",minWidth:12,textAlign:"center"}}>{final}</span>
+                      <button onClick={()=>upd({attrs:{...entry.attrs,[attr]:base+1}})} style={{width:10,height:10,background:"#E8E8D0",border:"1px solid #181818",color:"#18A870",cursor:"pointer",fontSize:8,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>+</button>
                     </div>
-                    {/* Temp mod +/- buttons */}
-                    <div style={{display:"flex",justifyContent:"center",gap:1,marginTop:1}}>
-                      <button onClick={()=>applyEffect(entry.id,attr,-1,"Manual")} title={`-1 temp ${labels[attr]}`} style={{width:12,height:10,background:"rgba(255,71,87,0.15)",border:"1px solid #ff475730",borderRadius:1,color:"#ff4757",cursor:"pointer",fontSize:7,lineHeight:1}}>▼</button>
-                      <button onClick={()=>applyEffect(entry.id,attr,1,"Manual")} title={`+1 temp ${labels[attr]}`} style={{width:12,height:10,background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa30",borderRadius:1,color:"#00d4aa",cursor:"pointer",fontSize:7,lineHeight:1}}>▲</button>
+                    <div style={{display:"flex",justifyContent:"center",gap:1,marginTop:2}}>
+                      <button onClick={()=>applyEffect(entry.id,attr,-1,"Manual")} title={`-1 temp ${labels[attr]}`} style={{width:10,height:8,background:"#F8C8C8",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:6,lineHeight:1,padding:0}}>▼</button>
+                      <button onClick={()=>applyEffect(entry.id,attr,1,"Manual")} title={`+1 temp ${labels[attr]}`} style={{width:10,height:8,background:"#C8F0C8",border:"1px solid #181818",color:"#187028",cursor:"pointer",fontSize:6,lineHeight:1,padding:0}}>▲</button>
                     </div>
-                    {/* Net mod badge under this attribute */}
                     <AttrModBadge mod={mod}/>
-                    {statusPen>0&&<div title={`${primaryStatus(entry)}: −${statusPen} to accuracy dice`} style={{marginTop:2,fontSize:7,fontWeight:700,color:"#f8d030",background:"rgba(248,208,48,0.15)",border:"1px solid #f8d03040",borderRadius:2,padding:"0 3px",display:"inline-block"}}>▼{statusPen}</div>}
+                    {statusPen>0&&<div title={`${primaryStatus(entry)}: −${statusPen}`} style={{marginTop:1,fontSize:6,fontWeight:700,color:"#807008",background:"#F8F0B8",border:"1px solid #181818",padding:"0 2px",display:"inline-block",fontFamily:"'Press Start 2P',monospace"}}>▼{statusPen}</div>}
                   </div>;
                 })}
               </div>
-              {/* Removable stat mod chips */}
               {entry.statMods.length>0&&<div style={{marginTop:4,display:"flex",flexWrap:"wrap",gap:2}}>
-                {entry.statMods.map((m,i)=><div key={i} title={m.appliedBy?`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source} used by ${m.appliedBy}`:`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source}`} style={{fontSize:8,display:"flex",alignItems:"center",gap:2,background:m.amount>0?"rgba(0,212,170,0.1)":"rgba(255,71,87,0.1)",border:`1px solid ${m.amount>0?"#00d4aa30":"#ff475730"}`,borderRadius:2,padding:"0 4px",cursor:"help"}}>
-                  <span style={{color:m.amount>0?"#00d4aa":"#ff4757"}}>{m.amount>0?"▲":"▼"}{Math.abs(m.amount)} {m.attr}</span>
-                  <button onClick={()=>upd({statMods:entry.statMods.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:9,padding:0}}>×</button>
+                {entry.statMods.map((m,i)=><div key={i} title={m.appliedBy?`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source} used by ${m.appliedBy}`:`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source}`} style={{fontSize:7,display:"flex",alignItems:"center",gap:2,background:m.amount>0?"#C8F0C8":"#F8C8C8",border:"1px solid #181818",padding:"0 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help"}}>
+                  <span style={{color:m.amount>0?"#187028":"#A00808"}}>{m.amount>0?"▲":"▼"}{Math.abs(m.amount)} {m.attr.slice(0,3).toUpperCase()}</span>
+                  <button onClick={()=>upd({statMods:entry.statMods.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#484830",cursor:"pointer",fontSize:9,padding:0}}>×</button>
                 </div>)}
               </div>}
             </div>
 
             {/* Abilities */}
             <div>
-              <div style={{fontSize:8,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Abilities</div>
-              {entry.abilities.map((ab,i)=>{const abData=ABILITIES.find(a=>a.name===ab.name);return<div key={i} style={{marginBottom:5,borderRadius:4,border:`1px solid ${ab.active?"#00d4aa20":"#2a2f45"}`,background:ab.active?"rgba(0,212,170,0.04)":"transparent",padding:"4px 6px"}}>
+              <div style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",marginBottom:4}}>ABILITIES</div>
+              {entry.abilities.map((ab,i)=>{const abData=ABILITIES.find(a=>a.name===ab.name);return<div key={i} style={{marginBottom:4,border:`1px solid #181818`,background:ab.active?"#C8F0C8":"#F8F8E8",padding:"4px 6px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <button onClick={()=>{const abs=[...entry.abilities];abs[i]={...abs[i],active:!abs[i].active};upd({abilities:abs});}} style={{width:12,height:12,borderRadius:2,border:`1px solid ${ab.active?"#00d4aa":"#3a4060"}`,background:ab.active?"#00d4aa":"transparent",cursor:"pointer",flexShrink:0}}/>
-                  <span style={{fontSize:10,fontWeight:700,color:ab.active?"#e8eaf0":"#5a6080"}}>{ab.name}</span>
+                  <button onClick={()=>{const abs=[...entry.abilities];abs[i]={...abs[i],active:!abs[i].active};upd({abilities:abs});}} style={{width:10,height:10,border:"1px solid #181818",background:ab.active?"#18A870":"#E8E8D0",cursor:"pointer",flexShrink:0,padding:0}}/>
+                  <span style={{fontSize:8,fontWeight:700,color:ab.active?"#187028":"#484830",fontFamily:"'Press Start 2P',monospace"}}>{ab.name}</span>
                 </div>
-                {abData&&<div style={{fontSize:9,color:"#5a6080",lineHeight:1.4,marginTop:2}}>{abData.effect}</div>}
+                {abData&&<div style={{fontSize:8,color:"#484830",lineHeight:1.5,marginTop:2}}>{abData.effect}</div>}
               </div>;})}
             </div>
 
-            {/* HP/WP editors + notes */}
+            {/* HP/WP max editors + notes */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-              {[{l:"HP",c:entry.currentHp,m:entry.maxHp,col:"#00d4aa",f:"currentHp" as const},{l:"WP",c:entry.currentWill,m:entry.maxWill,col:"#6890f0",f:"currentWill" as const}].map(f=><div key={f.l}>
-                <div style={{fontSize:8,color:"#5a6080",marginBottom:2}}>{f.l}</div>
+              {[{l:"MAX HP",c:entry.currentHp,m:entry.maxHp,col:"#18A870",f:"currentHp" as const,mf:"maxHp" as const},{l:"MAX WP",c:entry.currentWill,m:entry.maxWill,col:"#2858C0",f:"currentWill" as const,mf:"maxWill" as const}].map(f=><div key={f.l} style={{background:"#F8F8E8",border:"1px solid #181818",padding:"4px 5px"}}>
+                <div style={{fontSize:6,color:"#888870",fontFamily:"'Press Start 2P',monospace",marginBottom:3}}>{f.l}</div>
                 <div style={{display:"flex",gap:2,alignItems:"center"}}>
-                  <button onClick={()=>upd({[f.f]:Math.max(0,f.c-1)})} style={{...adjBtn,width:16,height:16,fontSize:12}}>−</button>
-                  <input type="number" value={f.c} onChange={e=>upd({[f.f]:Math.max(0,Math.min(f.m,+e.target.value||0))})} style={{width:28,textAlign:"center",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:2,color:f.col,fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,padding:"0 1px"}}/>
-                  <span style={{fontSize:8,color:"#5a6080"}}>/{f.m}</span>
-                  <button onClick={()=>upd({[f.f]:Math.min(f.m,f.c+1)})} style={{...adjBtn,width:16,height:16,fontSize:12}}>+</button>
+                  <button onClick={()=>upd({[f.f]:Math.max(0,f.c-1)})} style={{width:14,height:14,background:"#E8E8D0",border:"1px solid #181818",color:"#D82808",cursor:"pointer",fontSize:10,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>−</button>
+                  <input type="number" value={f.m} onChange={e=>upd({[f.mf]:Math.max(1,+e.target.value||1)})} style={{width:24,textAlign:"center",background:"#E8E8D0",border:"1px solid #181818",color:f.col,fontSize:9,fontFamily:"'Press Start 2P',monospace",fontWeight:700,padding:"0 1px",outline:"none"}}/>
+                  <button onClick={()=>upd({[f.mf]:f.m+1})} style={{width:14,height:14,background:"#E8E8D0",border:"1px solid #181818",color:"#18A870",cursor:"pointer",fontSize:10,display:"inline-flex",alignItems:"center",justifyContent:"center",padding:0}}>+</button>
                 </div>
               </div>)}
             </div>
 
-            <textarea value={entry.notes} onChange={e=>upd({notes:e.target.value})} placeholder="Notes…" style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:3,color:"#8b90a8",fontSize:9,padding:4,resize:"none",minHeight:28,fontFamily:"inherit",outline:"none"}}/>
-            <label style={{fontSize:9,color:"#8b90a8",display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-              <input type="checkbox" checked={entry.weatherImmune} onChange={e=>upd({weatherImmune:e.target.checked})}/>Weather immune
+            <textarea value={entry.notes} onChange={e=>upd({notes:e.target.value})} placeholder="Notes…" style={{width:"100%",background:"#F8F8E8",border:"1px solid #181818",color:"#181818",fontSize:8,padding:4,resize:"none",minHeight:28,fontFamily:"inherit",outline:"none"}}/>
+            <label style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+              <input type="checkbox" checked={entry.weatherImmune} onChange={e=>upd({weatherImmune:e.target.checked})}/>WX IMMUNE
             </label>
           </div>
         )}
@@ -2806,33 +2812,32 @@ function CharactersSidebar({onAddPokemon}:{onAddPokemon:(pokemon:PokemonEntry,tr
   const [selId,setSelId]=useState<string|null>(null);
   const sel=trainers.find(t=>t.id===selId);
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      {trainers.length===0&&<div style={{fontSize:11,color:"#5a6080",fontStyle:"italic"}}>No saved characters. Create them in the Characters page.</div>}
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      {trainers.length===0&&<div style={{fontSize:8,color:"#888870",fontFamily:"'Press Start 2P',monospace",lineHeight:1.8}}>No saved characters.<br/>Create them in the<br/>Characters page.</div>}
       {trainers.map(t=>(
-        <div key={t.id} style={{borderRadius:5,border:`1px solid ${selId===t.id?"#00d4aa":"#2a2f45"}`,overflow:"hidden"}}>
-          <div onClick={()=>setSelId(selId===t.id?null:t.id)} style={{padding:"6px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:6,background:selId===t.id?"rgba(0,212,170,0.08)":"#13151f"}}>
-            <span style={{fontSize:12,fontWeight:700,color:"#e8eaf0",flex:1}}>{t.name}</span>
-            <span style={{fontSize:9,color:RANK_COLORS[t.rank as Rank]}}>{t.rank}</span>
-            <span style={{fontSize:10,color:"#5a6080"}}>{selId===t.id?"▲":"▼"}</span>
+        <div key={t.id} style={{border:`2px solid ${selId===t.id?"#2858C0":"#181818"}`,overflow:"hidden",boxShadow:selId===t.id?"2px 2px 0 #2858C0":"2px 2px 0 #787878"}}>
+          <div onClick={()=>setSelId(selId===t.id?null:t.id)} style={{padding:"5px 8px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,background:selId===t.id?"#C8D8F0":"#E8E8D0"}}>
+            <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",fontWeight:700,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name.toUpperCase()}</span>
+            <span style={{fontSize:6,color:RANK_COLORS[t.rank as Rank],fontFamily:"'Press Start 2P',monospace"}}>{t.rank?.slice(0,3).toUpperCase()}</span>
+            <span style={{fontSize:8,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>{selId===t.id?"▲":"▼"}</span>
           </div>
-          {selId===t.id&&<div style={{padding:"6px 8px",background:"#0f1117"}}>
+          {selId===t.id&&<div style={{padding:"5px 7px",background:"#F8F8E8",borderTop:"1px solid #181818"}}>
             {(t.pokemon||[]).map((key:string)=>{
               const sheet=pokemonSheets[key];if(!sheet)return null;
               const p=POKEMON.find(x=>x.number===sheet.number);if(!p)return null;
               const activeMovs=((sheet.moves||[]) as string[]).map((mn:string)=>MOVES.find(m=>m.name===mn)).filter(Boolean) as Move[];
               return(
-                <div key={key} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #1a1d27"}}>
-                  <div style={{width:6,height:6,borderRadius:"50%",background:TYPE_COLORS[p.types[0]],flexShrink:0}}/>
-                  <span style={{fontSize:11,color:"#e8eaf0",flex:1}}>{sheet.nickname||p.name}</span>
-                  <button onClick={()=>onAddPokemon(p,t.id,sheet.nickname||"",sheet.loyalty??1,sheet.happiness??1,activeMovs,key,t.rank)} style={{background:"#00d4aa20",border:"1px solid #00d4aa40",borderRadius:3,color:"#00d4aa",padding:"2px 7px",fontSize:9,fontWeight:700,cursor:"pointer"}}>+</button>
+                <div key={key} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 0",borderBottom:"1px solid #C8C8A8"}}>
+                  <div style={{width:5,height:5,background:TYPE_COLORS[p.types[0]],border:"1px solid #181818",flexShrink:0}}/>
+                  <span style={{fontSize:8,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sheet.nickname||p.name}</span>
+                  <button onClick={()=>onAddPokemon(p,t.id,sheet.nickname||"",sheet.loyalty??1,sheet.happiness??1,activeMovs,key,t.rank)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#187028",padding:"1px 5px",fontSize:8,fontWeight:700,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>+</button>
                 </div>
               );
             })}
             <button onClick={()=>{
-              // Add trainer as combatant
               const fakePoke:PokemonEntry={...MISSINGNO,name:t.name,number:-1,attributes:t.attributes||{strength:1,dexterity:1,vitality:1,special:1,insight:1},abilities:[],moves:[]};
               onAddPokemon(fakePoke,t.id,t.name,0,0,[]);
-            }} style={{marginTop:5,background:"rgba(61,139,255,0.1)",border:"1px solid #3d8bff30",borderRadius:3,color:"#3d8bff",padding:"3px 8px",fontSize:9,cursor:"pointer"}}>+ Add Trainer to Battle</button>
+            }} style={{marginTop:5,background:"#C8D8F0",border:"1px solid #181818",color:"#2858C0",padding:"2px 6px",fontSize:7,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>+ ADD TRAINER</button>
           </div>}
         </div>
       ))}
@@ -2853,20 +2858,20 @@ function SearchBar({onAdd}:{onAdd:(p:PokemonEntry)=>void}){
     <div style={{position:"relative"}}>
       <input type="text" placeholder="Search or click to browse all…" value={q} onChange={e=>setQ(e.target.value)}
         onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)}
-        style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:5,padding:"6px 8px",color:"#e8eaf0",fontSize:12,outline:"none"}}/>
+        style={{width:"100%",background:"#F8F8E8",border:"2px solid #181818",padding:"5px 7px",color:"#181818",fontSize:9,outline:"none",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 #787878"}}/>
       {open&&(
-        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#1e2235",border:"1px solid #3a4060",borderRadius:5,zIndex:100,maxHeight:280,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.6)"}}>
-          <div onClick={()=>{onAdd(MISSINGNO);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #2a2f45",background:"#13151f"}}>
-            <span style={{fontSize:10,color:"#ffd32a",fontWeight:700}}>✦ Custom (blank card)</span>
+        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#F8F8E8",border:"2px solid #181818",zIndex:100,maxHeight:280,overflowY:"auto",boxShadow:"3px 3px 0 #787878"}}>
+          <div onClick={()=>{onAdd(MISSINGNO);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",cursor:"pointer",borderBottom:"2px solid #181818",background:"#E8E8D0"}}>
+            <span style={{fontSize:8,color:"#807008",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>✦ Custom (blank card)</span>
           </div>
           {filtered.map(p=>(
-            <div key={`${p.number}-${p.name}`} onClick={()=>{onAdd(p);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 8px",cursor:"pointer"}}
-              onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="#242842"}
+            <div key={`${p.number}-${p.name}`} onClick={()=>{onAdd(p);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 7px",cursor:"pointer",borderBottom:"1px solid #C8C8A8"}}
+              onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="#C8D8F0"}
               onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background="transparent"}>
-              <span style={{fontSize:9,color:"#3a4060",width:26,fontFamily:"'Exo 2'",fontWeight:700,flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
-              <span style={{fontSize:11,color:"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-              {p.types.slice(0,2).map(t=><TypeBadge key={t} type={t as PokemonType} small/>)}
-              <span style={{fontSize:9,color:RANK_COLORS[p.suggestedRank],flexShrink:0}}>{p.suggestedRank.slice(0,3)}</span>
+              <span style={{fontSize:7,color:"#888870",width:26,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
+              <span style={{fontSize:9,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+              {p.types.slice(0,2).map(t=><span key={t} style={{fontSize:6,color:"#F8F8E8",background:TYPE_COLORS[t as PokemonType]||"#888",border:"1px solid #181818",padding:"0 3px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{t.slice(0,3).toUpperCase()}</span>)}
+              <span style={{fontSize:7,color:RANK_COLORS[p.suggestedRank],flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{p.suggestedRank.slice(0,3).toUpperCase()}</span>
             </div>
           ))}
         </div>
@@ -2882,6 +2887,8 @@ export default function BattleTrackerPage(){
   const [terrain,setTerrain]=useState<string>("None");
   const [turn,setTurn]=useState(0);
   const [round,setRound]=useState(1);
+  const [mounted,setMounted]=useState(false);
+  useEffect(()=>setMounted(true),[]);
   const [showEOR,setShowEOR]=useState(false);
   const [showPriority,setShowPriority]=useState(false);
   const [battleType,setBattleType]=useState<"default"|"gym"|"boss"|"raid"|"danger">("default");
@@ -3096,57 +3103,62 @@ export default function BattleTrackerPage(){
   const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
 
   return(
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#0f1117",color:"#e8eaf0",overflow:"hidden"}}>
+    <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"#88A040",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
-      {/* Nav */}
-      <nav style={{background:"#13151f",borderBottom:"1px solid #2a2f45",padding:"0 12px",height:48,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-        <Link href="/" style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:15,color:"#e8eaf0",textDecoration:"none"}}>PokeRole<span style={{color:"#00d4aa"}}> Tools</span></Link>
-        <span style={{color:"#3a4060"}}>/</span>
-        <span style={{fontSize:13,color:"#ff4757",fontWeight:700}}>⚔️ Battle Tracker</span>
-        <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
-          <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)} style={{background:"#1e2235",border:"1px solid #2a2f45",borderRadius:4,color:"#ffd32a",fontSize:11,padding:"3px 6px"}}>{WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}</select>
-          <select value={terrain} onChange={e=>setTerrain(e.target.value)} title="Active Terrain" style={{background:"#1e2235",border:"1px solid #2a2f45",borderRadius:4,color:terrain==="None"?"#5a6080":"#00d4aa",fontSize:11,padding:"3px 6px"}}>
+      {/* Nav — FireRed white panel style */}
+      <nav style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"0 10px",height:46,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+        <Link href="/" style={{fontFamily:"'Press Start 2P',monospace",fontWeight:400,fontSize:10,color:"#181818",textDecoration:"none",letterSpacing:"-0.5px"}}>PokeRole<span style={{color:"#2858C0"}}> Tools</span></Link>
+        <span style={{color:"#888870",fontSize:12}}>›</span>
+        <span style={{fontSize:9,color:"#D82808",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>⚔ BATTLE</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center"}}>
+          <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>{WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}</select>
+          <select value={terrain} onChange={e=>setTerrain(e.target.value)} title="Active Terrain" style={{background:"#F8F8E8",border:"2px solid #181818",color:terrain==="None"?"#888870":"#2858C0",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>
             <option value="None">🌍 No Terrain</option>
             <option value="Electric Terrain">⚡ Electric Terrain</option>
             <option value="Grassy Terrain">🌿 Grassy Terrain</option>
             <option value="Misty Terrain">🌫 Misty Terrain</option>
             <option value="Psychic Terrain">🔮 Psychic Terrain</option>
           </select>
-          <div style={{display:"flex",alignItems:"center",gap:4,background:"#1e2235",border:"1px solid #2a2f45",borderRadius:4,padding:"3px 8px"}}>
-            <span style={{fontSize:10,color:"#5a6080"}}>Rnd {round} ·</span>
-            <span style={{fontSize:10,color:sideColor,fontWeight:600,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeEntry?.nickname||activeEntry?.pokemon.name||"—"}</span>
+          <div style={{display:"flex",alignItems:"center",gap:4,background:"#E8E8D0",border:"2px solid #181818",padding:"2px 6px",fontSize:9,fontFamily:"'Press Start 2P',monospace"}}>
+            <span style={{color:"#888870"}}>RND</span>
+            <span style={{color:"#181818",fontWeight:700}}>{round}</span>
+            <span style={{color:"#C8C8A8",margin:"0 2px"}}>·</span>
+            <span style={{color:mounted&&activeEntry?.side==="player"?"#2858C0":"#D82808",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mounted?(activeEntry?.nickname||activeEntry?.pokemon.name||"—"):"—"}</span>
           </div>
-          <button onClick={prevTurn} style={{background:"#1e2235",color:"#8b90a8",border:"1px solid #3a4060",borderRadius:4,padding:"4px 8px",fontWeight:700,fontSize:11,cursor:"pointer"}}>◀ Prev</button>
-          <button onClick={nextTurn} style={{background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:4,padding:"4px 10px",fontWeight:700,fontSize:11,cursor:"pointer"}}>Next ▶</button>
-          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);}}} style={{background:"rgba(255,71,87,0.1)",color:"#ff4757",border:"1px solid #ff475740",borderRadius:4,padding:"4px 8px",fontSize:11,cursor:"pointer"}}>⟳ Reset</button>
-          <button onClick={rollAllIni} style={{background:"#6890f015",border:"1px solid #6890f040",borderRadius:4,color:"#6890f0",padding:"3px 8px",fontSize:11,cursor:"pointer"}}>🎲 INI</button>
-          <button onClick={()=>setShowPriority(true)} style={{background:"#00d4aa10",border:"1px solid #00d4aa30",borderRadius:4,color:"#00d4aa",padding:"3px 8px",fontSize:11,cursor:"pointer"}} title="Declare priority moves (reaction phase)">⚡ Priority</button>
-          <button onClick={()=>setShowEOR(true)} style={{background:"#ffd32a10",border:"1px solid #ffd32a30",borderRadius:4,color:"#ffd32a",padding:"3px 8px",fontSize:11,cursor:"pointer"}} title="Apply end-of-round effects (Burn, Poison, Weather)">🔄 End of Round</button>
-          <select value={battleType} onChange={e=>setBattleType(e.target.value as any)}
-            style={{background:"#13151f",border:"1px solid #3a4060",borderRadius:4,color:"#e8eaf0",padding:"3px 6px",fontSize:11,cursor:"pointer"}}>
-            <option value="default">Default Battle</option>
-            <option value="gym">🏅 Gym Battle</option>
-            <option value="boss">💀 Major Boss</option>
-            <option value="raid">⚡ Raid</option>
-            <option value="danger">☠️ Dangerous Situation</option>
+          {[
+            {label:"◀ PREV",onClick:prevTurn,style:{background:"#E8E8D0"}},
+            {label:"NEXT ▶",onClick:nextTurn,style:{background:"#2858C0",color:"#F8F8E8",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818"}},
+          ].map(b=>(
+            <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",background:"#E8E8D0",color:"#181818",...b.style}}>{b.label}</button>
+          ))}
+          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);}}} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
+          <button onClick={rollAllIni} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
+          <button onClick={()=>setShowPriority(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}} title="Priority phase">⚡</button>
+          <button onClick={()=>setShowEOR(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D88018"}} title="End of Round">EOR</button>
+          <select value={battleType} onChange={e=>setBattleType(e.target.value as any)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:9,padding:"2px 4px",cursor:"pointer",fontFamily:"'Press Start 2P',monospace"}}>
+            <option value="default">DEFAULT</option>
+            <option value="gym">GYM</option>
+            <option value="boss">BOSS</option>
+            <option value="raid">RAID</option>
+            <option value="danger">DANGER</option>
           </select>
-          <button onClick={endBattle} style={{background:"#ff475715",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",padding:"3px 8px",fontSize:11,cursor:"pointer",fontWeight:700}} title="End battle and apply loyalty rewards">⚔️ End Battle</button>
-          <Link href="/gm-screen" style={{fontSize:11,color:"#a040a0",textDecoration:"none",background:"rgba(160,64,160,0.1)",border:"1px solid rgba(160,64,160,0.3)",borderRadius:4,padding:"3px 8px"}}>🖥️</Link>
+          <button onClick={endBattle} style={{background:"#D82808",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#F8F8E8",fontWeight:700}} title="End battle">END</button>
+          <Link href="/gm-screen" style={{fontSize:9,color:"#181818",textDecoration:"none",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 6px",fontFamily:"'Press Start 2P',monospace"}}>GM</Link>
         </div>
       </nav>
 
-      {/* Weather banner */}
-      {weather.name!=="Clear"&&<div style={{background:weather.color+"12",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:11,flexShrink:0,borderBottom:`1px solid ${weather.color}20`}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#e8eaf0"}}>{weather.name}</span><span style={{color:"#8b90a8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{weather.description}</span></div>}
+      {/* Weather banner — FireRed dialogue box style */}
+      {weather.name!=="Clear"&&<div style={{background:"#F8F8E8",borderBottom:"2px solid #181818",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:9,flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#181818"}}>{weather.name.toUpperCase()}</span><span style={{color:"#484830",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:8}}>{weather.description}</span>{terrain!=="None"&&<span style={{color:"#2858C0",fontSize:8}}>· {terrain}</span>}</div>}
 
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        {/* Left sidebar */}
-        <div style={{width:230,background:"#13151f",borderRight:"1px solid #2a2f45",display:"flex",flexDirection:"column",flexShrink:0}}>
+        {/* Left sidebar — FireRed style */}
+        <div style={{width:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0}}>
           {/* Sidebar tabs */}
-          <div style={{display:"flex",borderBottom:"1px solid #2a2f45",flexShrink:0}}>
-            {[{k:"search" as const,l:"Search"},{ k:"characters" as const,l:"Party 👤"}].map(t=>(
-              <button key={t.k} onClick={()=>setSidebarTab(t.k)} style={{flex:1,padding:"7px",background:"none",border:"none",borderBottom:`2px solid ${sidebarTab===t.k?"#00d4aa":"transparent"}`,color:sidebarTab===t.k?"#00d4aa":"#5a6080",cursor:"pointer",fontSize:11,fontWeight:700}}>{t.l}</button>
+          <div style={{display:"flex",borderBottom:"2px solid #181818",flexShrink:0}}>
+            {[{k:"search" as const,l:"SEARCH"},{ k:"characters" as const,l:"PARTY"}].map(t=>(
+              <button key={t.k} onClick={()=>setSidebarTab(t.k)} style={{flex:1,padding:"7px",background:sidebarTab===t.k?"#F8F8E8":"#E8E8D0",border:"none",borderBottom:`3px solid ${sidebarTab===t.k?"#2858C0":"transparent"}`,color:sidebarTab===t.k?"#2858C0":"#888870",cursor:"pointer",fontSize:8,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{t.l}</button>
             ))}
           </div>
           <div style={{padding:"8px 8px 4px",flexShrink:0}}>
@@ -3154,18 +3166,18 @@ export default function BattleTrackerPage(){
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"4px 8px"}}>
             {sidebarTab==="search"&&(
-              <>
-                {sorted.map((e,idx)=>(
-                  <div key={e.id} onClick={()=>upd(e.id,{isExpanded:!e.isExpanded})} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 4px",borderRadius:4,cursor:"pointer",background:activeEntry?.id===e.id?"rgba(0,212,170,0.08)":"transparent",borderLeft:`2px solid ${activeEntry?.id===e.id?sideColor:"transparent"}`,opacity:e.currentHp<=0?0.5:1}}>
-                    <span style={{fontSize:8,color:"#3a4060",fontFamily:"'Exo 2'",fontWeight:700,width:14,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
-                    <div style={{width:6,height:6,borderRadius:"50%",background:e.currentHp<=0?"#3a3040":TYPE_COLORS[e.pokemon.types[0]],flexShrink:0}}/>
-                    <span style={{fontSize:11,color:e.currentHp<=0?"#5a6080":"#e8eaf0",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none"}}>{e.nickname||e.pokemon.name}</span>
-                    <span style={{fontSize:9,color:"#6890f0",fontFamily:"'Exo 2'",fontWeight:700,flexShrink:0}}>{e.initiative}</span>
-                    <span style={{fontSize:10,color:e.currentHp<=0?"#705898":e.currentHp/e.maxHp>0.5?"#00d4aa":e.currentHp/e.maxHp>0.25?"#ffd32a":"#ff4757",fontFamily:"'Exo 2'",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
+              <div>
+                {mounted&&sorted.map((e,idx)=>(
+                  <div key={e.id} onClick={()=>upd(e.id,{isExpanded:!e.isExpanded})} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 5px",cursor:"pointer",background:activeEntry?.id===e.id?"#C8D8F0":"transparent",borderLeft:`3px solid ${activeEntry?.id===e.id?"#2858C0":"transparent"}`,opacity:e.currentHp<=0?0.45:1,borderBottom:"1px solid #C8C8A8"}}>
+                    <span style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace",width:12,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
+                    <div style={{width:5,height:5,background:e.currentHp<=0?"#787878":TYPE_COLORS[e.pokemon.types[0]],border:"1px solid #181818",flexShrink:0}}/>
+                    <span style={{fontSize:10,color:e.currentHp<=0?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none",fontWeight:600}}>{e.nickname||e.pokemon.name}</span>
+                    <span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{e.initiative}</span>
+                    <span style={{fontSize:8,color:e.currentHp<=0?"#888870":e.currentHp/e.maxHp>0.5?"#18C840":e.currentHp/e.maxHp>0.25?"#E8B018":"#D82808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
                   </div>
                 ))}
-                {entries.length===0&&<div style={{textAlign:"center",color:"#5a6080",padding:16,fontSize:11}}>Search to add Pokémon</div>}
-              </>
+                {(!mounted||entries.length===0)&&<div style={{textAlign:"center",color:"#888870",padding:16,fontSize:8,fontFamily:"'Press Start 2P',monospace",lineHeight:2}}>Search to add<br/>Pokémon</div>}
+              </div>
             )}
             {sidebarTab==="characters"&&(
               <>
@@ -3176,8 +3188,8 @@ export default function BattleTrackerPage(){
               </>
             )}
           </div>
-          <div style={{padding:"6px 8px",borderTop:"1px solid #2a2f45",flexShrink:0}}>
-            <button onClick={()=>setEntries([])} style={{width:"100%",background:"rgba(255,71,87,0.1)",border:"1px solid rgba(255,71,87,0.3)",borderRadius:4,color:"#ff4757",padding:"5px",fontSize:11,cursor:"pointer"}}>Clear All</button>
+          <div style={{padding:"6px 8px",borderTop:"2px solid #181818",flexShrink:0}}>
+            <button onClick={()=>setEntries([])} style={{width:"100%",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",color:"#D82808",padding:"5px",fontSize:8,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>CLEAR ALL</button>
           </div>
         </div>
 
@@ -3185,37 +3197,35 @@ export default function BattleTrackerPage(){
         <div style={{flex:1,position:"relative",overflow:"hidden"}}>
           <div ref={scrollRef} style={{position:"absolute",inset:0,overflowX:"auto",overflowY:"hidden",padding:"10px 10px"}}
             onWheel={e=>{e.preventDefault();if(scrollRef.current)scrollRef.current.scrollLeft+=e.deltaY;}}>
-          {/* Status summary strip — quick view of all combatant conditions */}
-          {entries.length>0&&(()=>{
+          {/* Status summary strip */}
+          {mounted&&entries.length>0&&(()=>{
             const active=sorted.filter(e=>e.currentHp>0);
             const withStatus=active.filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
             if(withStatus.length===0)return null;
             return(
-              <div style={{position:"sticky",top:0,zIndex:10,background:"#0f1117cc",backdropFilter:"blur(4px)",borderBottom:"1px solid #2a2f45",padding:"4px 10px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0}}>
-                <span style={{fontSize:8,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",flexShrink:0}}>Status</span>
+              <div style={{position:"sticky",top:0,zIndex:10,background:"#F0EFD8",borderBottom:"2px solid #181818",padding:"3px 8px",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",flexShrink:0,boxShadow:"0 2px 0 #787878"}}>
+                <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>STATUS</span>
                 {withStatus.map(e=>{
-                  const sc2={player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[e.side];
+                  const sc2=e.side==="player"?"#2858C0":e.side==="enemy"?"#D82808":"#888870";
                   const sts=(e.statuses||[]).filter(s=>s!=="Healthy");
                   return(
-                    <div key={e.id} style={{display:"flex",alignItems:"center",gap:3,background:"#1e2235",borderRadius:4,padding:"2px 6px",border:`1px solid ${sc2}30`}}>
-                      <span style={{fontSize:9,fontWeight:700,color:sc2}}>{e.nickname||e.pokemon.name}</span>
-                      {sts.map(s=>{const sc=STATUS_CONDITIONS[s];return<span key={s} style={{fontSize:8,color:sc?.color,background:(sc?.color||"#555")+"20",borderRadius:2,padding:"0 3px"}}>{s.slice(0,3)}</span>;})}
-                      {e.isProtected&&<span style={{fontSize:8,color:"#6890f0"}}>🛡</span>}
-                      {(e.statMods||[]).length>0&&<span style={{fontSize:8,color:"#8b90a8"}}>+{e.statMods.length}mod</span>}
-                      <span style={{fontSize:8,color:e.currentHp/e.maxHp>0.5?"#00d4aa":e.currentHp/e.maxHp>0.25?"#ffd32a":"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{e.currentHp}/{e.maxHp}</span>
+                    <div key={e.id} style={{display:"flex",alignItems:"center",gap:2,background:"#F8F8E8",border:`2px solid ${sc2}`,padding:"2px 5px",boxShadow:"1px 1px 0 #787878"}}>
+                      <span style={{fontSize:7,fontWeight:700,color:sc2,fontFamily:"'Press Start 2P',monospace"}}>{(e.nickname||e.pokemon.name).slice(0,8).toUpperCase()}</span>
+                      {sts.map(s=>{const sc=STATUS_CONDITIONS[s];return<span key={s} style={{fontSize:6,color:"#F8F8E8",background:sc?.color||"#888870",border:"1px solid #181818",padding:"0 2px",fontFamily:"'Press Start 2P',monospace"}}>{s.slice(0,3).toUpperCase()}</span>;})}
+                      {e.isProtected&&<span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace"}}>PROT</span>}
+                      {(e.statMods||[]).length>0&&<span style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>+{e.statMods.length}m</span>}
+                      <span style={{fontSize:7,color:e.currentHp/e.maxHp>0.5?"#187028":e.currentHp/e.maxHp>0.25?"#807008":"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{e.currentHp}/{e.maxHp}</span>
                     </div>
                   );
                 })}
               </div>
             );
           })()}
-          {entries.length===0?(
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#5a6080",fontSize:14,flexDirection:"column",gap:16,padding:40}}>
-              <span style={{fontSize:48}}>⚔️</span>
-              <div style={{textAlign:"center"}}>
-                <div style={{fontWeight:700,color:"#e8eaf0",marginBottom:6}}>No combatants yet</div>
-                <div style={{fontSize:12}}>← Use the sidebar search or Party tab to add Pokémon</div>
-                <div style={{fontSize:11,color:"#3a4060",marginTop:4}}>Tip: Click any Pokémon in the left list to expand their card</div>
+          {(!mounted||entries.length===0)?(
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:16,padding:40}}>
+              <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",marginBottom:10}}>NO COMBATANTS</div>
+                <div style={{fontSize:8,color:"#484830",fontFamily:"'Press Start 2P',monospace",lineHeight:1.8}}>Use the sidebar to<br/>add Pokémon</div>
               </div>
             </div>
           ):(
@@ -3232,7 +3242,7 @@ export default function BattleTrackerPage(){
           )}
           </div>
           {/* Right edge fade indicating more cards */}
-          <div style={{position:"absolute",top:0,right:0,bottom:0,width:32,background:"linear-gradient(to right, transparent, #0f1117)",pointerEvents:"none"}}/>
+          <div style={{position:"absolute",top:0,right:0,bottom:0,width:32,background:"linear-gradient(to right, transparent, #88A040)",pointerEvents:"none"}}/>
         </div>
       </div>
     </div>
