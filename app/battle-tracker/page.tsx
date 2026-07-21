@@ -115,6 +115,70 @@ function StatusBadge({status,onRemove}:{status:string;onRemove?:()=>void}){
     </span>
   );
 }
+// Offline battle sprite (front/back) — files live in /public/sprites/pokemon.
+// Mixed tiers (64×64 FRLG vs 96×96 gen5/default) are bottom-aligned in a fixed box so
+// every mon's feet sit on the platform regardless of source dimensions.
+function PokeSprite({number,back,boxW=160,boxH=150,fainted}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean}){
+  const [broken,setBroken]=useState(false);
+  return(
+    <div style={{width:boxW,height:boxH,display:"flex",alignItems:"flex-end",justifyContent:"center",pointerEvents:"none"}}>
+      {!broken&&number>0&&(
+        <img src={`/sprites/pokemon/${back?"back/":""}${number}.png`} alt="" draggable={false}
+          onError={()=>setBroken(true)}
+          style={{maxWidth:"100%",maxHeight:"100%",imageRendering:"pixelated",objectFit:"contain",
+            filter:fainted?"grayscale(1) brightness(1.15)":"drop-shadow(0 3px 2px rgba(0,0,0,0.35))",
+            opacity:fainted?0.4:1,transition:"opacity 0.3s"}}/>
+      )}
+    </div>
+  );
+}
+// Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
+// (as in-game); player plates show HP n/n + WP n/n.
+function SceneNameplate({entry,enemy,onClick}:{entry:BattleEntry;enemy?:boolean;onClick?:()=>void}){
+  const name=(entry.nickname||entry.pokemon.name).toUpperCase();
+  const sts=(entry.statuses||[]).filter(s=>s!=="Healthy");
+  const rank=entry.trainerRank||entry.pokemon.suggestedRank;
+  return(
+    <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"5px 9px 6px",minWidth:enemy?188:210,cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+        <span style={{fontSize:9,fontWeight:700,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+        <span style={{fontSize:7,color:entry.side==="player"?"#2858C0":"#D82808"}}>{rank}</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:5}}>
+        <span style={{fontSize:8,fontWeight:700,color:"#C8A000",WebkitTextStroke:"0.4px #705000"}}>HP</span>
+        <div style={{flex:1}}><HpBar cur={entry.currentHp} max={entry.maxHp}/></div>
+      </div>
+      {!enemy&&(
+        <div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
+          <span style={{fontSize:8,fontWeight:700,color:"#2858C0"}}>WP</span>
+          <div style={{flex:1}}><HpBar cur={entry.currentWill} max={entry.maxWill} isWp/></div>
+        </div>
+      )}
+      <div style={{display:"flex",justifyContent:enemy?"flex-end":"space-between",alignItems:"center",gap:4,marginTop:4}}>
+        {!enemy&&<span style={{fontSize:8,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#807008":"#A00808",fontWeight:700}}>{entry.currentHp}/{entry.maxHp}</span>}
+        <div style={{display:"flex",gap:3,alignItems:"center",flexWrap:"wrap"}}>
+          {sts.map(s=><StatusBadge key={s} status={s}/>)}
+          {entry.isProtected&&<span style={{fontSize:7,color:"#F8F8E8",background:"#2858C0",border:"1px solid #181818",padding:"1px 3px"}}>PROT</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+// A Pokémon standing on a FireRed-style grass platform. The sprite's feet are pinned to
+// the platform's mid-line so it sits correctly regardless of the sprite's source size.
+function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void}){
+  const w=back?250:220, h=back?176:150, plat=back?58:48;
+  return(
+    <div onClick={onClick} style={{position:"relative",width:w,height:h,cursor:onClick?"pointer":"default"}}>
+      <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:w,height:plat,borderRadius:"50%",
+        background:"radial-gradient(ellipse at 50% 38%, #C8E4A8 0%, #A8D088 45%, #7CAC54 100%)",
+        boxShadow:"inset 0 -5px 7px rgba(72,108,44,0.55)",border:"1px solid rgba(80,100,40,0.35)"}}/>
+      <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
+        <PokeSprite number={number} back={back} boxW={back?214:180} boxH={back?176:150} fainted={fainted}/>
+      </div>
+    </div>
+  );
+}
 function rollDice(n:number):{rolls:number[];successes:number}{
   const p=Math.max(1,n);
   const rolls=Array.from({length:p},()=>Math.floor(Math.random()*6)+1);
@@ -2945,6 +3009,13 @@ export default function BattleTrackerPage(){
   const [sidebarTab,setSidebarTab]=useState<"search"|"characters">("search");
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
+  // ── FireRed battle-scene state ──────────────────────────────────────────────
+  const [scenePlayerId,setScenePlayerId]=useState<string|null>(null);
+  const [sceneEnemyId,setSceneEnemyId]=useState<string|null>(null);
+  const [menuMode,setMenuMode]=useState<"root"|"fight"|"bag"|"pokemon">("root");
+  const [sceneMsg,setSceneMsg]=useState<string>("");
+  const [drawerId,setDrawerId]=useState<string|null>(null);
+  const [scenePopup,setScenePopup]=useState<Move|null>(null);
 
   useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
 
@@ -2972,6 +3043,32 @@ export default function BattleTrackerPage(){
 
   const sorted=useMemo(()=>[...entries].sort((a,b)=>b.initiative-a.initiative),[entries]);
   const activeEntry=sorted[turn%Math.max(1,sorted.length)];
+
+  // ── On-field combatants for the battle scene ────────────────────────────────
+  // Player side = back sprite (bottom-left); everything else counts as the "enemy"
+  // front sprite (top-right). Falls back to the highest-initiative living mon per side.
+  const pickField=(side:"player"|"enemy")=>{
+    const living=sorted.filter(e=>side==="player"?e.side==="player":e.side!=="player");
+    if(activeEntry&&living.some(e=>e.id===activeEntry.id))return activeEntry;
+    return living.find(e=>e.currentHp>0)||living[0]||null;
+  };
+  const onFieldPlayer=useMemo(()=>{
+    const chosen=scenePlayerId?entries.find(e=>e.id===scenePlayerId&&e.side==="player"):null;
+    return chosen||pickField("player");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[scenePlayerId,entries,sorted,activeEntry]);
+  const onFieldEnemy=useMemo(()=>{
+    const chosen=sceneEnemyId?entries.find(e=>e.id===sceneEnemyId&&e.side!=="player"):null;
+    return chosen||pickField("enemy");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sceneEnemyId,entries,sorted,activeEntry]);
+
+  // MovePopup handlers at the scene level (mirror BattleCard's local versions).
+  const sApplyDmg=(tid:string,dmg:number)=>setEntries(prev=>prev.map(e=>e.id===tid?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e));
+  const sApplyEffect=(tid:string,attr:string,amount:number,src:string,appliedBy?:string)=>setEntries(prev=>prev.map(t=>{if(t.id!==tid)return t;const nm=[...t.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx]={...nm[idx],amount:nm[idx].amount+amount,appliedBy:appliedBy??nm[idx].appliedBy};else nm.push({source:src,attr,amount,appliedBy});return{...t,statMods:nm};}));
+  const sIncrementAction=(id:string,isReaction?:boolean)=>setEntries(prev=>prev.map(e=>e.id===id?(isReaction?{...e,reactionUsed:true}:{...e,actionCount:Math.min(5,e.actionCount+1)}):e));
+  const sSpendWP=(id:string,amt:number)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e));
+  const sApplySpecial=(id:string,u:Partial<BattleEntry>)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e));
 
   const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string)=>{
     const hp=pokemon.number<=0?10:pokemon.baseHp+pokemon.attributes.vitality;
@@ -3064,6 +3161,7 @@ export default function BattleTrackerPage(){
   };
 
   const prevTurn=()=>{
+    setSceneMsg("");setMenuMode("root");
     const prev=(turn-1+Math.max(1,sorted.length))%Math.max(1,sorted.length);
     setTurn(prev);
     // Re-activate the previous entry
@@ -3073,6 +3171,7 @@ export default function BattleTrackerPage(){
   };
 
   const nextTurn=()=>{
+    setSceneMsg("");setMenuMode("root");
     if(activeEntry){
       setEntries(prev=>prev.map(e=>{
         if(e.id!==activeEntry.id)return e;
@@ -3242,23 +3341,20 @@ export default function BattleTrackerPage(){
           </div>
         </div>
 
-        {/* HORIZONTAL TRACKER AREA — scrolls left-right, edge-fades show there is more */}
-        <div style={{flex:1,position:"relative",overflow:"hidden"}}>
-          <div ref={scrollRef} style={{position:"absolute",inset:0,overflowX:"auto",overflowY:"hidden",padding:"10px 10px"}}
-            onWheel={e=>{e.preventDefault();if(scrollRef.current)scrollRef.current.scrollLeft+=e.deltaY;}}>
-          {/* Status summary strip */}
+        {/* ── FIRERED BATTLE SCENE ─────────────────────────────────────────── */}
+        <div style={{flex:1,position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          {/* Thin status summary strip */}
           {mounted&&entries.length>0&&(()=>{
-            const active=sorted.filter(e=>e.currentHp>0);
-            const withStatus=active.filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
+            const withStatus=sorted.filter(e=>e.currentHp>0).filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
             if(withStatus.length===0)return null;
             return(
-              <div style={{position:"sticky",top:0,zIndex:10,background:"rgba(24,16,8,0.75)",borderBottom:"2px solid #181818",padding:"3px 8px",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",flexShrink:0,boxShadow:"0 2px 0 #181818"}}>
+              <div style={{zIndex:6,background:"rgba(24,16,8,0.72)",borderBottom:"2px solid #181818",padding:"3px 8px",display:"flex",gap:6,overflowX:"auto",alignItems:"center",flexShrink:0}}>
                 <span style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",flexShrink:0,textShadow:"1px 1px 0 #181818"}}>STATUS</span>
                 {withStatus.map(e=>{
                   const sc2=e.side==="player"?"#2858C0":e.side==="enemy"?"#D82808":"#888870";
                   const sts=(e.statuses||[]).filter(s=>s!=="Healthy");
                   return(
-                    <div key={e.id} style={{display:"flex",alignItems:"center",gap:2,background:"#F8F8E8",border:`2px solid ${sc2}`,padding:"2px 5px",boxShadow:"1px 1px 0 #787878"}}>
+                    <div key={e.id} style={{display:"flex",alignItems:"center",gap:2,background:"#F8F8E8",border:`2px solid ${sc2}`,padding:"2px 5px",flexShrink:0}}>
                       <span style={{fontSize:7,fontWeight:700,color:sc2,fontFamily:"'Press Start 2P',monospace"}}>{(e.nickname||e.pokemon.name).slice(0,8).toUpperCase()}</span>
                       {sts.map(s=><StatusBadge key={s} status={s}/>)}
                       {e.isProtected&&<span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace"}}>PROT</span>}
@@ -3270,28 +3366,170 @@ export default function BattleTrackerPage(){
               </div>
             );
           })()}
+
           {(!mounted||entries.length===0)?(
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:16,padding:40}}>
+            <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,padding:40}}>
               <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",marginBottom:10}}>NO COMBATANTS</div>
                 <div style={{fontSize:8,color:"#484830",fontFamily:"'Press Start 2P',monospace",lineHeight:1.8}}>Use the sidebar to<br/>add Pokémon</div>
               </div>
             </div>
           ):(
-            <div style={{display:"flex",gap:10,height:"100%",alignItems:"flex-start"}}>
-              {sorted.map(e=>(
-                <div key={e.id} ref={el=>{cardRefs.current[e.id]=el;}} style={{opacity:dragId===e.id?0.4:1,flexShrink:0}}>
-                  <BattleCard entry={e} allEntries={entries} weather={weather} isActive={activeEntry?.id===e.id} onUpdate={upd} onRemove={remove} onNextTurn={nextTurn}
-                    onDragStart={()=>setDragId(e.id)}
-                    onDragOver={(ev)=>{ev.preventDefault();}}
-                    onDrop={()=>handleDrop(e.id)}/>
+            <>
+              {/* STAGE */}
+              <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
+                {/* Enemy nameplate — top-left */}
+                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:16,left:16,zIndex:3}}><SceneNameplate entry={onFieldEnemy} enemy onClick={()=>setDrawerId(onFieldEnemy.id)}/></div>}
+                {/* Enemy mon — upper-right */}
+                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}><FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)}/></div>}
+                {/* Player mon — lower-left (back sprite) */}
+                {mounted&&onFieldPlayer&&<div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}><FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)}/></div>}
+                {/* Player nameplate — lower-right */}
+                {mounted&&onFieldPlayer&&<div style={{position:"absolute",bottom:"9%",right:24,zIndex:3}}><SceneNameplate entry={onFieldPlayer} onClick={()=>setDrawerId(onFieldPlayer.id)}/></div>}
+
+                {/* POKéMON switch overlay */}
+                {menuMode==="pokemon"&&(
+                  <div style={{position:"absolute",inset:0,zIndex:8,background:"rgba(24,16,8,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                    <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:12,maxWidth:520,width:"100%",maxHeight:"90%",overflowY:"auto"}}>
+                      <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+                        <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#181818",flex:1}}>SEND / SWITCH</span>
+                        <button onClick={()=>setMenuMode("root")} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",padding:"3px 6px",cursor:"pointer"}}>BACK</button>
+                      </div>
+                      {(["player","enemy"] as const).map(side=>{
+                        const list=sorted.filter(e=>side==="player"?e.side==="player":e.side!=="player");
+                        if(list.length===0)return null;
+                        const onField=side==="player"?onFieldPlayer:onFieldEnemy;
+                        return(
+                          <div key={side} style={{marginBottom:8}}>
+                            <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:side==="player"?"#2858C0":"#D82808",marginBottom:4}}>{side==="player"?"◆ YOUR SIDE":"◆ OPPONENTS"}</div>
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                              {list.map(e=>{
+                                const active=onField?.id===e.id;
+                                return(
+                                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:5,background:active?"#C8D8F0":"#F0ECD4",border:`2px solid ${active?"#2858C0":"#181818"}`,padding:"3px 5px",opacity:e.currentHp<=0?0.5:1}}>
+                                    <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={28} height={28} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#181818",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(e.nickname||e.pokemon.name).toUpperCase()}</div>
+                                      <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:e.currentHp/e.maxHp>0.5?"#187028":e.currentHp/e.maxHp>0.25?"#807008":"#A00808"}}>{e.currentHp}/{e.maxHp}</div>
+                                    </div>
+                                    <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                                      <button onClick={()=>{side==="player"?setScenePlayerId(e.id):setSceneEnemyId(e.id);setMenuMode("root");}} disabled={active} style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",background:active?"#C8C8A8":"#2858C0",color:"#F8F8E8",border:"1px solid #181818",padding:"2px 3px",cursor:active?"default":"pointer"}}>{active?"OUT":"SEND"}</button>
+                                      <button onClick={()=>{setDrawerId(e.id);setMenuMode("root");}} style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",color:"#181818",border:"1px solid #181818",padding:"2px 3px",cursor:"pointer"}}>CARD</button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* BAG overlay — quick field items */}
+                {menuMode==="bag"&&(
+                  <div style={{position:"absolute",inset:0,zIndex:8,background:"rgba(24,16,8,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                    <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:12,maxWidth:340,width:"100%"}}>
+                      <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+                        <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#181818",flex:1}}>BAG</span>
+                        <button onClick={()=>setMenuMode("root")} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",padding:"3px 6px",cursor:"pointer"}}>BACK</button>
+                      </div>
+                      <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",marginBottom:8,lineHeight:1.6}}>Quick restore for {onFieldPlayer?(onFieldPlayer.nickname||onFieldPlayer.pokemon.name):"—"}.</div>
+                      {onFieldPlayer?(
+                        <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                          {[
+                            {l:"POTION  (+2 HP)",fn:()=>upd(onFieldPlayer.id,{currentHp:Math.min(onFieldPlayer.maxHp,onFieldPlayer.currentHp+2)}),m:`${onFieldPlayer.nickname||onFieldPlayer.pokemon.name} recovered HP!`},
+                            {l:"ETHER   (+2 WP)",fn:()=>upd(onFieldPlayer.id,{currentWill:Math.min(onFieldPlayer.maxWill,onFieldPlayer.currentWill+2)}),m:`${onFieldPlayer.nickname||onFieldPlayer.pokemon.name} recovered WP!`},
+                            {l:"FULL RESTORE",fn:()=>upd(onFieldPlayer.id,{currentHp:onFieldPlayer.maxHp,currentWill:onFieldPlayer.maxWill,statuses:["Healthy"],statusTurnsLeft:0}),m:`${onFieldPlayer.nickname||onFieldPlayer.pokemon.name} was fully restored!`},
+                          ].map(it=>(
+                            <button key={it.l} onClick={()=>{it.fn();setSceneMsg(it.m);setMenuMode("root");}} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#F0ECD4",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"7px 8px",cursor:"pointer",textAlign:"left"}}>{it.l}</button>
+                          ))}
+                        </div>
+                      ):<div style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#A00808"}}>No party Pokémon on field.</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* BOTTOM BAR — text box + menu */}
+              <div style={{flexShrink:0,height:138,display:"flex",gap:0,borderTop:"3px solid #181818"}}>
+                {/* Text box */}
+                <div style={{flex:1,padding:6,background:"#3058B0",borderRight:"3px solid #181818"}}>
+                  <div style={{height:"100%",border:"3px solid #F8F8E8",borderRadius:8,background:"linear-gradient(180deg,#3868C0 0%,#284C9C 100%)",boxShadow:"inset 0 0 0 2px #204088",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace",color:"#F8F8E8",textShadow:"2px 2px 0 #182848"}}>
+                      {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
+                        (sceneMsg||`What will ${onFieldPlayer?(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase():(onFieldEnemy?(onFieldEnemy.nickname||onFieldEnemy.pokemon.name).toUpperCase()+" appeared!":"the battle")}${onFieldPlayer?" do?":""}`)}
+                    </span>
+                  </div>
                 </div>
-              ))}
-            </div>
+                {/* Menu / move list */}
+                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#F8F8E8",padding:8,display:"flex"}}>
+                  <div style={{flex:1,border:"3px solid #181818",borderRadius:8,boxShadow:"inset 0 0 0 2px #A0A088",background:"#F8F8E8",padding:8}}>
+                    {menuMode==="fight"?(
+                      onFieldPlayer&&onFieldPlayer.moves.length>0?(
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,height:"100%"}}>
+                          {onFieldPlayer.moves.slice(0,4).map((m,i)=>{
+                            const stab=onFieldPlayer.pokemon.types.includes(m.type as PokemonType);
+                            return(
+                              <button key={i} onClick={()=>{setScenePopup(m);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
+                                style={{display:"flex",flexDirection:"column",gap:2,padding:"5px 6px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #181818",minHeight:0,overflow:"hidden"}}
+                                onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#C8D8F0";}}
+                                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F0ECD4";}}>
+                                <span style={{fontSize:8,color:"#181818",fontFamily:"'Press Start 2P',monospace",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{m.name}</span>
+                                <div style={{display:"flex",gap:3,alignItems:"center"}}><TypeBadge type={m.type as PokemonType} small/>{stab&&<span style={{fontSize:6,color:"#807008",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:6,color:"#18A870",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ):(
+                        <div style={{height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#888870"}}>No moves.</span>
+                          <button onClick={()=>setMenuMode("root")} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",padding:"4px 8px",cursor:"pointer"}}>BACK</button>
+                        </div>
+                      )
+                    ):(
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:4,height:"100%"}}>
+                        {[
+                          {l:"FIGHT",c:"#D02828",fn:()=>setMenuMode("fight")},
+                          {l:"BAG",c:"#C87818",fn:()=>setMenuMode("bag")},
+                          {l:"POKéMON",c:"#187828",fn:()=>setMenuMode("pokemon")},
+                          {l:"RUN",c:"#3050B0",fn:()=>endBattle()},
+                        ].map(b=>(
+                          <button key={b.l} onClick={b.fn} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 8px",background:"#F8F8E8",border:"none",cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,color:"#181818",fontWeight:700}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E0E8F8";}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F8F8E8";}}>
+                            <span style={{color:b.c}}>▶</span>{b.l}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
           )}
-          </div>
-          {/* Right edge fade indicating more cards */}
-          <div style={{position:"absolute",top:0,right:0,bottom:0,width:32,background:"linear-gradient(to right, transparent, rgba(80,120,48,0.6))",pointerEvents:"none"}}/>
+
+          {/* Cards-on-demand drawer */}
+          {mounted&&drawerId&&(()=>{
+            const e=entries.find(x=>x.id===drawerId);
+            if(!e)return null;
+            return(
+              <div style={{position:"absolute",inset:0,zIndex:20,background:"rgba(24,16,8,0.6)",display:"flex",justifyContent:"flex-end"}} onClick={()=>setDrawerId(null)}>
+                <div onClick={ev=>ev.stopPropagation()} style={{height:"100%",overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:8}}>
+                  <button onClick={()=>setDrawerId(null)} style={{alignSelf:"flex-end",fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"4px 8px",cursor:"pointer",color:"#D82808"}}>CLOSE ✕</button>
+                  <BattleCard entry={e} allEntries={entries} weather={weather} isActive={activeEntry?.id===e.id} onUpdate={upd} onRemove={(id)=>{remove(id);setDrawerId(null);}} onNextTurn={nextTurn} onDragStart={()=>{}} onDragOver={()=>{}} onDrop={()=>{}}/>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Move detail popup (from FIGHT) */}
+          {mounted&&scenePopup&&onFieldPlayer&&(
+            <MovePopup move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
+              onClose={()=>setScenePopup(null)} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
+              onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}/>
+          )}
         </div>
       </div>
     </div>
