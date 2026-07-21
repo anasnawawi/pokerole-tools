@@ -3545,7 +3545,7 @@ export default function BattleTrackerPage(){
               </div>
 
               {/* BOTTOM BAR — text box + menu */}
-              <div style={{flexShrink:0,height:160,display:"flex",gap:0,borderTop:"3px solid #181818"}}>
+              <div style={{flexShrink:0,height:176,display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:6,background:"#3058B0",borderRight:"3px solid #181818"}}>
                   <div style={{height:"100%",border:"3px solid #F8F8E8",borderRadius:8,background:"linear-gradient(180deg,#3868C0 0%,#284C9C 100%)",boxShadow:"inset 0 0 0 2px #204088",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
@@ -3571,10 +3571,10 @@ export default function BattleTrackerPage(){
                             const stab=onFieldPlayer.pokemon.types.includes(m.type as PokemonType);
                             return(
                               <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
-                                style={{display:"flex",flexDirection:"column",justifyContent:"center",gap:3,padding:"4px 7px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #181818",minHeight:0,overflow:"hidden"}}
+                                style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:2,padding:"4px 6px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #181818",minHeight:0,overflow:"hidden"}}
                                 onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#C8D8F0";}}
                                 onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F0ECD4";}}>
-                                <span style={{fontSize:8,color:"#181818",fontFamily:"'Press Start 2P',monospace",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%",lineHeight:1.3}}>{m.name}</span>
+                                <span style={{fontSize:7,color:"#181818",fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35,maxWidth:"100%"}}>{m.name}</span>
                                 <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0}}><TypeBadge type={m.type as PokemonType} small/>{stab&&<span style={{fontSize:6,color:"#807008",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:6,color:"#18A870",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
                               </button>
                             );
