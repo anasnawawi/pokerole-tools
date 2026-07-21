@@ -62,8 +62,34 @@ interface BattleEntry{
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// x-offsets (px) for each type in the frlg-types.png sprite strip (y≈508, each badge 32×16px)
+const TYPE_SPRITE_X: Partial<Record<PokemonType,number>> = {
+  Normal:0, Fire:34, Water:69, Ice:104, Electric:139, Grass:174,
+  Ground:209, Rock:244, Fight:279, Steel:314, Dark:350, Psychic:384,
+  Flying:418, Bug:452, Poison:487, Ghost:522, Dragon:557,
+};
+const TYPE_SPRITE_Y = 508;
+const TYPE_SPRITE_W = 32;
+const TYPE_SPRITE_H = 16;
+const TYPE_IMG_W = 632;
+const TYPE_IMG_H = 583;
+
 function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
-  return <span style={{display:"inline-flex",alignItems:"center",padding:small?"1px 5px":"2px 7px",borderRadius:3,fontSize:small?9:11,fontWeight:700,color:"#fff",background:TYPE_COLORS[type]||"#555"}}>{type}</span>;
+  const x = TYPE_SPRITE_X[type];
+  if(x===undefined){
+    // Fairy and any unknown types fall back to CSS
+    return <span style={{display:"inline-flex",alignItems:"center",padding:small?"0 4px":"1px 6px",fontSize:small?7:9,fontWeight:700,color:"#fff",background:TYPE_COLORS[type]||"#B060C8",border:"1px solid #181818",fontFamily:"'Press Start 2P',monospace",imageRendering:"pixelated",flexShrink:0}}>{type.toUpperCase()}</span>;
+  }
+  const scale = small ? 0.75 : 1;
+  return <div title={type} style={{
+    display:"inline-block",flexShrink:0,
+    width: TYPE_SPRITE_W * scale,
+    height: TYPE_SPRITE_H * scale,
+    backgroundImage:"url('/assets/frlg-types.png')",
+    backgroundPosition:`-${x*scale}px -${TYPE_SPRITE_Y*scale}px`,
+    backgroundSize:`${TYPE_IMG_W*scale}px ${TYPE_IMG_H*scale}px`,
+    imageRendering:"pixelated",
+  }}/>;
 }
 function rollDice(n:number):{rolls:number[];successes:number}{
   const p=Math.max(1,n);
@@ -3102,7 +3128,7 @@ export default function BattleTrackerPage(){
   const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
 
   return(
-    <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"linear-gradient(180deg,#88B8E8 0%,#60A0D8 35%,#78A848 65%,#507830 100%)",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
+    <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"url('/assets/frlg-grass-bg.png') bottom/auto 45% repeat-x, linear-gradient(180deg,#88B8E8 0%,#60A0D8 42%,#78A848 58%,#507830 100%)",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
