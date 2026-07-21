@@ -176,7 +176,7 @@ function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fai
       <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:w,height:plat,borderRadius:"50%",
         background:"radial-gradient(ellipse at 50% 38%, #C8E4A8 0%, #A8D088 45%, #7CAC54 100%)",
         boxShadow:"inset 0 -5px 7px rgba(72,108,44,0.55)",border:"1px solid rgba(80,100,40,0.35)"}}/>
-      <div style={{position:"absolute",bottom:Math.round(plat*0.28),left:0,right:0,display:"flex",justifyContent:"center"}}>
+      <div style={{position:"absolute",bottom:Math.round(plat*(back?0.1:0.28)),left:0,right:0,display:"flex",justifyContent:"center"}}>
         <PokeSprite number={number} back={back} boxW={back?300:250} boxH={back?232:200} fainted={fainted}/>
       </div>
     </div>
