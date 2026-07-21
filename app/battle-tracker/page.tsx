@@ -125,7 +125,7 @@ function PokeSprite({number,back,boxW=160,boxH=150,fainted}:{number:number;back?
       {!broken&&number>0&&(
         <img src={`/sprites/pokemon/${back?"back/":""}${number}.png`} alt="" draggable={false}
           onError={()=>setBroken(true)}
-          style={{maxWidth:"100%",maxHeight:"100%",imageRendering:"pixelated",objectFit:"contain",
+          style={{width:"100%",height:"100%",imageRendering:"pixelated",objectFit:"contain",objectPosition:"center bottom",
             filter:fainted?"grayscale(1) brightness(1.15)":"drop-shadow(0 3px 2px rgba(0,0,0,0.35))",
             opacity:fainted?0.4:1,transition:"opacity 0.3s"}}/>
       )}
@@ -167,14 +167,14 @@ function SceneNameplate({entry,enemy,onClick}:{entry:BattleEntry;enemy?:boolean;
 // A Pokémon standing on a FireRed-style grass platform. The sprite's feet are pinned to
 // the platform's mid-line so it sits correctly regardless of the sprite's source size.
 function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void}){
-  const w=back?250:220, h=back?176:150, plat=back?58:48;
+  const w=back?340:300, h=back?232:200, plat=back?74:62;
   return(
     <div onClick={onClick} style={{position:"relative",width:w,height:h,cursor:onClick?"pointer":"default"}}>
       <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:w,height:plat,borderRadius:"50%",
         background:"radial-gradient(ellipse at 50% 38%, #C8E4A8 0%, #A8D088 45%, #7CAC54 100%)",
         boxShadow:"inset 0 -5px 7px rgba(72,108,44,0.55)",border:"1px solid rgba(80,100,40,0.35)"}}/>
-      <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={number} back={back} boxW={back?214:180} boxH={back?176:150} fainted={fainted}/>
+      <div style={{position:"absolute",bottom:Math.round(plat*0.28),left:0,right:0,display:"flex",justifyContent:"center"}}>
+        <PokeSprite number={number} back={back} boxW={back?300:250} boxH={back?232:200} fainted={fainted}/>
       </div>
     </div>
   );
