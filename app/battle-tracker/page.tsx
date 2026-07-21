@@ -184,6 +184,16 @@ function rollDice(n:number):{rolls:number[];successes:number}{
   const rolls=Array.from({length:p},()=>Math.floor(Math.random()*6)+1);
   return{rolls,successes:rolls.filter(r=>r>=4).length};
 }
+// Struggle: the free fallback attack used when a Pokémon has no moves it can
+// afford — either it has no moves at all, or it's out of WP to use the ones it has.
+function getStruggleMove():Move{
+  return MOVES.find(m=>m.name==="Struggle")||{
+    name:"Struggle",type:"Normal" as PokemonType,category:"Physical" as const,
+    power:"1",accuracy:"Strength + Brawl",damagePool:"Strength + 1",
+    effect:"Target Foe. No WP cost. User takes recoil equal to half damage dealt.",
+    description:"A desperate thrashing attack used when no other moves are available.",
+  } as Move;
+}
 // Compatibility: get primary status from statuses array (first non-Healthy)
 function primaryStatus(e:{statuses?:string[];status?:string}):string{
   if(e.statuses&&e.statuses.length>0)return e.statuses[0];
@@ -2835,11 +2845,12 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
                   );
                 })}
                 </div>
-                {entry.moves.length===0&&<div style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",padding:"8px 0",textShadow:"1px 1px 0 #181818"}}>No moves — press EDIT{entry.currentWill>0?" or STRUGGLE":""}</div>}
-                {entry.moves.length===0&&entry.currentWill>0&&(
-                  <button onClick={()=>{const s=MOVES.find(m=>m.name==="Struggle")||{name:"Struggle",type:"Normal" as PokemonType,category:"Physical" as const,power:"1",accuracy:"Strength + Brawl",damagePool:"Strength + 1",effect:"Target Foe. No WP cost. User takes recoil equal to half damage dealt.",description:"A desperate thrashing attack used when no other moves are available."} as Move;setMovePopup(s);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 6px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",width:"100%",boxShadow:"2px 2px 0 #181818"}}>
+                {entry.moves.length===0&&<div style={{fontSize:7,color:"#C8D8F8",fontFamily:"'Press Start 2P',monospace",padding:"8px 0",textShadow:"1px 1px 0 #181818"}}>No moves — press EDIT or STRUGGLE</div>}
+                {entry.moves.length>0&&entry.currentWill<=0&&<div style={{fontSize:7,color:"#F8C8C8",fontFamily:"'Press Start 2P',monospace",padding:"8px 0",textShadow:"1px 1px 0 #181818"}}>Out of WP — use STRUGGLE</div>}
+                {(entry.moves.length===0||entry.currentWill<=0)&&(
+                  <button onClick={()=>setMovePopup(getStruggleMove())} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 6px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",width:"100%",boxShadow:"2px 2px 0 #181818"}}>
                     <span style={{fontSize:8,color:"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flex:1}}>STRUGGLE</span>
-                    <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>1 WP</span>
+                    <span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>No WP cost</span>
                   </button>
                 )}
               </>
@@ -3565,7 +3576,7 @@ export default function BattleTrackerPage(){
                     )}
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
-                      onFieldPlayer&&onFieldPlayer.moves.length>0?(
+                      onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:5,height:"100%"}}>
                           {onFieldPlayer.moves.slice(0,4).map((m,i)=>{
                             const stab=onFieldPlayer.pokemon.types.includes(m.type as PokemonType);
@@ -3579,6 +3590,15 @@ export default function BattleTrackerPage(){
                               </button>
                             );
                           })}
+                        </div>
+                      ):onFieldPlayer?(
+                        <div style={{height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
+                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#888870",textAlign:"center"}}>{onFieldPlayer.moves.length===0?"No moves.":"Out of WP."}</span>
+                          <button onClick={()=>{const s=getStruggleMove();setScenePopup(s);setSceneTargetIds([]);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used STRUGGLE!`);setMenuMode("root");}}
+                            style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",boxShadow:"2px 2px 0 #181818"}}>
+                            <span style={{fontSize:8,color:"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>STRUGGLE</span>
+                            <span style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>No WP cost</span>
+                          </button>
                         </div>
                       ):(
                         <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
