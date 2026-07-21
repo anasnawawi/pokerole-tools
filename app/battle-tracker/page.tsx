@@ -18,6 +18,9 @@ const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Sta
 type AttrSet={strength:number;dexterity:number;vitality:number;special:number;insight:number};
 interface StatMod{source:string;attr:string;amount:number;appliedBy?:string;}
 interface AbilityState{name:string;active:boolean;}
+// Field-side entry hazards (Spikes/Toxic Spikes stack; Stealth Rock/Sticky Web are set-or-not).
+interface HazardSide{spikes:number;toxicSpikes:number;stealthRock:boolean;stickyWeb:boolean;}
+const EMPTY_HAZARDS:HazardSide={spikes:0,toxicSpikes:0,stealthRock:false,stickyWeb:false};
 interface BattleEntry{
   id:string; pokemon:PokemonEntry; nickname:string;
   initiative:number; currentHp:number; maxHp:number; currentWill:number; maxWill:number;
@@ -176,6 +179,136 @@ function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fai
       <div style={{position:"absolute",bottom:Math.round(plat*0.28),left:0,right:0,display:"flex",justifyContent:"center"}}>
         <PokeSprite number={number} back={back} boxW={back?300:250} boxH={back?232:200} fainted={fainted}/>
       </div>
+    </div>
+  );
+}
+// ── Battle scene FX: weather, terrain, status conditions, entry hazards ────────
+function WeatherFX({weather}:{weather:WeatherData}){
+  const name=weather.name;
+  if(name==="Rain")return<div style={{position:"absolute",inset:0,zIndex:5,pointerEvents:"none",opacity:0.55,
+    backgroundImage:"repeating-linear-gradient(115deg, rgba(200,224,255,0.9) 0px, rgba(200,224,255,0.9) 1px, transparent 1px, transparent 14px)",
+    backgroundSize:"24px 220px",animation:"fxRainFall 0.5s linear infinite"}}/>;
+  if(name==="Sunny")return<div style={{position:"absolute",inset:0,zIndex:5,pointerEvents:"none",
+    background:"radial-gradient(circle at 82% 10%, rgba(255,220,120,0.65) 0%, rgba(255,220,120,0.15) 35%, transparent 60%)",
+    animation:"fxSunPulse 2.6s ease-in-out infinite"}}/>;
+  if(name==="Sandstorm")return<div style={{position:"absolute",inset:0,zIndex:5,pointerEvents:"none",opacity:0.45,
+    backgroundImage:"repeating-linear-gradient(100deg, rgba(224,192,104,0.8) 0px, rgba(224,192,104,0.8) 2px, transparent 2px, transparent 18px)",
+    backgroundSize:"260px 100%",animation:"fxSandDrift 0.9s linear infinite"}}/>;
+  if(name==="Hail")return<div style={{position:"absolute",inset:0,zIndex:5,pointerEvents:"none",opacity:0.7,
+    backgroundImage:"radial-gradient(circle, #F8F8FF 1.5px, transparent 1.5px), radial-gradient(circle, #F8F8FF 1.5px, transparent 1.5px)",
+    backgroundSize:"36px 160px, 36px 160px",backgroundPosition:"0 0, 18px 60px",animation:"fxSnowFall 1.1s linear infinite"}}/>;
+  if(name==="Fog")return<div style={{position:"absolute",inset:0,zIndex:5,pointerEvents:"none",opacity:0.5,
+    backgroundImage:"repeating-linear-gradient(90deg, rgba(230,230,236,0.5) 0px, rgba(230,230,236,0.5) 60px, transparent 60px, transparent 140px)",
+    animation:"fxFogDrift 6s linear infinite"}}/>;
+  return null;
+}
+const TERRAIN_INFO:Record<string,{emoji:string;color:string;label:string}> = {
+  "Electric Terrain":{emoji:"⚡",color:"#F8D030",label:"ELECTRIC TERRAIN"},
+  "Grassy Terrain":{emoji:"🌿",color:"#78C850",label:"GRASSY TERRAIN"},
+  "Misty Terrain":{emoji:"🌸",color:"#EE99AC",label:"MISTY TERRAIN"},
+  "Psychic Terrain":{emoji:"🔮",color:"#F878B8",label:"PSYCHIC TERRAIN"},
+};
+function TerrainFX({terrain}:{terrain:string}){
+  const info=TERRAIN_INFO[terrain];
+  if(!info)return null;
+  return(
+    <div style={{position:"absolute",left:0,right:0,top:"44%",height:"32%",zIndex:1,pointerEvents:"none",overflow:"hidden"}}>
+      <div style={{position:"absolute",inset:0,background:`radial-gradient(ellipse at 50% 100%, ${info.color}55 0%, transparent 70%)`,animation:"fxGlowPulse 2.4s ease-in-out infinite"}}/>
+      {Array.from({length:8}).map((_,i)=>(
+        <span key={i} style={{position:"absolute",bottom:`${4+(i*13)%20}%`,left:`${(i*12.5)%100}%`,fontSize:11,opacity:0.85,
+          animation:`fxSparkFlicker ${1+(i%3)*0.3}s ease-in-out infinite`,animationDelay:`${i*0.18}s`}}>{info.emoji}</span>
+      ))}
+    </div>
+  );
+}
+function TerrainLabel({terrain}:{terrain:string}){
+  const info=TERRAIN_INFO[terrain];
+  if(!info)return null;
+  return(
+    <div style={{position:"absolute",top:"46%",left:"50%",transform:"translate(-50%,-50%)",zIndex:4,
+      background:"rgba(24,16,8,0.72)",border:`2px solid ${info.color}`,borderRadius:4,padding:"4px 10px",
+      display:"flex",alignItems:"center",gap:5,boxShadow:"0 2px 6px rgba(0,0,0,0.4)",pointerEvents:"none"}}>
+      <span style={{fontSize:12}}>{info.emoji}</span>
+      <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:info.color,textShadow:"1px 1px 0 #181818",whiteSpace:"nowrap"}}>{info.label}</span>
+    </div>
+  );
+}
+// On-sprite status particle effects — layered over a FieldMon's wrapper.
+function StatusFX({statuses}:{statuses:string[]}){
+  const sts=(statuses||[]).filter(s=>s!=="Healthy");
+  if(sts.length===0)return null;
+  return(
+    <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"visible",zIndex:6}}>
+      {sts.includes("Burned")&&(
+        <div style={{position:"absolute",bottom:"20%",left:"50%",transform:"translateX(-50%)",width:24,height:32,
+          background:"radial-gradient(ellipse at 50% 100%, #FFD850 0%, #F87018 55%, transparent 75%)",
+          borderRadius:"50% 50% 50% 50% / 60% 60% 40% 40%",animation:"fxFlameFlicker 0.5s ease-in-out infinite"}}/>
+      )}
+      {sts.includes("Frozen")&&(
+        <div style={{position:"absolute",inset:"10% 14%",background:"linear-gradient(180deg, rgba(180,232,240,0.55) 0%, rgba(120,192,224,0.35) 100%)",
+          border:"1px solid rgba(200,240,248,0.8)",borderRadius:10,animation:"fxIceShimmer 1.8s ease-in-out infinite"}}/>
+      )}
+      {sts.includes("Paralyzed")&&[0,1,2].map(i=>(
+        <span key={i} style={{position:"absolute",top:`${8+i*22}%`,left:i%2?"10%":"80%",fontSize:15,color:"#F8D030",
+          textShadow:"0 0 4px #F8D030",animation:`fxSparkFlicker ${0.5+i*0.15}s ease-in-out infinite`,animationDelay:`${i*0.12}s`}}>⚡</span>
+      ))}
+      {(sts.includes("Poisoned")||sts.includes("Badly Poisoned"))&&[0,1,2].map(i=>(
+        <div key={i} style={{position:"absolute",bottom:"8%",left:`${36+i*11}%`,width:7+i*2,height:7+i*2,borderRadius:"50%",
+          background:sts.includes("Badly Poisoned")?"rgba(112,56,248,0.8)":"rgba(160,64,160,0.75)",
+          animation:"fxBubbleRise 1.6s ease-in infinite",animationDelay:`${i*0.4}s`}}/>
+      ))}
+      {sts.includes("Asleep")&&[0,1].map(i=>(
+        <span key={i} style={{position:"absolute",top:`${2+i*10}%`,right:"10%",fontSize:12+i*3,fontWeight:700,color:"#F8F8E8",
+          textShadow:"1px 1px 0 #181818",animation:"fxZzzFloat 2.2s ease-out infinite",animationDelay:`${i*0.7}s`}}>Z</span>
+      ))}
+      {sts.includes("Confused")&&(
+        <div style={{position:"absolute",top:"0%",left:"50%",transform:"translateX(-50%)",fontSize:17,animation:"fxSwirlSpin 1.1s linear infinite"}}>💫</div>
+      )}
+      {sts.includes("Infatuated")&&[0,1].map(i=>(
+        <span key={i} style={{position:"absolute",top:"4%",left:`${38+i*16}%`,fontSize:13,color:"#FF69B4",
+          animation:"fxHeartFloat 1.8s ease-out infinite",animationDelay:`${i*0.5}s`}}>♥</span>
+      ))}
+      {sts.includes("Flinched")&&(
+        <span style={{position:"absolute",top:"-4%",left:"50%",transform:"translateX(-50%)",fontSize:16,color:"#F8F8E8",textShadow:"1px 1px 0 #181818"}}>!</span>
+      )}
+    </div>
+  );
+}
+// Compact clickable hazard badges — placed near a side's nameplate. Click cycles the stack.
+function HazardRow({hazards,onChange,align}:{hazards:HazardSide;onChange:(h:HazardSide)=>void;align:"left"|"right"}){
+  const items:{key:keyof HazardSide;label:string;active:boolean;icon:string}[]=[
+    {key:"spikes",label:hazards.spikes>0?`SPIKES ${hazards.spikes}`:"SPIKES",active:hazards.spikes>0,icon:"▲"},
+    {key:"toxicSpikes",label:hazards.toxicSpikes>0?`T.SPIKES ${hazards.toxicSpikes}`:"T.SPIKES",active:hazards.toxicSpikes>0,icon:"☠"},
+    {key:"stealthRock",label:"ROCK",active:hazards.stealthRock,icon:"⛰"},
+    {key:"stickyWeb",label:"WEB",active:hazards.stickyWeb,icon:"🕸"},
+  ];
+  const cycle=(key:keyof HazardSide)=>{
+    const next={...hazards};
+    if(key==="spikes")next.spikes=((hazards.spikes+1)%4) as any;
+    else if(key==="toxicSpikes")next.toxicSpikes=((hazards.toxicSpikes+1)%3) as any;
+    else (next as any)[key]=!hazards[key];
+    onChange(next);
+  };
+  return(
+    <div style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:210}}>
+      {items.map(it=>(
+        <button key={it.key} onClick={()=>cycle(it.key)} title="Click to cycle"
+          style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",padding:"2px 4px",cursor:"pointer",
+            background:it.active?"#785838":"rgba(248,248,232,0.7)",color:it.active?"#F8F0D8":"#888870",
+            border:`1px solid ${it.active?"#181818":"#C8C8A8"}`}}>{it.icon} {it.label}</button>
+      ))}
+    </div>
+  );
+}
+// Small icon cluster drawn at the base of a platform showing active hazards for that side.
+function HazardMarkers({hazards}:{hazards:HazardSide}){
+  if(!hazards.spikes&&!hazards.toxicSpikes&&!hazards.stealthRock&&!hazards.stickyWeb)return null;
+  return(
+    <div style={{position:"absolute",bottom:-2,left:"50%",transform:"translateX(-50%)",display:"flex",gap:5,zIndex:1,pointerEvents:"none"}}>
+      {hazards.stickyWeb&&<span style={{fontSize:15,opacity:0.85}}>🕸</span>}
+      {Array.from({length:hazards.spikes}).map((_,i)=><span key={`sp${i}`} style={{fontSize:13,color:"#687858",textShadow:"1px 1px 0 rgba(0,0,0,0.3)"}}>▲</span>)}
+      {Array.from({length:hazards.toxicSpikes}).map((_,i)=><span key={`tx${i}`} style={{fontSize:11,color:"#A040A0"}}>●</span>)}
+      {hazards.stealthRock&&<span style={{fontSize:15}}>🪨</span>}
     </div>
   );
 }
@@ -720,7 +853,7 @@ function useDraggablePopup():{pos:{x:number;y:number};handlers:{onMouseDown:(e:R
 }
 
 // ── Move Popup ────────────────────────────────────────────────────────────────
-function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial,onEndTurn,fromPriorityPhase,onTargetsChange}:{
+function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial,onEndTurn,fromPriorityPhase,onTargetsChange,onSetHazard}:{
   move:Move;attacker:BattleEntry;allEntries:BattleEntry[];weather:WeatherData;
   onClose:()=>void;onApplyDmg:(id:string,dmg:number)=>void;
   onApplyEffect:(id:string,attr:string,amount:number,src:string,appliedBy?:string)=>void;
@@ -730,6 +863,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   onEndTurn?:()=>void;
   fromPriorityPhase?:boolean;
   onTargetsChange?:(ids:string[])=>void;
+  onSetHazard?:(side:"player"|"enemy",updater:(h:HazardSide)=>HazardSide)=>void;
 }){
   const {pos:popupPos,handlers:popupHandlers}=useDraggablePopup();
   const [targets,setTargets]=useState<string[]>(()=>{
@@ -1469,11 +1603,30 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               )}
 
               {/* Entry Hazard */}
-              {isEntryHazard&&(
-                <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#78c850"}}>
-                  ⚠️ <strong>{move.name}</strong> — Entry Hazard. Note this on the field (no automatic mechanic yet). Affects Pokémon entering the battle on that side.
-                </div>
-              )}
+              {isEntryHazard&&(()=>{
+                const key:keyof HazardSide|null=move.name==="Spikes"?"spikes":move.name==="Stealth Rock"?"stealthRock":move.name==="Toxic Spikes"?"toxicSpikes":move.name==="Sticky Web"?"stickyWeb":null;
+                const bump=(side:"player"|"enemy")=>{
+                  if(!key||!onSetHazard)return;
+                  onSetHazard(side,h=>{
+                    const next={...h};
+                    if(key==="spikes")next.spikes=Math.min(3,h.spikes+1);
+                    else if(key==="toxicSpikes")next.toxicSpikes=Math.min(2,h.toxicSpikes+1);
+                    else (next as any)[key]=true;
+                    return next;
+                  });
+                };
+                return(
+                  <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#78c850"}}>
+                    ⚠️ <strong>{move.name}</strong> — Entry Hazard. Set it on the field so it shows on the battle stage.
+                    {key&&onSetHazard&&(
+                      <div style={{display:"flex",gap:6,marginTop:6}}>
+                        <button onClick={()=>bump("enemy")} style={{padding:"4px 8px",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",fontSize:10,fontWeight:700,cursor:"pointer"}}>Set on ENEMY side</button>
+                        <button onClick={()=>bump("player")} style={{padding:"4px 8px",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",borderRadius:4,color:"#00d4aa",fontSize:10,fontWeight:700,cursor:"pointer"}}>Set on PLAYER side</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Disable / Encore / Taunt / Torment */}
               {isDisableLock&&targets.length>0&&onApplySpecial&&(
@@ -2628,11 +2781,12 @@ function AttrModBadge({mod}:{mod:number}){
   </div>;
 }
 
-function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextTurn,onDragStart,onDragOver,onDrop}:{
+function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextTurn,onDragStart,onDragOver,onDrop,onSetHazard}:{
   entry:BattleEntry;allEntries:BattleEntry[];weather:WeatherData;isActive:boolean;
   onUpdate:(id:string,u:Partial<BattleEntry>)=>void;onRemove:(id:string)=>void;
   onNextTurn?:()=>void;
   onDragStart?:()=>void;onDragOver?:(e:React.DragEvent)=>void;onDrop?:()=>void;
+  onSetHazard?:(side:"player"|"enemy",updater:(h:HazardSide)=>HazardSide)=>void;
 }){
   const [movePopup,setMovePopup]=useState<Move|null>(null);
   const [showEditMoves,setShowEditMoves]=useState(false);
@@ -2659,7 +2813,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 
   return(
     <>
-      {movePopup&&<MovePopup move={movePopup} attacker={entry} allEntries={allEntries} weather={weather} onClose={()=>setMovePopup(null)} onApplyDmg={applyDmg} onApplyEffect={applyEffect} onIncrementAction={incrementAction} onSpendWP={spendWP} onApplySpecial={(id,u)=>onUpdate(id,u)} onEndTurn={onNextTurn}/>}
+      {movePopup&&<MovePopup move={movePopup} attacker={entry} allEntries={allEntries} weather={weather} onClose={()=>setMovePopup(null)} onApplyDmg={applyDmg} onApplyEffect={applyEffect} onIncrementAction={incrementAction} onSpendWP={spendWP} onApplySpecial={(id,u)=>onUpdate(id,u)} onEndTurn={onNextTurn} onSetHazard={onSetHazard}/>}
       {showCapture&&<CapturePopup allEntries={allEntries} defaultTargetId={entry.id} onClose={()=>setShowCapture(false)}/>}
       {showMega&&<MegaEvolutionPopup entry={entry} allEntries={allEntries} onClose={()=>setShowMega(false)} onApply={onUpdate}/>}
       {showDynamax&&<DynamaxPopup entry={entry} onClose={()=>setShowDynamax(false)} onApply={onUpdate}/>}
@@ -3083,8 +3237,10 @@ export default function BattleTrackerPage(){
   const [scenePopup,setScenePopup]=useState<Move|null>(null);
   const [sceneTargetIds,setSceneTargetIds]=useState<string[]>([]);
   const [showAddModal,setShowAddModal]=useState(false);
+  const [hazards,setHazards]=useState<{player:HazardSide;enemy:HazardSide}>(()=>loadFromStorage("bt_hazards",{player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS}));
 
   useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
+  useEffect(()=>{saveToStorage("bt_hazards",hazards);},[hazards]);
 
   // Sync with GM Screen battle tracker (and other tabs) via storage events
   useEffect(()=>{
@@ -3230,7 +3386,7 @@ export default function BattleTrackerPage(){
     const msg=isMajor?"Battle ended! Surviving party Pokémon gained +1 Loyalty.":"Battle ended.";
     alert(msg);
     // Clear battle entries
-    setEntries([]);setTurn(0);setRound(1);setBattleType("default");
+    setEntries([]);setTurn(0);setRound(1);setBattleType("default");setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});
   },[battleType,entries]);
   const remove=useCallback((id:string)=>setEntries(prev=>prev.filter(e=>e.id!==id)),[]);
   const applyEOR=(id:string,hp:number)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp+hp)}:e));
@@ -3366,7 +3522,7 @@ export default function BattleTrackerPage(){
           ].map(b=>(
             <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",background:"#E8E8D0",color:"#181818",...b.style}}>{b.label}</button>
           ))}
-          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);}}} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
+          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}}} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
           <button onClick={rollAllIni} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
           <button onClick={()=>setShowPriority(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}} title="Priority phase">⚡</button>
           <button onClick={()=>setShowEOR(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D88018"}} title="End of Round">EOR</button>
@@ -3422,7 +3578,7 @@ export default function BattleTrackerPage(){
             )}
           </div>
           <div style={{padding:"6px 8px",borderTop:"2px solid #181818",flexShrink:0}}>
-            <button onClick={()=>setEntries([])} style={{width:"100%",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",color:"#D82808",padding:"5px",fontSize:8,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>CLEAR ALL</button>
+            <button onClick={()=>{setEntries([]);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}} style={{width:"100%",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",color:"#D82808",padding:"5px",fontSize:8,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>CLEAR ALL</button>
           </div>
         </div>
 
@@ -3469,8 +3625,17 @@ export default function BattleTrackerPage(){
                 <div style={{position:"absolute",left:0,right:0,top:"48%",height:22,zIndex:1,
                   backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='22' viewBox='0 0 40 22'%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8 L40,22 L0,22 Z' fill='%2378A848'/%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8' fill='none' stroke='%235C8834' stroke-width='0.75'/%3E%3C/svg%3E\")",
                   backgroundRepeat:"repeat-x",backgroundSize:"40px 22px",backgroundPosition:"bottom",pointerEvents:"none"}}/>
-                {/* Enemy nameplate — top-left */}
-                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:16,left:16,zIndex:3}}><SceneNameplate entry={onFieldEnemy} enemy onClick={()=>setDrawerId(onFieldEnemy.id)}/></div>}
+                {/* Weather + terrain FX — scoped to the stage */}
+                <TerrainFX terrain={terrain}/>
+                <WeatherFX weather={weather}/>
+                <TerrainLabel terrain={terrain}/>
+                {/* Enemy nameplate — top-left, with that side's field hazards below it */}
+                {mounted&&onFieldEnemy&&(
+                  <div style={{position:"absolute",top:16,left:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
+                    <SceneNameplate entry={onFieldEnemy} enemy onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                    <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
+                  </div>
+                )}
                 {/* Bench row — every other opponent in the tracker, faded, click to focus */}
                 {mounted&&benchEnemies.length>0&&(
                   <div style={{position:"absolute",top:96,left:16,zIndex:3,display:"flex",gap:5,flexWrap:"wrap",maxWidth:200}}>
@@ -3487,14 +3652,29 @@ export default function BattleTrackerPage(){
                 )}
                 {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
                 {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
-                  <div style={{filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
+                  <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
                     <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                    <StatusFX statuses={onFieldEnemy.statuses}/>
+                    <HazardMarkers hazards={hazards.enemy}/>
                   </div>
                 </div>}
                 {/* Player mon — lower-left (back sprite) */}
-                {mounted&&onFieldPlayer&&<div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}><FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)}/></div>}
-                {/* Player nameplate — lower-right */}
-                {mounted&&onFieldPlayer&&<div style={{position:"absolute",bottom:"9%",right:24,zIndex:3}}><SceneNameplate entry={onFieldPlayer} onClick={()=>setDrawerId(onFieldPlayer.id)}/></div>}
+                {mounted&&onFieldPlayer&&(
+                  <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                    <div style={{position:"relative"}}>
+                      <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                      <StatusFX statuses={onFieldPlayer.statuses}/>
+                      <HazardMarkers hazards={hazards.player}/>
+                    </div>
+                  </div>
+                )}
+                {/* Player nameplate — lower-right, with that side's field hazards above it */}
+                {mounted&&onFieldPlayer&&(
+                  <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                    <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
+                    <SceneNameplate entry={onFieldPlayer} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                  </div>
+                )}
 
                 {/* POKéMON switch overlay */}
                 {menuMode==="pokemon"&&(
@@ -3642,7 +3822,8 @@ export default function BattleTrackerPage(){
               <div style={{position:"absolute",inset:0,zIndex:20,background:"rgba(24,16,8,0.6)",display:"flex",justifyContent:"flex-end"}} onClick={()=>setDrawerId(null)}>
                 <div onClick={ev=>ev.stopPropagation()} style={{height:"100%",overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:8}}>
                   <button onClick={()=>setDrawerId(null)} style={{alignSelf:"flex-end",fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"4px 8px",cursor:"pointer",color:"#D82808"}}>CLOSE ✕</button>
-                  <BattleCard entry={e} allEntries={entries} weather={weather} isActive={activeEntry?.id===e.id} onUpdate={upd} onRemove={(id)=>{remove(id);setDrawerId(null);}} onNextTurn={nextTurn} onDragStart={()=>{}} onDragOver={()=>{}} onDrop={()=>{}}/>
+                  <BattleCard entry={e} allEntries={entries} weather={weather} isActive={activeEntry?.id===e.id} onUpdate={upd} onRemove={(id)=>{remove(id);setDrawerId(null);}} onNextTurn={nextTurn} onDragStart={()=>{}} onDragOver={()=>{}} onDrop={()=>{}}
+                    onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               </div>
             );
@@ -3653,7 +3834,8 @@ export default function BattleTrackerPage(){
             <MovePopup move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
               onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
               onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
-              onTargetsChange={setSceneTargetIds}/>
+              onTargetsChange={setSceneTargetIds}
+              onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
           )}
         </div>
       </div>
