@@ -1179,8 +1179,14 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
             if(react?.resolved)return null;
             return(
               <div key={`react-${tid}`} style={{background:"rgba(168,64,160,0.06)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
-                <div style={{fontSize:10,color:"#a040a0",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>
-                  ⚡ {t.nickname||t.pokemon.name} Reaction {reactionUsed?"(Reaction used this round)":hasWP?"(costs 1 WP)":"(no WP)"}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <div style={{fontSize:10,color:"#a040a0",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",flex:1}}>
+                    ⚡ {t.nickname||t.pokemon.name} Reaction {reactionUsed?"(Reaction used this round)":hasWP?"(costs 1 WP)":"(no WP)"}
+                  </div>
+                  {react&&!react.resolved&&!react.clashOutcome&&(
+                    <button onClick={()=>setDefReactions(p=>{const n={...p};delete n[tid];return n;})}
+                      style={{padding:"3px 8px",borderRadius:4,fontSize:9,fontWeight:700,cursor:"pointer",background:"transparent",border:"1px solid #5a608060",color:"#8b90a8",flexShrink:0}}>← Change reaction</button>
+                  )}
                 </div>
                 {!reactionUsed&&hasWP&&!react&&(
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -1211,7 +1217,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                         <div style={{fontSize:9,color:"#5a6080",marginBottom:4}}>Pick counter move ({t.nickname||t.pokemon.name}):</div>
                         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                           {clashMoves.map((m,i)=>(
-                            <button key={i} onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],move:m,roll:undefined}}))} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:3,border:`1px solid ${react.move?.name===m.name?"#f08030":"#3a4060"}`,background:react.move?.name===m.name?"rgba(240,128,48,0.15)":"#13151f",cursor:"pointer",fontSize:10}}>
+                            <button key={i} onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],move:m,roll:undefined}}))} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:3,border:`1px solid ${react.move?.name===m.name?"#f08030":"#3a4060"}`,background:react.move?.name===m.name?"rgba(240,128,48,0.15)":"#13151f",color:react.move?.name===m.name?"#f08030":"#e8eaf0",cursor:"pointer",fontSize:10}}>
                               <TypeBadge type={m.type as PokemonType} small/>{m.name}
                             </button>
                           ))}
