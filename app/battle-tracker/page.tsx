@@ -710,7 +710,7 @@ function useDraggablePopup():{pos:{x:number;y:number};handlers:{onMouseDown:(e:R
 }
 
 // ── Move Popup ────────────────────────────────────────────────────────────────
-function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial,onEndTurn,fromPriorityPhase}:{
+function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial,onEndTurn,fromPriorityPhase,onTargetsChange}:{
   move:Move;attacker:BattleEntry;allEntries:BattleEntry[];weather:WeatherData;
   onClose:()=>void;onApplyDmg:(id:string,dmg:number)=>void;
   onApplyEffect:(id:string,attr:string,amount:number,src:string,appliedBy?:string)=>void;
@@ -719,12 +719,14 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   onApplySpecial?:(id:string,u:Partial<BattleEntry>)=>void;
   onEndTurn?:()=>void;
   fromPriorityPhase?:boolean;
+  onTargetsChange?:(ids:string[])=>void;
 }){
   const {pos:popupPos,handlers:popupHandlers}=useDraggablePopup();
   const [targets,setTargets]=useState<string[]>(()=>{
     if(moveTargetsSelf(move)&&!moveSelfDestructsAll(move)&&!moveIsTransform(move))return[attacker.id];
     return[];
   });
+  useEffect(()=>{onTargetsChange?.(targets);},[targets]); // eslint-disable-line react-hooks/exhaustive-deps
   const [accResult,setAccResult]=useState<{rolls:number[];successes:number}|null>(null);
   const [dmgResults,setDmgResults]=useState<Record<string,{rolls:number[];successes:number}>>({});
   const [applied,setApplied]=useState<Set<string>>(new Set());
@@ -3068,6 +3070,7 @@ export default function BattleTrackerPage(){
   const [sceneMsg,setSceneMsg]=useState<string>("");
   const [drawerId,setDrawerId]=useState<string|null>(null);
   const [scenePopup,setScenePopup]=useState<Move|null>(null);
+  const [sceneTargetIds,setSceneTargetIds]=useState<string[]>([]);
   const [showAddModal,setShowAddModal]=useState(false);
 
   useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
@@ -3098,23 +3101,40 @@ export default function BattleTrackerPage(){
   const activeEntry=sorted[turn%Math.max(1,sorted.length)];
 
   // ── On-field combatants for the battle scene ────────────────────────────────
-  // Player side = back sprite (bottom-left); everything else counts as the "enemy"
-  // front sprite (top-right). Falls back to the highest-initiative living mon per side.
-  const pickField=(side:"player"|"enemy")=>{
-    const living=sorted.filter(e=>side==="player"?e.side==="player":e.side!=="player");
-    if(activeEntry&&living.some(e=>e.id===activeEntry.id))return activeEntry;
-    return living.find(e=>e.currentHp>0)||living[0]||null;
-  };
+  // Player side = back sprite (bottom-left), always tracks whichever player mon is
+  // currently active (its turn) — falling back to a manual pick / first living player
+  // mon only while it isn't a player mon's turn.
   const onFieldPlayer=useMemo(()=>{
+    if(activeEntry&&activeEntry.side==="player"&&activeEntry.currentHp>0)return activeEntry;
     const chosen=scenePlayerId?entries.find(e=>e.id===scenePlayerId&&e.side==="player"):null;
-    return chosen||pickField("player");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if(chosen)return chosen;
+    return sorted.find(e=>e.side==="player"&&e.currentHp>0)||sorted.find(e=>e.side==="player")||null;
   },[scenePlayerId,entries,sorted,activeEntry]);
-  const onFieldEnemy=useMemo(()=>{
+
+  // Opponent side: every non-player combatant is rendered (faded) as a bench row; the
+  // "focused" one is shown full-size on the platform. Focus priority: a move target
+  // currently selected in the FIGHT popup > a manual bench/POKéMON-menu pick (cleared
+  // each turn) > the next enemy up in turn order (the current one if it's already an
+  // enemy's turn) > fallback.
+  const oppEntries=useMemo(()=>sorted.filter(e=>e.side!=="player"),[sorted]);
+  const nextEnemyInOrder=useMemo(()=>{
+    const n=sorted.length;
+    if(n===0)return null;
+    for(let i=0;i<n;i++){const e=sorted[(turn+i)%n];if(e.side!=="player"&&e.currentHp>0)return e;}
+    for(let i=0;i<n;i++){const e=sorted[(turn+i)%n];if(e.side!=="player")return e;}
+    return null;
+  },[sorted,turn]);
+  const focusedEnemy=useMemo(()=>{
+    const targeted=sceneTargetIds.map(id=>entries.find(e=>e.id===id)).filter((e):e is BattleEntry=>!!e&&e.side!=="player");
+    if(targeted.length>0)return targeted[0];
     const chosen=sceneEnemyId?entries.find(e=>e.id===sceneEnemyId&&e.side!=="player"):null;
-    return chosen||pickField("enemy");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[sceneEnemyId,entries,sorted,activeEntry]);
+    if(chosen)return chosen;
+    if(nextEnemyInOrder)return nextEnemyInOrder;
+    return oppEntries.find(e=>e.currentHp>0)||oppEntries[0]||null;
+  },[sceneTargetIds,nextEnemyInOrder,sceneEnemyId,entries,oppEntries]);
+  const onFieldEnemy=focusedEnemy;
+  const focusedTargetIdSet=useMemo(()=>new Set(sceneTargetIds),[sceneTargetIds]);
+  const benchEnemies=useMemo(()=>oppEntries.filter(e=>e.id!==focusedEnemy?.id),[oppEntries,focusedEnemy]);
 
   // MovePopup handlers at the scene level (mirror BattleCard's local versions).
   const sApplyDmg=(tid:string,dmg:number)=>setEntries(prev=>prev.map(e=>e.id===tid?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e));
@@ -3214,7 +3234,7 @@ export default function BattleTrackerPage(){
   };
 
   const prevTurn=()=>{
-    setSceneMsg("");setMenuMode("root");
+    setSceneMsg("");setMenuMode("root");setSceneEnemyId(null);setSceneTargetIds([]);
     const prev=(turn-1+Math.max(1,sorted.length))%Math.max(1,sorted.length);
     setTurn(prev);
     // Re-activate the previous entry
@@ -3224,7 +3244,7 @@ export default function BattleTrackerPage(){
   };
 
   const nextTurn=()=>{
-    setSceneMsg("");setMenuMode("root");
+    setSceneMsg("");setMenuMode("root");setSceneEnemyId(null);setSceneTargetIds([]);
     if(activeEntry){
       setEntries(prev=>prev.map(e=>{
         if(e.id!==activeEntry.id)return e;
@@ -3434,8 +3454,26 @@ export default function BattleTrackerPage(){
               <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
                 {/* Enemy nameplate — top-left */}
                 {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:16,left:16,zIndex:3}}><SceneNameplate entry={onFieldEnemy} enemy onClick={()=>setDrawerId(onFieldEnemy.id)}/></div>}
-                {/* Enemy mon — upper-right */}
-                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}><FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)}/></div>}
+                {/* Bench row — every other opponent in the tracker, faded, click to focus */}
+                {mounted&&benchEnemies.length>0&&(
+                  <div style={{position:"absolute",top:96,left:16,zIndex:3,display:"flex",gap:5,flexWrap:"wrap",maxWidth:200}}>
+                    {benchEnemies.map(e=>(
+                      <button key={e.id} onClick={()=>setSceneEnemyId(e.id)} title={`${e.nickname||e.pokemon.name} — click to focus`}
+                        style={{width:34,height:34,padding:0,border:"2px solid #181818",borderRadius:6,background:"rgba(248,248,232,0.82)",cursor:"pointer",opacity:0.4,transition:"opacity .15s",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                        onMouseEnter={ev=>{(ev.currentTarget as HTMLButtonElement).style.opacity="0.85";}}
+                        onMouseLeave={ev=>{(ev.currentTarget as HTMLButtonElement).style.opacity="0.4";}}>
+                        <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={26} height={26} style={{imageRendering:"pixelated",objectFit:"contain",filter:e.currentHp<=0?"grayscale(1)":undefined}}
+                          onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
+                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
+                  <div style={{filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
+                    <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                  </div>
+                </div>}
                 {/* Player mon — lower-left (back sprite) */}
                 {mounted&&onFieldPlayer&&<div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}><FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)}/></div>}
                 {/* Player nameplate — lower-right */}
@@ -3528,7 +3566,7 @@ export default function BattleTrackerPage(){
                           {onFieldPlayer.moves.slice(0,4).map((m,i)=>{
                             const stab=onFieldPlayer.pokemon.types.includes(m.type as PokemonType);
                             return(
-                              <button key={i} onClick={()=>{setScenePopup(m);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
+                              <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
                                 style={{display:"flex",flexDirection:"column",gap:2,padding:"5px 6px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #181818",minHeight:0,overflow:"hidden"}}
                                 onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#C8D8F0";}}
                                 onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F0ECD4";}}>
@@ -3583,8 +3621,9 @@ export default function BattleTrackerPage(){
           {/* Move detail popup (from FIGHT) */}
           {mounted&&scenePopup&&onFieldPlayer&&(
             <MovePopup move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
-              onClose={()=>setScenePopup(null)} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
-              onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}/>
+              onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
+              onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
+              onTargetsChange={setSceneTargetIds}/>
           )}
         </div>
       </div>
