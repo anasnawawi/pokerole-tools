@@ -3559,7 +3559,11 @@ export default function BattleTrackerPage(){
                 </div>
                 {/* Menu / move list */}
                 <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#F8F8E8",padding:8,display:"flex"}}>
-                  <div style={{flex:1,border:"3px solid #181818",borderRadius:8,boxShadow:"inset 0 0 0 2px #A0A088",background:"#F8F8E8",padding:8}}>
+                  <div style={{flex:1,border:"3px solid #181818",borderRadius:8,boxShadow:"inset 0 0 0 2px #A0A088",background:"#F8F8E8",padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                    {menuMode!=="root"&&(
+                      <button onClick={()=>setMenuMode("root")} style={{alignSelf:"flex-start",flexShrink:0,fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"1px 1px 0 #787878",padding:"3px 7px",cursor:"pointer"}}>◀ BACK</button>
+                    )}
+                    <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0?(
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,height:"100%"}}>
@@ -3577,9 +3581,8 @@ export default function BattleTrackerPage(){
                           })}
                         </div>
                       ):(
-                        <div style={{height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+                        <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#888870"}}>No moves.</span>
-                          <button onClick={()=>setMenuMode("root")} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",padding:"4px 8px",cursor:"pointer"}}>BACK</button>
                         </div>
                       )
                     ):(
@@ -3598,6 +3601,7 @@ export default function BattleTrackerPage(){
                         ))}
                       </div>
                     )}
+                    </div>
                   </div>
                 </div>
               </div>
