@@ -62,42 +62,23 @@ interface BattleEntry{
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-// x-offsets (px) for each type in the frlg-types.png sprite strip (y≈508, each badge 32×16px)
-const TYPE_SPRITE_X: Partial<Record<PokemonType,number>> = {
-  Normal:0, Fire:34, Water:69, Ice:104, Electric:139, Grass:174,
-  Ground:209, Rock:244, Fight:279, Steel:314, Dark:350, Psychic:384,
-  Flying:418, Bug:452, Poison:487, Ghost:522, Dragon:557,
-};
-const TYPE_SPRITE_Y = 508;
-const TYPE_SPRITE_W = 32;
-const TYPE_SPRITE_H = 16;
-const TYPE_IMG_W = 632;
-const TYPE_IMG_H = 583;
-
 function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
-  const x = TYPE_SPRITE_X[type];
-  const scale = small ? 0.75 : 1;
-  if(x===undefined){
-    // Fairy type — CSS badge matching FireRed proportions
-    const isFairy = type==="Fairy";
-    return <span title={type} style={{
-      display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-      width:TYPE_SPRITE_W*scale, height:TYPE_SPRITE_H*scale,
-      background:isFairy?"linear-gradient(180deg,#F8B8F0 0%,#E898E0 60%,#D878C8 100%)":TYPE_COLORS[type]||"#888870",
-      border:"1px solid #404040",color:"#F8F8F8",
-      fontSize:Math.max(4,Math.floor(6*scale)),fontFamily:"'Press Start 2P',monospace",
-      imageRendering:"pixelated",letterSpacing:"-0.5px",textShadow:"1px 1px 0 #404040",
-    }}>{small?"FAI":"FAIRY"}</span>;
-  }
-  return <div title={type} style={{
-    display:"inline-block",flexShrink:0,
-    width: TYPE_SPRITE_W * scale,
-    height: TYPE_SPRITE_H * scale,
-    backgroundImage:"url('/assets/frlg-types.png')",
-    backgroundPosition:`-${x*scale}px -${TYPE_SPRITE_Y*scale}px`,
-    backgroundSize:`${TYPE_IMG_W*scale}px ${TYPE_IMG_H*scale}px`,
-    imageRendering:"pixelated",
-  }}/>;
+  const bg = TYPE_COLORS[type]||"#888870";
+  // Fairy gets a pink gradient; others use the flat type color
+  const background = type==="Fairy"
+    ? "linear-gradient(180deg,#F8B8F0 0%,#E898E0 60%,#D878C8 100%)"
+    : bg;
+  return <span title={type} style={{
+    display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+    padding: small ? "0 3px" : "0 5px",
+    height: small ? 11 : 15,
+    background,
+    border:"1px solid #282828",color:"#F8F8F8",
+    fontSize: small ? 5 : 7,
+    fontFamily:"'Press Start 2P',monospace",
+    letterSpacing:"-0.5px",textShadow:"1px 1px 0 #282828",
+    whiteSpace:"nowrap",
+  }}>{type.toUpperCase()}</span>;
 }
 
 // Status condition sprites from frlg-status.png (128×96)
@@ -885,7 +866,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
       <div {...popupHandlers} style={{background:"#F8F8E8",border:"3px solid #181818",width:520,maxWidth:"95vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"6px 6px 0 #787878",transform:`translate(${popupPos.x}px,${popupPos.y}px)`,cursor:"default",userSelect:"none"}}>
         {/* Header — FireRed dialogue box style */}
         <div style={{padding:"8px 12px",background:"#E8E8D0",borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:6,flexShrink:0,cursor:"move"}}>
-          <span style={{fontSize:7,color:"#F8F8E8",background:TYPE_COLORS[move.type as PokemonType]||"#888",border:"1px solid #181818",padding:"1px 5px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{move.type.slice(0,3).toUpperCase()}</span>
+          <TypeBadge type={move.type as PokemonType}/>
           <span style={{fontSize:7,fontWeight:700,color:move.category==="Physical"?"#B85808":move.category==="Special"?"#2848A8":"#187028",background:move.category==="Physical"?"#F8D8B8":move.category==="Special"?"#C8D8F8":"#C8F0C8",border:"1px solid #181818",padding:"1px 5px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{move.category.slice(0,4).toUpperCase()}</span>
           {stab&&<span style={{fontSize:7,color:"#807008",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>STAB</span>}
           {(move.priority??0)>0&&<span style={{fontSize:7,color:"#187028",background:"#C8F0C8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>P+{move.priority}</span>}
@@ -2685,7 +2666,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
           <select value={entry.side} onChange={e=>upd({side:e.target.value as BattleEntry["side"]})} style={{background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.3)",color:entry.side==="player"?"#A8C8F8":"#F8A8A8",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
             <option value="player">PLAYER</option><option value="enemy">ENEMY</option><option value="neutral">NEUT</option>
           </select>
-          {(entry.typeOverride||entry.pokemon.types).map(t=><span key={t} style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:TYPE_COLORS[t as PokemonType]||"#888",padding:"1px 4px",border:"1px solid #181818",fontFamily:"'Press Start 2P',monospace"}}>{t.slice(0,3).toUpperCase()}</span>)}
+          {(entry.typeOverride||entry.pokemon.types).map(t=><TypeBadge key={t} type={t as PokemonType}/>)}
           {entry.side==="enemy"&&<button onClick={()=>setShowCapture(true)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title="Capture">CATCH</button>}
           {entry.isMegaEvolved&&<button onClick={()=>setShowMega(true)} style={{background:"#E8A840",border:"1px solid #181818",color:"#181818",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title="Mega Evolved">MEGA</button>}
           {entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"#E84040",border:"1px solid #181818",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title={`Dynamaxed — ${entry.dynamaxRoundsLeft} rounds left`}>MAX{entry.dynamaxRoundsLeft}</button>}
@@ -2779,7 +2760,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
                       onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F0ECD4";}}>
                       <span style={{fontSize:8,color:"#181818",fontFamily:"'Press Start 2P',monospace",fontWeight:700,lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{m.name}</span>
                       <div style={{display:"flex",gap:2,alignItems:"center",marginTop:1}}>
-                        <span style={{fontSize:6,color:"#F8F8E8",background:typeColor,border:"1px solid #181818",padding:"0 3px",fontFamily:"'Press Start 2P',monospace"}}>{m.type.slice(0,3).toUpperCase()}</span>
+                        <TypeBadge type={m.type as PokemonType} small/>
                         {stab&&<span style={{fontSize:6,color:"#807008",fontFamily:"'Press Start 2P',monospace"}}>★</span>}
                         {(m.priority??0)>0&&<span style={{fontSize:6,color:"#18A870",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}
                         {abilMods.bonus>0&&<span style={{fontSize:6,color:"#2858C0",fontFamily:"'Press Start 2P',monospace"}}>+{abilMods.bonus}</span>}
@@ -2938,7 +2919,7 @@ function SearchBar({onAdd}:{onAdd:(p:PokemonEntry)=>void}){
               onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background="transparent"}>
               <span style={{fontSize:7,color:"#888870",width:26,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
               <span style={{fontSize:9,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-              {p.types.slice(0,2).map(t=><span key={t} style={{fontSize:6,color:"#F8F8E8",background:TYPE_COLORS[t as PokemonType]||"#888",border:"1px solid #181818",padding:"0 3px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{t.slice(0,3).toUpperCase()}</span>)}
+              {p.types.slice(0,2).map(t=><TypeBadge key={t} type={t as PokemonType} small/>)}
               <span style={{fontSize:7,color:RANK_COLORS[p.suggestedRank],flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{p.suggestedRank.slice(0,3).toUpperCase()}</span>
             </div>
           ))}
