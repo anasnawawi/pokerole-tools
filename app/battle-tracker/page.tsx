@@ -1221,7 +1221,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                         <div style={{fontSize:9,color:"#5a6080",marginBottom:4}}>Pick counter move ({t.nickname||t.pokemon.name}):</div>
                         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                           {clashMoves.map((m,i)=>(
-                            <button key={i} onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],move:m,roll:undefined}}))} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:3,border:`1px solid ${react.move?.name===m.name?"#f08030":"#3a4060"}`,background:react.move?.name===m.name?"rgba(240,128,48,0.15)":"#13151f",color:react.move?.name===m.name?"#f08030":"#e8eaf0",cursor:"pointer",fontSize:10}}>
+                            <button key={i} onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],move:m,roll:undefined}}))} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:3,border:`1px solid ${react.move?.name===m.name?"#f08030":"#c8c8d0"}`,background:react.move?.name===m.name?"rgba(240,128,48,0.15)":"#ffffff",color:react.move?.name===m.name?"#f08030":"#3a3a45",cursor:"pointer",fontSize:10}}>
                               <TypeBadge type={m.type as PokemonType} small/>{m.name}
                             </button>
                           ))}
