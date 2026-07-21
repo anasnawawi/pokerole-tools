@@ -3229,7 +3229,6 @@ export default function BattleTrackerPage(){
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
-  const [scenePlayerId,setScenePlayerId]=useState<string|null>(null);
   const [sceneEnemyId,setSceneEnemyId]=useState<string|null>(null);
   const [menuMode,setMenuMode]=useState<"root"|"fight"|"bag"|"pokemon">("root");
   const [sceneMsg,setSceneMsg]=useState<string>("");
@@ -3268,40 +3267,34 @@ export default function BattleTrackerPage(){
   const activeEntry=sorted[turn%Math.max(1,sorted.length)];
 
   // ── On-field combatants for the battle scene ────────────────────────────────
-  // Player side = back sprite (bottom-left), always tracks whichever player mon is
-  // currently active (its turn) — falling back to a manual pick / first living player
-  // mon only while it isn't a player mon's turn.
-  const onFieldPlayer=useMemo(()=>{
-    if(activeEntry&&activeEntry.side==="player"&&activeEntry.currentHp>0)return activeEntry;
-    const chosen=scenePlayerId?entries.find(e=>e.id===scenePlayerId&&e.side==="player"):null;
-    if(chosen)return chosen;
-    return sorted.find(e=>e.side==="player"&&e.currentHp>0)||sorted.find(e=>e.side==="player")||null;
-  },[scenePlayerId,entries,sorted,activeEntry]);
+  // "User side" (back sprite, bottom-left) = whoever's turn it currently is — ANY
+  // combatant, regardless of player/enemy/neutral tag. No manual override: it's
+  // strictly turn-driven, so it always reflects the current actor.
+  const onFieldPlayer=activeEntry||null;
 
-  // Opponent side: every non-player combatant is rendered (faded) as a bench row; the
-  // "focused" one is shown full-size on the platform. Focus priority: a move target
-  // currently selected in the FIGHT popup > a manual bench/POKéMON-menu pick (cleared
-  // each turn) > the next enemy up in turn order (the current one if it's already an
-  // enemy's turn) > fallback.
-  const oppEntries=useMemo(()=>sorted.filter(e=>e.side!=="player"),[sorted]);
-  const nextEnemyInOrder=useMemo(()=>{
+  // "Other side" (front sprite, top-right) = the focused counterpart. Every other
+  // combatant is rendered (faded) as a bench row; the focused one is shown full-size.
+  // Focus priority: a move target currently selected in the FIGHT popup > a manual
+  // POKéMON-menu pick (cleared each turn) > the next combatant up after the active
+  // one in turn order > fallback to any other living entry.
+  const otherEntries=useMemo(()=>sorted.filter(e=>e.id!==activeEntry?.id),[sorted,activeEntry]);
+  const nextOtherInOrder=useMemo(()=>{
     const n=sorted.length;
-    if(n===0)return null;
-    for(let i=0;i<n;i++){const e=sorted[(turn+i)%n];if(e.side!=="player"&&e.currentHp>0)return e;}
-    for(let i=0;i<n;i++){const e=sorted[(turn+i)%n];if(e.side!=="player")return e;}
-    return null;
+    if(n<2)return null;
+    for(let i=1;i<n;i++){const e=sorted[(turn+i)%n];if(e.currentHp>0)return e;}
+    return sorted[(turn+1)%n];
   },[sorted,turn]);
-  const focusedEnemy=useMemo(()=>{
-    const targeted=sceneTargetIds.map(id=>entries.find(e=>e.id===id)).filter((e):e is BattleEntry=>!!e&&e.side!=="player");
+  const focusedOther=useMemo(()=>{
+    const targeted=sceneTargetIds.map(id=>entries.find(e=>e.id===id)).filter((e):e is BattleEntry=>!!e&&e.id!==activeEntry?.id);
     if(targeted.length>0)return targeted[0];
-    const chosen=sceneEnemyId?entries.find(e=>e.id===sceneEnemyId&&e.side!=="player"):null;
+    const chosen=sceneEnemyId?entries.find(e=>e.id===sceneEnemyId&&e.id!==activeEntry?.id):null;
     if(chosen)return chosen;
-    if(nextEnemyInOrder)return nextEnemyInOrder;
-    return oppEntries.find(e=>e.currentHp>0)||oppEntries[0]||null;
-  },[sceneTargetIds,nextEnemyInOrder,sceneEnemyId,entries,oppEntries]);
-  const onFieldEnemy=focusedEnemy;
+    if(nextOtherInOrder)return nextOtherInOrder;
+    return otherEntries.find(e=>e.currentHp>0)||otherEntries[0]||null;
+  },[sceneTargetIds,nextOtherInOrder,sceneEnemyId,entries,otherEntries,activeEntry]);
+  const onFieldEnemy=focusedOther;
   const focusedTargetIdSet=useMemo(()=>new Set(sceneTargetIds),[sceneTargetIds]);
-  const benchEnemies=useMemo(()=>oppEntries.filter(e=>e.id!==focusedEnemy?.id),[oppEntries,focusedEnemy]);
+  const benchEnemies=useMemo(()=>otherEntries.filter(e=>e.id!==focusedOther?.id),[otherEntries,focusedOther]);
 
   // MovePopup handlers at the scene level (mirror BattleCard's local versions).
   const sApplyDmg=(tid:string,dmg:number)=>setEntries(prev=>prev.map(e=>e.id===tid?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e));
@@ -3676,33 +3669,38 @@ export default function BattleTrackerPage(){
                   </div>
                 )}
 
-                {/* POKéMON switch overlay */}
+                {/* POKéMON overlay — whoever's turn it is is always shown automatically (no send
+                    needed); SEND here just picks who's focused in the "other" spotlight slot. */}
                 {menuMode==="pokemon"&&(
                   <div style={{position:"absolute",inset:0,zIndex:8,background:"rgba(24,16,8,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
                     <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:12,maxWidth:520,width:"100%",maxHeight:"90%",overflowY:"auto"}}>
                       <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
-                        <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#181818",flex:1}}>SEND / SWITCH</span>
+                        <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#181818",flex:1}}>ALL COMBATANTS</span>
                         <button onClick={()=>setMenuMode("root")} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",padding:"3px 6px",cursor:"pointer"}}>BACK</button>
                       </div>
-                      {(["player","enemy"] as const).map(side=>{
-                        const list=sorted.filter(e=>side==="player"?e.side==="player":e.side!=="player");
+                      {(["player","enemy","neutral"] as const).map(side=>{
+                        const list=sorted.filter(e=>e.side===side);
                         if(list.length===0)return null;
-                        const onField=side==="player"?onFieldPlayer:onFieldEnemy;
                         return(
                           <div key={side} style={{marginBottom:8}}>
-                            <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:side==="player"?"#2858C0":"#D82808",marginBottom:4}}>{side==="player"?"◆ YOUR SIDE":"◆ OPPONENTS"}</div>
+                            <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:side==="player"?"#2858C0":side==="enemy"?"#D82808":"#888870",marginBottom:4}}>{side==="player"?"◆ YOUR SIDE":side==="enemy"?"◆ OPPONENTS":"◆ NEUTRAL"}</div>
                             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
                               {list.map(e=>{
-                                const active=onField?.id===e.id;
+                                const isActing=activeEntry?.id===e.id;
+                                const isFocused=onFieldEnemy?.id===e.id;
                                 return(
-                                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:5,background:active?"#C8D8F0":"#F0ECD4",border:`2px solid ${active?"#2858C0":"#181818"}`,padding:"3px 5px",opacity:e.currentHp<=0?0.5:1}}>
+                                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:5,background:isActing?"#F0ECD4":isFocused?"#C8D8F0":"#F0ECD4",border:`2px solid ${isActing?"#787018":isFocused?"#2858C0":"#181818"}`,padding:"3px 5px",opacity:e.currentHp<=0?0.5:1}}>
                                     <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={28} height={28} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
                                     <div style={{flex:1,minWidth:0}}>
                                       <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#181818",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(e.nickname||e.pokemon.name).toUpperCase()}</div>
                                       <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:e.currentHp/e.maxHp>0.5?"#187028":e.currentHp/e.maxHp>0.25?"#807008":"#A00808"}}>{e.currentHp}/{e.maxHp}</div>
                                     </div>
                                     <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                                      <button onClick={()=>{side==="player"?setScenePlayerId(e.id):setSceneEnemyId(e.id);setMenuMode("root");}} disabled={active} style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",background:active?"#C8C8A8":"#2858C0",color:"#F8F8E8",border:"1px solid #181818",padding:"2px 3px",cursor:active?"default":"pointer"}}>{active?"OUT":"SEND"}</button>
+                                      {isActing?(
+                                        <span style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",background:"#785818",color:"#F8F0D8",border:"1px solid #181818",padding:"2px 3px",textAlign:"center"}}>ACTING</span>
+                                      ):(
+                                        <button onClick={()=>{setSceneEnemyId(e.id);setMenuMode("root");}} disabled={isFocused} style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",background:isFocused?"#C8C8A8":"#2858C0",color:"#F8F8E8",border:"1px solid #181818",padding:"2px 3px",cursor:isFocused?"default":"pointer"}}>{isFocused?"FOCUSED":"FOCUS"}</button>
+                                      )}
                                       <button onClick={()=>{setDrawerId(e.id);setMenuMode("root");}} style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",color:"#181818",border:"1px solid #181818",padding:"2px 3px",cursor:"pointer"}}>CARD</button>
                                     </div>
                                   </div>
