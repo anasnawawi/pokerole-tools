@@ -76,11 +76,19 @@ const TYPE_IMG_H = 583;
 
 function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
   const x = TYPE_SPRITE_X[type];
-  if(x===undefined){
-    // Fairy and any unknown types fall back to CSS
-    return <span style={{display:"inline-flex",alignItems:"center",padding:small?"0 4px":"1px 6px",fontSize:small?7:9,fontWeight:700,color:"#fff",background:TYPE_COLORS[type]||"#B060C8",border:"1px solid #181818",fontFamily:"'Press Start 2P',monospace",imageRendering:"pixelated",flexShrink:0}}>{type.toUpperCase()}</span>;
-  }
   const scale = small ? 0.75 : 1;
+  if(x===undefined){
+    // Fairy type — CSS badge matching FireRed proportions
+    const isFairy = type==="Fairy";
+    return <span title={type} style={{
+      display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+      width:TYPE_SPRITE_W*scale, height:TYPE_SPRITE_H*scale,
+      background:isFairy?"linear-gradient(180deg,#F8B8F0 0%,#E898E0 60%,#D878C8 100%)":TYPE_COLORS[type]||"#888870",
+      border:"1px solid #404040",color:"#F8F8F8",
+      fontSize:Math.max(4,Math.floor(6*scale)),fontFamily:"'Press Start 2P',monospace",
+      imageRendering:"pixelated",letterSpacing:"-0.5px",textShadow:"1px 1px 0 #404040",
+    }}>{small?"FAI":"FAIRY"}</span>;
+  }
   return <div title={type} style={{
     display:"inline-block",flexShrink:0,
     width: TYPE_SPRITE_W * scale,
@@ -90,6 +98,41 @@ function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
     backgroundSize:`${TYPE_IMG_W*scale}px ${TYPE_IMG_H*scale}px`,
     imageRendering:"pixelated",
   }}/>;
+}
+
+// Status condition sprites from frlg-status.png (128×96)
+const STATUS_SPRITE_COORDS: Partial<Record<string,{x:number;y:number}>> = {
+  "Poisoned":       {x:0,  y:80},
+  "Paralyzed":      {x:32, y:80},
+  "Asleep":         {x:64, y:80},
+  "Frozen":         {x:96, y:80},
+  "Burned":         {x:0,  y:88},
+  "Badly Poisoned": {x:32, y:88},
+  "Fainted":        {x:64, y:88},
+};
+const STATUS_IMG_W=128, STATUS_IMG_H=96, STATUS_BADGE_W=32, STATUS_BADGE_H=9;
+
+function StatusBadge({status,onRemove}:{status:string;onRemove?:()=>void}){
+  const sp=STATUS_SPRITE_COORDS[status];
+  const sc=(STATUS_CONDITIONS as Record<string,any>)[status];
+  const scale=1.5;
+  return(
+    <span title={sc?.fullDesc||sc?.battleEffect||status} style={{display:"inline-flex",alignItems:"center",gap:1,flexShrink:0}}>
+      {sp?(
+        <div style={{display:"inline-block",
+          width:STATUS_BADGE_W*scale, height:STATUS_BADGE_H*scale,
+          backgroundImage:"url('/assets/frlg-status.png')",
+          backgroundPosition:`-${sp.x*scale}px -${sp.y*scale}px`,
+          backgroundSize:`${STATUS_IMG_W*scale}px ${STATUS_IMG_H*scale}px`,
+          imageRendering:"pixelated"}}/>
+      ):(
+        <span style={{fontSize:7,color:"#F8F8E8",background:sc?.color??"#888870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>
+          {status.slice(0,3).toUpperCase()}
+        </span>
+      )}
+      {onRemove&&<button onClick={onRemove} style={{background:"none",border:"none",color:"#F8D8F8",cursor:"pointer",fontSize:8,padding:"0 1px",lineHeight:1}}>×</button>}
+    </span>
+  );
 }
 function rollDice(n:number):{rolls:number[];successes:number}{
   const p=Math.max(1,n);
@@ -2685,7 +2728,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 
         {/* Status chip row */}
         <div style={{padding:"3px 7px",background:"rgba(0,0,0,0.12)",display:"flex",gap:3,alignItems:"center",flexWrap:"wrap",borderBottom:"1px solid rgba(0,0,0,0.25)"}}>
-          {(entry.statuses||[]).filter(s=>s!=="Healthy").map(s=>{const sc2=STATUS_CONDITIONS[s];return<span key={s} title={sc2?.fullDesc||sc2?.battleEffect} style={{fontSize:7,color:"#F8F8E8",background:sc2?.color??"#888870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",display:"flex",alignItems:"center",gap:2}}>{s.slice(0,3).toUpperCase()}<button onClick={()=>upd({statuses:removeStatus(entry.statuses||[],s)})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>;})}
+          {(entry.statuses||[]).filter(s=>s!=="Healthy").map(s=><StatusBadge key={s} status={s} onRemove={()=>upd({statuses:removeStatus(entry.statuses||[],s)})}/>)}
           <select onChange={e=>{if(e.target.value&&e.target.value!=="＋")upd({statuses:addStatus(entry.statuses||[],e.target.value),statusTurnsLeft:e.target.value==="Asleep"?3:entry.statusTurnsLeft});e.target.value="＋";}} defaultValue="＋"
             style={{background:"rgba(0,0,0,0.25)",border:"1px solid rgba(255,255,255,0.3)",color:"#C8D8F8",fontSize:7,padding:"1px 2px",fontFamily:"'Press Start 2P',monospace"}}>
             <option value="＋">＋</option>
@@ -3236,7 +3279,7 @@ export default function BattleTrackerPage(){
                   return(
                     <div key={e.id} style={{display:"flex",alignItems:"center",gap:2,background:"#F8F8E8",border:`2px solid ${sc2}`,padding:"2px 5px",boxShadow:"1px 1px 0 #787878"}}>
                       <span style={{fontSize:7,fontWeight:700,color:sc2,fontFamily:"'Press Start 2P',monospace"}}>{(e.nickname||e.pokemon.name).slice(0,8).toUpperCase()}</span>
-                      {sts.map(s=>{const sc=STATUS_CONDITIONS[s];return<span key={s} style={{fontSize:6,color:"#F8F8E8",background:sc?.color||"#888870",border:"1px solid #181818",padding:"0 2px",fontFamily:"'Press Start 2P',monospace"}}>{s.slice(0,3).toUpperCase()}</span>;})}
+                      {sts.map(s=><StatusBadge key={s} status={s}/>)}
                       {e.isProtected&&<span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace"}}>PROT</span>}
                       {(e.statMods||[]).length>0&&<span style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>+{e.statMods.length}m</span>}
                       <span style={{fontSize:7,color:e.currentHp/e.maxHp>0.5?"#187028":e.currentHp/e.maxHp>0.25?"#807008":"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>{e.currentHp}/{e.maxHp}</span>
