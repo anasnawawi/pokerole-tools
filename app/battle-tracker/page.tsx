@@ -3335,7 +3335,7 @@ export default function BattleTrackerPage(){
   const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
 
   return(
-    <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"url('/assets/frlg-grass-bg.png') bottom/auto 45% repeat-x, linear-gradient(180deg,#88B8E8 0%,#60A0D8 42%,#78A848 58%,#507830 100%)",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
+    <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"#181818",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
       {showAddModal&&<AddPokemonModal onAdd={(p,side)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side)} onClose={()=>setShowAddModal(false)}/>}
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
@@ -3463,6 +3463,12 @@ export default function BattleTrackerPage(){
             <>
               {/* STAGE */}
               <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
+                {/* Layer 1 — sky/ground colour gradient, scoped to the stage itself */}
+                <div style={{position:"absolute",inset:0,zIndex:0,background:"linear-gradient(180deg,#88B8E8 0%,#60A0D8 42%,#78A848 58%,#507830 100%)"}}/>
+                {/* Layer 2 — grass-tuft horizon illustration, independent of the gradient above */}
+                <div style={{position:"absolute",left:0,right:0,top:"48%",height:22,zIndex:1,
+                  backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='22' viewBox='0 0 40 22'%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8 L40,22 L0,22 Z' fill='%2378A848'/%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8' fill='none' stroke='%235C8834' stroke-width='0.75'/%3E%3C/svg%3E\")",
+                  backgroundRepeat:"repeat-x",backgroundSize:"40px 22px",backgroundPosition:"bottom",pointerEvents:"none"}}/>
                 {/* Enemy nameplate — top-left */}
                 {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:16,left:16,zIndex:3}}><SceneNameplate entry={onFieldEnemy} enemy onClick={()=>setDrawerId(onFieldEnemy.id)}/></div>}
                 {/* Bench row — every other opponent in the tracker, faded, click to focus */}
