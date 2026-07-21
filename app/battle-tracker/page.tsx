@@ -2958,37 +2958,89 @@ function CharactersSidebar({onAddPokemon}:{onAddPokemon:(pokemon:PokemonEntry,tr
   );
 }
 
-// ── Search bar ────────────────────────────────────────────────────────────────
-function SearchBar({onAdd}:{onAdd:(p:PokemonEntry)=>void}){
+// Small CSS pokéball icon — used in list rows instead of a sprite thumbnail for "Custom".
+function PokeballIcon({size=14}:{size?:number}){
+  return(
+    <div style={{width:size,height:size,borderRadius:"50%",flexShrink:0,position:"relative",
+      background:`linear-gradient(to bottom, #F83838 0%, #F83838 46%, #181818 46%, #181818 54%, #F8F8F8 54%, #F8F8F8 100%)`,
+      border:"1px solid #181818"}}>
+      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:size*0.4,height:size*0.4,borderRadius:"50%",background:"#F8F8F8",border:"1px solid #181818"}}/>
+    </div>
+  );
+}
+
+// ── Add Pokémon modal — styled after the FireRed party/Pokémon menu ────────────
+function AddPokemonModal({onAdd,onClose}:{onAdd:(p:PokemonEntry,side:"player"|"enemy"|"neutral")=>void;onClose:()=>void}){
   const [q,setQ]=useState("");
-  const [open,setOpen]=useState(false);
+  const [side,setSide]=useState<"player"|"enemy"|"neutral">("enemy");
+  const [justAdded,setJustAdded]=useState<number|null>(null);
   const filtered=useMemo(()=>{
     const ql=q.toLowerCase();
     if(!ql)return POKEMON;
     return POKEMON.filter(p=>p.name.toLowerCase().includes(ql)||String(p.number).includes(q));
   },[q]);
+  const sideColor={player:"#2858C0",enemy:"#D82808",neutral:"#686858"}[side];
+  const handleAdd=(p:PokemonEntry)=>{
+    onAdd(p,side);
+    setJustAdded(p.number);
+    setTimeout(()=>setJustAdded(cur=>cur===p.number?null:cur),500);
+  };
   return(
-    <div style={{position:"relative"}}>
-      <input type="text" placeholder="Search or click to browse all…" value={q} onChange={e=>setQ(e.target.value)}
-        onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)}
-        style={{width:"100%",background:"#F8F8E8",border:"2px solid #181818",padding:"5px 7px",color:"#181818",fontSize:9,outline:"none",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 #787878"}}/>
-      {open&&(
-        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#F8F8E8",border:"2px solid #181818",zIndex:100,maxHeight:280,overflowY:"auto",boxShadow:"3px 3px 0 #787878"}}>
-          <div onClick={()=>{onAdd(MISSINGNO);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",cursor:"pointer",borderBottom:"2px solid #181818",background:"#E8E8D0"}}>
-            <span style={{fontSize:8,color:"#807008",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>✦ Custom (blank card)</span>
-          </div>
-          {filtered.map(p=>(
-            <div key={`${p.number}-${p.name}`} onClick={()=>{onAdd(p);setQ("");setOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 7px",cursor:"pointer",borderBottom:"1px solid #C8C8A8"}}
-              onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="#C8D8F0"}
-              onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background="transparent"}>
-              <span style={{fontSize:7,color:"#888870",width:26,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
-              <span style={{fontSize:9,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-              {p.types.slice(0,2).map(t=><TypeBadge key={t} type={t as PokemonType} small/>)}
-              <span style={{fontSize:7,color:RANK_COLORS[p.suggestedRank],flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{p.suggestedRank.slice(0,3).toUpperCase()}</span>
-            </div>
-          ))}
+    <div style={{position:"fixed",inset:0,zIndex:200,background:"rgba(8,16,8,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+      <div onClick={ev=>ev.stopPropagation()} style={{width:420,maxWidth:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",
+        background:"linear-gradient(160deg,#5098A0 0%,#307078 55%,#204C54 100%)",border:"3px solid #0C2024",borderRadius:8,
+        boxShadow:"4px 6px 0 rgba(0,0,0,0.45)",padding:10,gap:8,fontFamily:"'Press Start 2P',monospace"}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:11,color:"#F8F8E8",textShadow:"2px 2px 0 #0C2024",flex:1}}>ADD POKéMON</span>
+          <button onClick={onClose} style={{width:20,height:20,background:"#F8F8E8",border:"2px solid #0C2024",color:"#181818",cursor:"pointer",fontSize:10,lineHeight:1}}>✕</button>
         </div>
-      )}
+        {/* Side selector */}
+        <div style={{display:"flex",gap:5}}>
+          {(["player","enemy","neutral"] as const).map(s=>{
+            const c={player:"#2858C0",enemy:"#D82808",neutral:"#686858"}[s];
+            const active=side===s;
+            return(
+              <button key={s} onClick={()=>setSide(s)} style={{flex:1,padding:"6px 4px",fontSize:8,fontFamily:"'Press Start 2P',monospace",
+                background:active?c:"rgba(248,248,232,0.85)",color:active?"#F8F8E8":c,border:`2px solid ${active?"#0C2024":c}`,
+                boxShadow:active?"inset 0 0 0 1px rgba(255,255,255,0.4)":"1px 1px 0 rgba(0,0,0,0.3)",cursor:"pointer"}}>
+                {s==="player"?"◆ PLAYER":s==="enemy"?"◆ ENEMY":"◆ NEUTRAL"}
+              </button>
+            );
+          })}
+        </div>
+        {/* Search input */}
+        <input type="text" autoFocus placeholder="Search Pokémon…" value={q} onChange={e=>setQ(e.target.value)}
+          style={{width:"100%",background:"#F8F8E8",border:"2px solid #0C2024",padding:"6px 8px",color:"#181818",fontSize:9,outline:"none",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 rgba(0,0,0,0.3)"}}/>
+        {/* Results list — cream FireRed rows */}
+        <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
+          <div onClick={()=>handleAdd(MISSINGNO)} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 8px",cursor:"pointer",borderBottom:"2px solid #181818",background:justAdded===MISSINGNO.number?"#B8F0B8":"#E8E8D0"}}
+            onMouseEnter={e=>{if(justAdded!==MISSINGNO.number)(e.currentTarget as HTMLDivElement).style.background="#DCDCC0";}}
+            onMouseLeave={e=>{if(justAdded!==MISSINGNO.number)(e.currentTarget as HTMLDivElement).style.background="#E8E8D0";}}>
+            <PokeballIcon/>
+            <span style={{fontSize:8,color:"#807008",fontWeight:700}}>Custom (blank card)</span>
+          </div>
+          {filtered.map(p=>{
+            const added=justAdded===p.number;
+            return(
+              <div key={`${p.number}-${p.name}`} onClick={()=>handleAdd(p)} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #C8C8A8",background:added?"#B8F0B8":"transparent"}}
+                onMouseEnter={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background="#C8D8F0";}}
+                onMouseLeave={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background="transparent";}}>
+                <img src={`/sprites/pokemon/${p.number}.png`} alt="" width={24} height={24} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}} onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
+                <span style={{fontSize:7,color:"#888870",width:26,flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
+                <span style={{fontSize:9,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                {p.types.slice(0,2).map(t=><TypeBadge key={t} type={t as PokemonType} small/>)}
+                <span style={{fontSize:7,color:RANK_COLORS[p.suggestedRank],flexShrink:0}}>{added?"ADDED":p.suggestedRank.slice(0,3).toUpperCase()}</span>
+              </div>
+            );
+          })}
+          {filtered.length===0&&<div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>No matches.</div>}
+        </div>
+        <div style={{fontSize:7,color:"#E0F0F0",textAlign:"center",textShadow:"1px 1px 0 #0C2024"}}>Adding to <span style={{color:sideColor,background:"#F8F8E8",padding:"0 4px"}}>{side.toUpperCase()}</span> side — click a row to add, list stays open.</div>
+        {/* Footer */}
+        <button onClick={onClose} style={{alignSelf:"center",padding:"7px 28px",fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#F8F8E8",
+          background:"linear-gradient(180deg,#F87878 0%,#D83838 100%)",border:"2px solid #0C2024",borderRadius:14,boxShadow:"2px 2px 0 rgba(0,0,0,0.35)",cursor:"pointer"}}>CANCEL</button>
+      </div>
     </div>
   );
 }
@@ -3016,6 +3068,7 @@ export default function BattleTrackerPage(){
   const [sceneMsg,setSceneMsg]=useState<string>("");
   const [drawerId,setDrawerId]=useState<string|null>(null);
   const [scenePopup,setScenePopup]=useState<Move|null>(null);
+  const [showAddModal,setShowAddModal]=useState(false);
 
   useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
 
@@ -3070,7 +3123,7 @@ export default function BattleTrackerPage(){
   const sSpendWP=(id:string,amt:number)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e));
   const sApplySpecial=(id:string,u:Partial<BattleEntry>)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e));
 
-  const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string)=>{
+  const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string,side?:"player"|"enemy"|"neutral")=>{
     const hp=pokemon.number<=0?10:pokemon.baseHp+pokemon.attributes.vitality;
     const will=pokemon.number<=0?5:pokemon.attributes.insight+3;
     const ini=Math.floor(Math.random()*6)+1+(pokemon.attributes?.dexterity??1);
@@ -3082,7 +3135,7 @@ export default function BattleTrackerPage(){
       initiative:ini,currentHp:hp,maxHp:hp,currentWill:will,maxWill:will,
       loyalty,happiness,
       statuses:["Healthy"],statusTurnsLeft:0,notes:"",isExpanded:false,hasTakenTurn:false,
-      side:trainerId?"player":"enemy",trainerRank:(trainerRank||"Rookie") as any,
+      side:side||(trainerId?"player":"enemy"),trainerRank:(trainerRank||"Rookie") as any,
       abilities:pokemon.abilities.map(a=>({name:a,active:true})),
       moves:moves||defaultMoves,
       attrs:{...pokemon.attributes},statMods:[],weatherImmune:false,actionCount:0,
@@ -3252,6 +3305,7 @@ export default function BattleTrackerPage(){
 
   return(
     <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",height:"100vh",background:"url('/assets/frlg-grass-bg.png') bottom/auto 45% repeat-x, linear-gradient(180deg,#88B8E8 0%,#60A0D8 42%,#78A848 58%,#507830 100%)",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
+      {showAddModal&&<AddPokemonModal onAdd={(p,side)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side)} onClose={()=>setShowAddModal(false)}/>}
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
@@ -3310,7 +3364,7 @@ export default function BattleTrackerPage(){
             ))}
           </div>
           <div style={{padding:"8px 8px 4px",flexShrink:0}}>
-            {sidebarTab==="search"&&<SearchBar onAdd={p=>addPokemon(p)}/>}
+            {sidebarTab==="search"&&<button onClick={()=>setShowAddModal(true)} style={{width:"100%",background:"#2858C0",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",color:"#F8F8E8",padding:"7px",fontSize:9,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>+ ADD POKéMON</button>}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"4px 8px"}}>
             {sidebarTab==="search"&&(
@@ -3324,7 +3378,7 @@ export default function BattleTrackerPage(){
                     <span style={{fontSize:8,color:e.currentHp<=0?"#888870":e.currentHp/e.maxHp>0.5?"#18C840":e.currentHp/e.maxHp>0.25?"#E8B018":"#D82808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
                   </div>
                 ))}
-                {(!mounted||entries.length===0)&&<div style={{textAlign:"center",color:"#888870",padding:16,fontSize:8,fontFamily:"'Press Start 2P',monospace",lineHeight:2}}>Search to add<br/>Pokémon</div>}
+                {(!mounted||entries.length===0)&&<div style={{textAlign:"center",color:"#888870",padding:16,fontSize:8,fontFamily:"'Press Start 2P',monospace",lineHeight:2}}>+ ADD POKéMON<br/>to begin</div>}
               </div>
             )}
             {sidebarTab==="characters"&&(
@@ -3459,7 +3513,9 @@ export default function BattleTrackerPage(){
                   <div style={{height:"100%",border:"3px solid #F8F8E8",borderRadius:8,background:"linear-gradient(180deg,#3868C0 0%,#284C9C 100%)",boxShadow:"inset 0 0 0 2px #204088",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace",color:"#F8F8E8",textShadow:"2px 2px 0 #182848"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
-                        (sceneMsg||`What will ${onFieldPlayer?(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase():(onFieldEnemy?(onFieldEnemy.nickname||onFieldEnemy.pokemon.name).toUpperCase()+" appeared!":"the battle")}${onFieldPlayer?" do?":""}`)}
+                        (sceneMsg||(onFieldPlayer?`What will ${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} do?`
+                          :onFieldEnemy?`${(onFieldEnemy.nickname||onFieldEnemy.pokemon.name).toUpperCase()} appeared!`
+                          :"Add a Pokémon to begin the battle."))}
                     </span>
                   </div>
                 </div>
