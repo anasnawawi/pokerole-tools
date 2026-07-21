@@ -76,10 +76,14 @@ function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
     padding: small ? "0 3px" : "0 5px",
     height: small ? 11 : 15,
     background,
-    border:"1px solid #282828",color:"#F8F8F8",
+    border:"1px solid #282828",color:"#FFFFFF",
     fontSize: small ? 5 : 7,
     fontFamily:"'Press Start 2P',monospace",
-    letterSpacing:"-0.5px",textShadow:"1px 1px 0 #282828",
+    letterSpacing:"-0.5px",
+    // Solid dark outline (not just a single-corner shadow) so the text stays legible
+    // against light type colors (Normal, Grass, Ice, Electric, ...) as well as dark ones.
+    WebkitTextStroke:"0.5px #181818",
+    textShadow:"1px 1px 0 #181818,-1px 1px 0 #181818,1px -1px 0 #181818,-1px -1px 0 #181818",
     whiteSpace:"nowrap",
   }}>{type.toUpperCase()}</span>;
 }
