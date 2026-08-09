@@ -1,17 +1,13 @@
 "use client";
-import Link from "next/link";
 import { STATUS_CONDITIONS, WEATHER_DATA, CATCH_REQUIRED_SUCCESSES } from "../../data/game-rules";
+import SiteNav from "../../components/SiteNav";
 
 export default function QuickRefPage() {
   return (
-    <div style={{minHeight:"100vh",background:"#0f1117",color:"#e8eaf0",overflow:"auto"}}>
-      <nav style={{background:"#13151f",borderBottom:"1px solid #2a2f45",padding:"0 16px",height:48,display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:10}}>
-        <Link href="/" style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:15,color:"#e8eaf0",textDecoration:"none"}}>PokeRole<span style={{color:"#00d4aa"}}> Tools</span></Link>
-        <span style={{color:"#3a4060"}}>/</span>
-        <span style={{fontSize:13,color:"#3d8bff",fontWeight:700}}>📚 Quick Reference</span>
-      </nav>
+    <div style={{minHeight:"100vh",background:"#E8E8D8",color:"#202020",overflow:"auto"}}>
+      <div style={{position:"sticky",top:0,zIndex:10}}><SiteNav active="quick-ref"/></div>
       <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 24px 60px"}}>
-        <h1 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:26,color:"#e8eaf0",marginBottom:20}}>PokeRole 3.0 — Quick Reference</h1>
+        <h1 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:26,color:"#202020",marginBottom:20}}>PokeRole 3.0 — Quick Reference</h1>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:16}}>
 
           <Sec title="🎲 How to Roll" c="#3d8bff">
@@ -26,13 +22,13 @@ export default function QuickRefPage() {
             <R l="Per Round">Up to 5 actions per round. Each action raises the required successes by 1.</R>
             {["1 success","2 successes","3 successes","4 successes","5 successes"].map((s,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"1px 0"}}>
-                <span style={{color:"#8b90a8"}}>Action {i+1}</span>
-                <span style={{color:"#e8eaf0",fontWeight:700}}>Need {s} to hit</span>
+                <span style={{color:"#383838"}}>Action {i+1}</span>
+                <span style={{color:"#202020",fontWeight:700}}>Need {s} to hit</span>
               </div>
             ))}
           </Sec>
 
-          <Sec title="💥 Damage" c="#ff4757">
+          <Sec title="💥 Damage" c="#C02820">
             <R l="Physical">STR + Move Power − foe's Vitality (defense). Min 1 damage.</R>
             <R l="Special">SPC + Move Power − foe's Insight (sp.def). Min 1 damage.</R>
             <R l="STAB">Move type = Pokémon type → +1 die to damage pool</R>
@@ -45,8 +41,8 @@ export default function QuickRefPage() {
             <R l="What it does">Low HP = dice penalty to all rolls.</R>
             {[["Above 50% HP","No penalty"],["26–50% HP","–1 die"],["1–25% HP","–2 dice"],["0 HP","Fainted"]].map(([c,e])=>(
               <div key={c} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"1px 0"}}>
-                <span style={{color:"#8b90a8"}}>{c}</span>
-                <span style={{color:c.includes("Fainted")||c.includes("1–25")?"#ff4757":c.includes("26–50")?"#ffd32a":"#00d4aa",fontWeight:700}}>{e}</span>
+                <span style={{color:"#383838"}}>{c}</span>
+                <span style={{color:c.includes("Fainted")||c.includes("1–25")?"#C02820":c.includes("26–50")?"#A07000":"#2850A0",fontWeight:700}}>{e}</span>
               </div>
             ))}
           </Sec>
@@ -55,29 +51,29 @@ export default function QuickRefPage() {
             {Object.values(STATUS_CONDITIONS).filter(s=>s.name!=="Healthy").map(sc=>(
               <div key={sc.name} style={{borderLeft:`2px solid ${sc.color}`,paddingLeft:7,marginBottom:7}}>
                 <div style={{fontSize:11,fontWeight:700,color:sc.color}}>{sc.name}</div>
-                <div style={{fontSize:10,color:"#8b90a8",lineHeight:1.4}}>{sc.shortDesc}</div>
+                <div style={{fontSize:10,color:"#383838",lineHeight:1.4}}>{sc.shortDesc}</div>
               </div>
             ))}
           </Sec>
 
-          <Sec title="🎯 Catching Pokémon" c="#00d4aa">
+          <Sec title="🎯 Catching Pokémon" c="#2850A0">
             <R l="Steps">1. Assess rank → 2. Weaken → 3. Throw ball (DEX/STR + Throw) → 4. Roll Seal</R>
             <R l="Bonuses">Half HP: +1 · 1 HP: +2 · Status Ailment: +1 each · Fainted: –ALL bonuses</R>
-            <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginTop:6,marginBottom:3}}>Required Successes</div>
+            <div style={{fontSize:10,color:"#585858",textTransform:"uppercase",letterSpacing:"1px",marginTop:6,marginBottom:3}}>Required Successes</div>
             {Object.entries(CATCH_REQUIRED_SUCCESSES).slice(0,6).map(([r,s])=>(
               <div key={r} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"1px 0"}}>
-                <span style={{color:"#8b90a8"}}>{r}</span><span style={{color:"#ffd32a",fontWeight:700}}>{s}</span>
+                <span style={{color:"#383838"}}>{r}</span><span style={{color:"#A07000",fontWeight:700}}>{s}</span>
               </div>
             ))}
-            <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginTop:6,marginBottom:3}}>Ball Seal Potency</div>
+            <div style={{fontSize:10,color:"#585858",textTransform:"uppercase",letterSpacing:"1px",marginTop:6,marginBottom:3}}>Ball Seal Potency</div>
             {[["Pokéball","4d"],["Great Ball","6d"],["Ultra Ball","8d"]].map(([b,p])=>(
               <div key={b} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"1px 0"}}>
-                <span style={{color:"#8b90a8"}}>{b}</span><span style={{color:"#00d4aa",fontWeight:700}}>{p}</span>
+                <span style={{color:"#383838"}}>{b}</span><span style={{color:"#2850A0",fontWeight:700}}>{p}</span>
               </div>
             ))}
           </Sec>
 
-          <Sec title="⚠ Disobedience" c="#ffd32a">
+          <Sec title="⚠ Disobedience" c="#A07000">
             <R l="Same Rank or Lower">No disobedience. Full obedience.</R>
             <R l="One Rank Above">Low Disobedience — Roll Loyalty at round start. 3+ successes = obeys for the round. Fail = acts on instinct/Nature.</R>
             <R l="Two+ Ranks Above">High Disobedience — Acts entirely on its own. Cannot be commanded.</R>
@@ -87,8 +83,8 @@ export default function QuickRefPage() {
           <Sec title="🌤️ Weather Summary" c="#e0c068">
             {WEATHER_DATA.filter(w=>w.name!=="Clear").map(w=>(
               <div key={w.name} style={{marginBottom:7}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#e8eaf0"}}>{w.emoji.split(" ")[0]} {w.name}</div>
-                <div style={{fontSize:10,color:"#8b90a8",lineHeight:1.4}}>{w.description}</div>
+                <div style={{fontSize:11,fontWeight:700,color:"#202020"}}>{w.emoji.split(" ")[0]} {w.name}</div>
+                <div style={{fontSize:10,color:"#383838",lineHeight:1.4}}>{w.description}</div>
               </div>
             ))}
           </Sec>
@@ -100,7 +96,7 @@ export default function QuickRefPage() {
             <R l="End of Round">Apply burn/poison/weather. Flinch clears. Status ticks down.</R>
           </Sec>
 
-          <Sec title="❤️ HP, WP & Healing" c="#00d4aa">
+          <Sec title="❤️ HP, WP & Healing" c="#2850A0">
             <R l="Trainer HP">Base 4 + Vitality</R>
             <R l="Pokémon HP">Base HP (from Pokédex) + Vitality</R>
             <R l="Will Points">Insight + 3</R>
@@ -115,7 +111,7 @@ export default function QuickRefPage() {
 
 function Sec({title,c,children}:{title:string;c:string;children:React.ReactNode}) {
   return (
-    <div style={{background:"#1e2235",border:`1px solid ${c}25`,borderRadius:8,padding:14,borderTop:`3px solid ${c}`}}>
+    <div style={{background:"#F8F8F0",border:`1px solid ${c}25`,borderRadius:8,padding:14,borderTop:`3px solid ${c}`}}>
       <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:14,color:c,marginBottom:10}}>{title}</h3>
       {children}
     </div>
@@ -124,8 +120,8 @@ function Sec({title,c,children}:{title:string;c:string;children:React.ReactNode}
 function R({l,children}:{l:string;children:React.ReactNode}) {
   return (
     <div style={{marginBottom:7}}>
-      <div style={{fontSize:11,fontWeight:700,color:"#e8eaf0"}}>{l}</div>
-      <div style={{fontSize:10,color:"#8b90a8",lineHeight:1.4}}>{children}</div>
+      <div style={{fontSize:11,fontWeight:700,color:"#202020"}}>{l}</div>
+      <div style={{fontSize:10,color:"#383838",lineHeight:1.4}}>{children}</div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import SiteNav from "./components/SiteNav";
 
 const SECTIONS = [
   {
@@ -32,17 +33,6 @@ const SECTIONS = [
   },
 ];
 
-const NAV_LINKS = [
-  {href:"/reference?tab=pokedex",label:"Pokédex"},
-  {href:"/reference?tab=moves",label:"Moves"},
-  {href:"/reference?tab=abilities",label:"Abilities"},
-  {href:"/encounter",label:"Encounter"},
-  {href:"/battle-tracker",label:"Battle Tracker"},
-  {href:"/gm-screen",label:"GM Screen"},
-  {href:"/characters",label:"Characters"},
-  {href:"/reference/quick-ref",label:"Rules"},
-];
-
 function ScanlineOverlay(){
   return <div style={{position:"absolute",inset:0,pointerEvents:"none",borderRadius:6,
     background:"repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 3px)"}}/>;
@@ -54,19 +44,7 @@ export default function Home() {
 
   return (
     <div style={{height:"100vh",background:"linear-gradient(180deg,#B85030 0%,#68402C 40%,#3C281C 100%)",color:"#181818",overflowY:"auto",overflowX:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
-      {/* Nav — FireRed white panel style, matching the battle tracker */}
-      <nav style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"0 16px",height:48,display:"flex",alignItems:"center",gap:6,position:"sticky",top:0,zIndex:100,overflowX:"auto"}}>
-        <span style={{fontFamily:"'Press Start 2P',monospace",fontWeight:400,fontSize:11,color:"#181818",letterSpacing:"-0.5px",flexShrink:0,marginRight:10}}>
-          PokeRole<span style={{color:"#D82808"}}> Tools</span>
-        </span>
-        {NAV_LINKS.map(l=>(
-          <Link key={l.href} href={l.href} style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#484830",textDecoration:"none",padding:"5px 8px",whiteSpace:"nowrap",flexShrink:0,border:"1px solid transparent"}}
-            onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;el.style.color="#D82808";el.style.background="#F0ECD4";el.style.border="1px solid #181818";}}
-            onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.color="#484830";el.style.background="transparent";el.style.border="1px solid transparent";}}>
-            {l.label}
-          </Link>
-        ))}
-      </nav>
+      <div style={{position:"sticky",top:0,zIndex:100}}><SiteNav/></div>
 
       {/* ── POKéDEX DEVICE HERO ─────────────────────────────────────────────── */}
       <div style={{padding:"36px 16px 28px",display:"flex",justifyContent:"center"}}>
@@ -106,18 +84,15 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Quick-jump buttons — one per section, styled like device keys */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
-            {SECTIONS.map(s=>(
-              <a key={s.id} href={`#${s.id}`} style={{textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:6,
-                padding:"10px 8px",borderRadius:9,background:"linear-gradient(180deg,#78C0E8 0%,#3878B8 100%)",
-                border:"3px solid #181818",boxShadow:"0 3px 0 #103858",cursor:"pointer"}}
-                onMouseEnter={e=>{const el=e.currentTarget as HTMLAnchorElement;el.style.transform="translateY(1px)";el.style.boxShadow="0 2px 0 #103858";}}
-                onMouseLeave={e=>{const el=e.currentTarget as HTMLAnchorElement;el.style.transform="";el.style.boxShadow="0 3px 0 #103858";}}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:s.accent,border:"1px solid #181818",flexShrink:0}}/>
-                <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#F8F8E8",textShadow:"1px 1px 0 #103858",whiteSpace:"nowrap"}}>{s.title}</span>
-              </a>
-            ))}
+          {/* Device keys — decorative, since the sections themselves sit directly
+              below and the shared nav already covers every destination. */}
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{display:"flex",gap:6}}>
+              {SECTIONS.map(s=>(
+                <span key={s.id} style={{width:26,height:26,borderRadius:"50%",background:s.accent,border:"3px solid #181818",boxShadow:"inset -2px -2px 3px rgba(0,0,0,0.35), 0 2px 0 rgba(0,0,0,0.3)"}}/>
+              ))}
+            </div>
+            <div style={{flex:1,height:14,borderRadius:3,border:"2px solid #181818",background:"repeating-linear-gradient(90deg,#B02010 0px,#B02010 5px,#8C1408 5px,#8C1408 10px)"}}/>
           </div>
         </div>
       </div>
