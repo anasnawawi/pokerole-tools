@@ -251,7 +251,11 @@ function TerrainFX({terrain}:{terrain:string}){
 function StageBackdrop(){
   return(
     <>
-      <div style={{position:"absolute",inset:0,zIndex:0,background:"linear-gradient(180deg,#88B8E8 0%,#60A0D8 42%,#78A848 58%,#507830 100%)"}}/>
+      {/* Sky and ground meet in a hard edge at the 48% horizon, where the grass
+          strip below sits. Blending them across a band instead let blue bleed
+          under the tuft line. The ground's first stop matches the tuft fill
+          (#78A848) exactly, so the two read as one surface. */}
+      <div style={{position:"absolute",inset:0,zIndex:0,background:"linear-gradient(180deg,#88B8E8 0%,#60A0D8 48%,#78A848 48%,#507830 100%)"}}/>
       {/* FRLG battle backdrops are banded with fine horizontal scanlines */}
       <div style={{position:"absolute",inset:0,zIndex:0,pointerEvents:"none",opacity:0.28,
         backgroundImage:"repeating-linear-gradient(180deg, rgba(255,255,255,0.85) 0px, rgba(255,255,255,0.85) 2px, transparent 2px, transparent 6px)"}}/>
