@@ -12,6 +12,7 @@ import {
   getDisobedienceLevel, getPainPenalty,
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage } from "../lib/storage";
+import SiteNav from "../components/SiteNav";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Standard:"#f8d030",Advanced:"#f08030",Expert:"#a040a0",Ace:"#e04040",Master:"#705898",Champion:"#ffd700"};
@@ -65,21 +66,45 @@ interface BattleEntry{
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+/* Relative luminance (WCAG) of a #rrggbb colour, used to pick readable label ink. */
+function luminance(hex:string){
+  const m=hex.replace("#","").match(/.{2}/g);
+  if(!m)return 0;
+  const [r,g,b]=m.map(h=>{
+    const v=parseInt(h,16)/255;
+    return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);
+  });
+  return 0.2126*r+0.7152*g+0.0722*b;
+}
+const contrast=(a:string,b:string)=>{
+  const [hi,lo]=[luminance(a),luminance(b)].sort((x,y)=>y-x);
+  return (hi+0.05)/(lo+0.05);
+};
+
 function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
   const bg = TYPE_COLORS[type]||"#888870";
   // Fairy gets a pink gradient; others use the flat type color
   const background = type==="Fairy"
     ? "linear-gradient(180deg,#F8B8F0 0%,#E898E0 60%,#D878C8 100%)"
     : bg;
+  /* Half the type colours (Normal, Grass, Electric, Ice, Ground, Fairy…) are light
+     enough that white text sits near 2:1 against them. Rather than outlining the
+     text, pick whichever ink actually contrasts better and keep the single-corner
+     drop shadow the badges have always had. Comparing the two beats a luminance
+     threshold: Normal (#A8A878) sits right on the fence at 0.38 but is far more
+     readable dark (7.6:1) than white (2.3:1). */
+  const light = type==="Fairy" || contrast("#181818",bg)>contrast("#F8F8F8",bg);
+  const ink   = light ? "#181818" : "#F8F8F8";
+  const shade = light ? "#FFFFFFB0" : "#282828";
   return <span title={type} style={{
     display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,
     padding: small ? "0 3px" : "0 5px",
     height: small ? 11 : 15,
     background,
-    border:"1px solid #282828",color:"#F8F8F8",
+    border:"1px solid #282828",color:ink,
     fontSize: small ? 5 : 7,
     fontFamily:"'Press Start 2P',monospace",
-    letterSpacing:"-0.5px",textShadow:"1px 1px 0 #282828",
+    letterSpacing:"-0.5px",textShadow:`1px 1px 0 ${shade}`,
     whiteSpace:"nowrap",
   }}>{type.toUpperCase()}</span>;
 }
@@ -219,6 +244,21 @@ function TerrainFX({terrain}:{terrain:string}){
           animation:`fxSparkFlicker ${1+(i%3)*0.3}s ease-in-out infinite`,animationDelay:`${i*0.18}s`}}>{info.emoji}</span>
       ))}
     </div>
+  );
+}
+/* Sky/ground gradient + grass-tuft horizon — the stage environment, drawn
+   whether or not there are combatants standing on it. */
+function StageBackdrop(){
+  return(
+    <>
+      <div style={{position:"absolute",inset:0,zIndex:0,background:"linear-gradient(180deg,#88B8E8 0%,#60A0D8 42%,#78A848 58%,#507830 100%)"}}/>
+      {/* FRLG battle backdrops are banded with fine horizontal scanlines */}
+      <div style={{position:"absolute",inset:0,zIndex:0,pointerEvents:"none",opacity:0.28,
+        backgroundImage:"repeating-linear-gradient(180deg, rgba(255,255,255,0.85) 0px, rgba(255,255,255,0.85) 2px, transparent 2px, transparent 6px)"}}/>
+      <div style={{position:"absolute",left:0,right:0,top:"48%",height:22,zIndex:1,
+        backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='22' viewBox='0 0 40 22'%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8 L40,22 L0,22 Z' fill='%2378A848'/%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8' fill='none' stroke='%235C8834' stroke-width='0.75'/%3E%3C/svg%3E\")",
+        backgroundRepeat:"repeat-x",backgroundSize:"40px 22px",backgroundPosition:"bottom",pointerEvents:"none"}}/>
+    </>
   );
 }
 function TerrainLabel({terrain}:{terrain:string}){
@@ -3495,12 +3535,12 @@ export default function BattleTrackerPage(){
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
-      {/* Nav — FireRed white panel style */}
-      <nav style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"0 10px",height:46,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-        <Link href="/" style={{fontFamily:"'Press Start 2P',monospace",fontWeight:400,fontSize:10,color:"#181818",textDecoration:"none",letterSpacing:"-0.5px"}}>PokeRole<span style={{color:"#2858C0"}}> Tools</span></Link>
-        <span style={{color:"#888870",fontSize:12}}>›</span>
-        <span style={{fontSize:9,color:"#D82808",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>⚔ BATTLE</span>
-        <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center"}}>
+      <SiteNav active="battle-tracker"/>
+      {/* Battle toolbar — scrolls rather than clipping, so the controls at the far
+          right (INI, EOR, END) stay reachable on narrow windows. */}
+      <div style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"0 10px",height:42,display:"flex",alignItems:"center",gap:8,flexShrink:0,overflowX:"auto",overflowY:"hidden"}}>
+        <span style={{fontSize:9,color:"#D82808",fontWeight:700,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>⚔ BATTLE</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
           <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>{WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}</select>
           <select value={terrain} onChange={e=>setTerrain(e.target.value)} title="Active Terrain" style={{background:"#F8F8E8",border:"2px solid #181818",color:terrain==="None"?"#888870":"#2858C0",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>
             <option value="None">🌍 No Terrain</option>
@@ -3519,7 +3559,9 @@ export default function BattleTrackerPage(){
             {label:"◀ PREV",onClick:prevTurn,style:{background:"#E8E8D0"}},
             {label:"NEXT ▶",onClick:nextTurn,style:{background:"#2858C0",color:"#F8F8E8",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818"}},
           ].map(b=>(
-            <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",background:"#E8E8D0",color:"#181818",...b.style}}>{b.label}</button>
+            /* No literal `background` here — every entry supplies its own via
+               b.style, and a duplicate key would just be overwritten. */
+            <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#181818",...b.style}}>{b.label}</button>
           ))}
           <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}}} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
           <button onClick={rollAllIni} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
@@ -3535,7 +3577,7 @@ export default function BattleTrackerPage(){
           <button onClick={endBattle} style={{background:"#D82808",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#F8F8E8",fontWeight:700}} title="End battle">END</button>
           <Link href="/gm-screen" style={{fontSize:9,color:"#181818",textDecoration:"none",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 6px",fontFamily:"'Press Start 2P',monospace"}}>GM</Link>
         </div>
-      </nav>
+      </div>
 
       {/* Weather banner — FireRed dialogue box style */}
       {weather.name!=="Clear"&&<div style={{background:"#F8F8E8",borderBottom:"2px solid #181818",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:9,flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#181818"}}>{weather.name.toUpperCase()}</span><span style={{color:"#484830",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:8}}>{weather.description}</span>{terrain!=="None"&&<span style={{color:"#2858C0",fontSize:8}}>· {terrain}</span>}</div>}
@@ -3608,8 +3650,11 @@ export default function BattleTrackerPage(){
           })()}
 
           {(!mounted||entries.length===0)?(
-            <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,padding:40}}>
-              <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
+            <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260,display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
+              <StageBackdrop/>
+              <TerrainFX terrain={terrain}/>
+              <WeatherFX weather={weather}/>
+              <div style={{position:"relative",zIndex:6,background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",marginBottom:10}}>NO COMBATANTS</div>
                 <div style={{fontSize:8,color:"#484830",fontFamily:"'Press Start 2P',monospace",lineHeight:1.8}}>Use the sidebar to<br/>add Pokémon</div>
               </div>
@@ -3618,12 +3663,7 @@ export default function BattleTrackerPage(){
             <>
               {/* STAGE */}
               <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
-                {/* Layer 1 — sky/ground colour gradient, scoped to the stage itself */}
-                <div style={{position:"absolute",inset:0,zIndex:0,background:"linear-gradient(180deg,#88B8E8 0%,#60A0D8 42%,#78A848 58%,#507830 100%)"}}/>
-                {/* Layer 2 — grass-tuft horizon illustration, independent of the gradient above */}
-                <div style={{position:"absolute",left:0,right:0,top:"48%",height:22,zIndex:1,
-                  backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='22' viewBox='0 0 40 22'%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8 L40,22 L0,22 Z' fill='%2378A848'/%3E%3Cpath d='M0,8 L5,0 L10,8 L15,1 L20,9 L25,0 L30,8 L35,1 L40,8' fill='none' stroke='%235C8834' stroke-width='0.75'/%3E%3C/svg%3E\")",
-                  backgroundRepeat:"repeat-x",backgroundSize:"40px 22px",backgroundPosition:"bottom",pointerEvents:"none"}}/>
+                <StageBackdrop/>
                 {/* Weather + terrain FX — scoped to the stage */}
                 <TerrainFX terrain={terrain}/>
                 <WeatherFX weather={weather}/>
@@ -3749,8 +3789,8 @@ export default function BattleTrackerPage(){
               <div style={{flexShrink:0,height:176,display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:6,background:"#3058B0",borderRight:"3px solid #181818"}}>
-                  <div style={{height:"100%",border:"3px solid #F8F8E8",borderRadius:8,background:"linear-gradient(180deg,#3868C0 0%,#284C9C 100%)",boxShadow:"inset 0 0 0 2px #204088",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                    <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace",color:"#F8F8E8",textShadow:"2px 2px 0 #182848"}}>
+                  <div className="frw-blue" style={{height:"100%",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
                         (sceneMsg||(onFieldPlayer?`What will ${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} do?`
                           :onFieldEnemy?`${(onFieldEnemy.nickname||onFieldEnemy.pokemon.name).toUpperCase()} appeared!`
@@ -3759,11 +3799,8 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
                 {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#F8F8E8",padding:8,display:"flex"}}>
-                  <div style={{flex:1,border:"3px solid #181818",borderRadius:8,boxShadow:"inset 0 0 0 2px #A0A088",background:"#F8F8E8",padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
-                    {menuMode!=="root"&&(
-                      <button onClick={()=>setMenuMode("root")} style={{alignSelf:"flex-start",flexShrink:0,fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"1px 1px 0 #787878",padding:"3px 7px",cursor:"pointer"}}>◀ BACK</button>
-                    )}
+                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#F8F8E8",padding:6,display:"flex"}}>
+                  <div className="frw" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -3771,12 +3808,19 @@ export default function BattleTrackerPage(){
                           {onFieldPlayer.moves.slice(0,4).map((m,i)=>{
                             const stab=onFieldPlayer.pokemon.types.includes(m.type as PokemonType);
                             return(
+                              /* Gen 3 move select: entries sit bare inside the one
+                                 window and are marked by a ▶ cursor, rather than
+                                 each being its own bordered, drop-shadowed box. */
                               <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
-                                style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:2,padding:"4px 6px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",textAlign:"left",boxShadow:"2px 2px 0 #181818",minHeight:0,overflow:"hidden"}}
-                                onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#C8D8F0";}}
-                                onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F0ECD4";}}>
-                                <span style={{fontSize:7,color:"#181818",fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35,maxWidth:"100%"}}>{m.name}</span>
-                                <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0}}><TypeBadge type={m.type as PokemonType} small/>{stab&&<span style={{fontSize:6,color:"#807008",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:6,color:"#18A870",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
+                                style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:3,padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
+                                onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#D8E8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#2858C0";}}
+                                onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
+                                <span style={{display:"flex",alignItems:"flex-start",gap:3,minWidth:0}}>
+                                  {/* Cursor keeps its width when hidden so names never shift */}
+                                  <span aria-hidden data-cursor style={{fontSize:7,color:"transparent",fontFamily:"'Press Start 2P',monospace",flexShrink:0,lineHeight:1.35}}>▶</span>
+                                  <span className="fr-ink" style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35}}>{m.name}</span>
+                                </span>
+                                <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0,paddingLeft:10}}><TypeBadge type={m.type as PokemonType} small/>{stab&&<span style={{fontSize:6,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:6,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
                               </button>
                             );
                           })}
@@ -3803,15 +3847,25 @@ export default function BattleTrackerPage(){
                           {l:"POKéMON",c:"#187828",fn:()=>setMenuMode("pokemon")},
                           {l:"RUN",c:"#3050B0",fn:()=>endBattle()},
                         ].map(b=>(
-                          <button key={b.l} onClick={b.fn} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 8px",background:"#F8F8E8",border:"none",cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,color:"#181818",fontWeight:700}}
-                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E0E8F8";}}
-                            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="#F8F8E8";}}>
-                            <span style={{color:b.c}}>▶</span>{b.l}
+                          <button key={b.l} onClick={b.fn} className="fr-ink" style={{display:"flex",alignItems:"center",gap:5,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,fontWeight:700}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="var(--fr-row-sel)";}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
+                            <span style={{color:b.c,textShadow:"none"}}>▶</span>{b.l}
                           </button>
                         ))}
                       </div>
                     )}
                     </div>
+                    {/* Navigation sits below the move grid so the moves stay put
+                        as you switch between the root menu and a submenu. */}
+                    {menuMode!=="root"&&(
+                      <button onClick={()=>setMenuMode("root")} className="fr-ink"
+                        style={{alignSelf:"flex-start",flexShrink:0,fontSize:7,fontFamily:"'Press Start 2P',monospace",
+                          background:"transparent",border:"2px solid var(--fr-win-edge)",borderRadius:4,
+                          padding:"3px 7px",cursor:"pointer"}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="var(--fr-row-sel)";}}
+                        onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>◀ BACK</button>
+                    )}
                   </div>
                 </div>
               </div>
