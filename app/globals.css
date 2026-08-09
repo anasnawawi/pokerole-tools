@@ -24,6 +24,22 @@
   --fr-select:      #60A0F8;   /* selection highlight */
   --pixel-font: 'Press Start 2P', monospace;
 
+  /* ── FireRed window system ────────────────────────────────────────────────
+     Taken from the FRLG in-game windows (bag, party, start menu, battle menu):
+     a white pane with a double blue keyline — dark outer rule, white gap, then
+     a lighter inner rule — with black text carrying a 1px light-grey shadow. */
+  --fr-win:         #FFFFFF;   /* window fill */
+  --fr-win-edge:    #2850A0;   /* outer keyline */
+  --fr-win-bevel:   #78A8E0;   /* inner keyline */
+  --fr-ink:         #202020;   /* body text */
+  --fr-ink-shade:   #A8A8A8;   /* the signature GBA text shadow */
+  --fr-ink-red:     #C02820;   /* values & secondary readouts */
+  --fr-ink-blue:    #2850A0;   /* headings */
+  --fr-bar:         #3878C8;   /* system bars */
+  --fr-bar-ink:     #FFFFFF;
+  --fr-row-sel:     #D8D8D8;   /* OPTION-style selected band */
+  --fr-sel-ring:    #D82820;   /* red selection outline */
+
   /* Legacy aliases used elsewhere */
   --bg-primary: var(--fr-field);
   --bg-card: var(--fr-panel);
@@ -83,6 +99,62 @@ html, body {
 }
 .fr-btn:hover { background: var(--fr-active-bg); }
 .fr-btn:active { box-shadow: none; transform: translate(2px,2px); }
+
+/* ── FireRed window system ───────────────────────────────────────────────────
+   Reusable pieces matching the FRLG UI. `.frw` is the window shell used by every
+   panel; `.fr-ink`/`.fr-val` are the text treatments; `.fr-row` is a cursor row
+   from the bag / party / start menus. */
+
+.frw {
+  background: var(--fr-win);
+  border: 3px solid var(--fr-win);
+  border-radius: 7px;
+  /* outer dark rule + inner light rule = the FRLG double keyline */
+  box-shadow: 0 0 0 2px var(--fr-win-edge), inset 0 0 0 2px var(--fr-win-bevel);
+}
+/* Blue variant used for battle dialogue boxes */
+.frw-blue {
+  background: linear-gradient(180deg, #3868C0 0%, #284C9C 100%);
+  border: 3px solid var(--fr-win);
+  border-radius: 7px;
+  box-shadow: 0 0 0 2px var(--fr-win-edge), inset 0 0 0 2px #204088;
+  color: #F8F8F8;
+  text-shadow: 2px 2px 0 #182848;
+}
+
+/* Signature GBA text: near-black with a light drop shadow */
+.fr-ink   { color: var(--fr-ink);      text-shadow: 1px 1px 0 var(--fr-ink-shade); }
+.fr-val   { color: var(--fr-ink-red);  text-shadow: 1px 1px 0 var(--fr-ink-shade); }
+.fr-head  { color: var(--fr-ink-blue); text-shadow: 1px 1px 0 var(--fr-ink-shade); }
+
+/* System bar — the blue strip carrying button hints */
+.fr-bar {
+  background: var(--fr-bar);
+  color: var(--fr-bar-ink);
+  font-family: var(--pixel-font);
+  text-shadow: 1px 1px 0 #183868;
+}
+
+/* Menu row: selection is a ▶ cursor, not a fill. The cursor keeps its width when
+   hidden so labels never shift as the highlight moves. */
+.fr-row {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: none; width: 100%;
+  padding: 3px 6px; cursor: pointer; text-align: left;
+  font-family: var(--pixel-font);
+  color: var(--fr-ink); text-shadow: 1px 1px 0 var(--fr-ink-shade);
+}
+.fr-row::before {
+  content: "\25B6";
+  flex-shrink: 0;
+  color: transparent;
+  text-shadow: none;
+}
+.fr-row:hover, .fr-row[aria-selected="true"] { background: var(--fr-row-sel); }
+.fr-row:hover::before, .fr-row[aria-selected="true"]::before { color: var(--fr-ink); }
+
+/* Red outline marking the active entry, as on the KNOWN MOVES screen */
+.fr-ring { box-shadow: 0 0 0 2px var(--fr-sel-ring); border-radius: 4px; }
 
 /* ── Battle scene FX keyframes (weather / terrain / status / hazards) ────── */
 @keyframes fxRainFall { from { background-position: 0 0; } to { background-position: -24px 220px; } }

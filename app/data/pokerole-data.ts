@@ -46,6 +46,9 @@ export interface PokemonEntry {
 export interface Move {
   name: string;
   type: PokemonType;
+  // Present only when a move comes from a Pokémon's learnset entry
+  // (see PokemonEntry.moves); the global MOVES_DATA table carries no rank.
+  rank?: Rank;
   category: MoveCategory;
   power: string;
   accuracy: string;
