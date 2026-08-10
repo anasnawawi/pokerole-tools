@@ -23,7 +23,7 @@ function MovePopupPanel({move,onClose}:{move:Move;onClose:()=>void}) {
   const related=POKEMON.filter(p=>p.moves.some(m=>m.name===move.name));
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,width:440,maxHeight:"85vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,width:440,maxHeight:"85vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",gap:8,alignItems:"center"}}>
           <TypeBadge type={move.type}/><span style={{fontSize:11,fontWeight:700,color:cat.text,background:cat.bg,padding:"2px 7px",borderRadius:3}}>{move.category}</span>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:17,color:"#202020",margin:0,flex:1}}>{move.name}</h3>
@@ -33,7 +33,7 @@ function MovePopupPanel({move,onClose}:{move:Move;onClose:()=>void}) {
           <p style={{fontSize:12,color:"#383838",marginBottom:12,lineHeight:1.6}}>{move.description}</p>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
             {[["Power",move.power],["Accuracy",move.accuracy],["Damage Pool",move.damagePool],["Effect",move.effect]].map(([l,v])=>(
-              <div key={l} style={{background:"#FFFFFF",borderRadius:5,padding:"8px 10px"}}>
+              <div key={l} style={{background:"#F8F4D0",borderRadius:5,padding:"8px 10px"}}>
                 <div style={{fontSize:9,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:3}}>{l}</div>
                 <div style={{fontSize:12,color:"#202020",fontWeight:600}}>{v}</div>
               </div>
@@ -44,7 +44,7 @@ function MovePopupPanel({move,onClose}:{move:Move;onClose:()=>void}) {
               <div style={{fontSize:9,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Learned by</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                 {related.map(p=>(
-                  <div key={p.number} style={{display:"flex",alignItems:"center",gap:4,background:"#FFFFFF",border:"1px solid #2850A0",borderRadius:3,padding:"2px 7px"}}>
+                  <div key={p.number} style={{display:"flex",alignItems:"center",gap:4,background:"#F8F4D0",border:"1px solid #2850A0",borderRadius:3,padding:"2px 7px"}}>
                     <TypeBadge type={p.types[0]} small/><span style={{fontSize:11,color:"#202020"}}>{p.name}</span>
                   </div>
                 ))}
@@ -61,7 +61,7 @@ function AbilityPopupPanel({ability,onClose}:{ability:Ability;onClose:()=>void})
   const pokemon=POKEMON.filter(p=>p.abilities.includes(ability.name));
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,width:420,maxHeight:"80vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,width:420,maxHeight:"80vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",alignItems:"center",gap:8}}>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:17,color:"#202020",margin:0,flex:1}}>{ability.name}</h3>
           {ability.isUnique&&<span style={{fontSize:10,fontWeight:700,color:"#A07000",background:"rgba(255,211,42,0.12)",padding:"2px 7px",borderRadius:3}}>UNIQUE</span>}
@@ -69,7 +69,7 @@ function AbilityPopupPanel({ability,onClose}:{ability:Ability;onClose:()=>void})
         </div>
         <div style={{padding:16}}>
           <p style={{fontSize:12,color:"#383838",marginBottom:12,lineHeight:1.6}}>{ability.description}</p>
-          <div style={{background:"#FFFFFF",borderRadius:5,padding:"10px 12px",marginBottom:12,borderLeft:"3px solid #2850A0"}}>
+          <div style={{background:"#F8F4D0",borderRadius:5,padding:"10px 12px",marginBottom:12,borderLeft:"3px solid #2850A0"}}>
             <div style={{fontSize:9,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Effect</div>
             <div style={{fontSize:12,color:"#202020",lineHeight:1.6}}>{ability.effect}</div>
           </div>
@@ -78,7 +78,7 @@ function AbilityPopupPanel({ability,onClose}:{ability:Ability;onClose:()=>void})
               <div style={{fontSize:9,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Pokémon with this ability</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                 {pokemon.map(p=>(
-                  <div key={p.number} style={{display:"flex",alignItems:"center",gap:4,background:"#FFFFFF",border:"1px solid #2850A0",borderRadius:3,padding:"2px 7px"}}>
+                  <div key={p.number} style={{display:"flex",alignItems:"center",gap:4,background:"#F8F4D0",border:"1px solid #2850A0",borderRadius:3,padding:"2px 7px"}}>
                     <TypeBadge type={p.types[0]} small/><span style={{fontSize:11,color:"#202020"}}>{p.name}</span>
                   </div>
                 ))}
@@ -117,11 +117,15 @@ function PokemonDetail({pokemon,onTrack}:{pokemon:PokemonEntry;onTrack:(p:Pokemo
 
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16}}>
         <div>
-          <div style={{fontSize:11,color:"#585858",fontFamily:"'Exo 2'",fontWeight:700,letterSpacing:1}}>#{String(pokemon.number).padStart(4,"0")} · {pokemon.evolutiveStage} Stage</div>
-          <h1 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:28,color:"#202020",lineHeight:1.1}}>{pokemon.name}</h1>
+          {/* Sits directly on the green field, not a blue panel, so it needs
+              white rather than the panel's pale label ink. */}
+          <div style={{fontSize:11,color:"#FFFFFF",fontFamily:"'Exo 2'",fontWeight:700,letterSpacing:1}}>#{String(pokemon.number).padStart(4,"0")} · {pokemon.evolutiveStage} Stage</div>
+          <h1 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:28,color:"#FFFFFF",lineHeight:1.1}}>{pokemon.name}</h1>
           <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
             {pokemon.types.map(t=><TypeBadge key={t} type={t}/>)}
-            <span style={{padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:600,background:RANK_COLORS[pokemon.suggestedRank]+"20",border:`1px solid ${RANK_COLORS[pokemon.suggestedRank]}40`,color:RANK_COLORS[pokemon.suggestedRank]}}>{pokemon.suggestedRank}</span>
+            {/* Dark scrim rather than a white one: 16% white over the green field
+                lifted it enough that white text fell to 3.8:1. */}
+            <span style={{padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:600,background:"rgba(0,0,0,0.30)",border:`1px solid rgba(255,255,255,0.5)`,color:"#FFFFFF"}}>{pokemon.suggestedRank}</span>
           </div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"flex-start",flexShrink:0}}>
@@ -130,7 +134,7 @@ function PokemonDetail({pokemon,onTrack}:{pokemon:PokemonEntry;onTrack:(p:Pokemo
             if(!w)return;
             const attrs=`STR ${pokemon.attributes.strength}/${pokemon.attributeLimits?.strength??5} | DEX ${pokemon.attributes.dexterity}/${pokemon.attributeLimits?.dexterity??5} | VIT ${pokemon.attributes.vitality}/${pokemon.attributeLimits?.vitality??5} | SPC ${pokemon.attributes.special}/${pokemon.attributeLimits?.special??5} | INS ${pokemon.attributes.insight}/${pokemon.attributeLimits?.insight??5}`;
             const moves=pokemon.moves.slice(0,20).map(m=>`<tr><td style="padding:2px 8px;color:#484848">${m.rank}</td><td style="padding:2px 8px;color:#202020">${m.name}</td><td style="padding:2px 8px;color:#383838">${m.type}</td></tr>`).join("");
-            w.document.write(`<!DOCTYPE html><html><head><title>${pokemon.name} — PokeRole</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#E8E8D8;color:#202020;font-family:Inter,sans-serif;padding:20px;font-size:13px}h1{font-family:'Exo 2',sans-serif;font-size:24px;margin-bottom:6px}h3{font-family:'Exo 2',sans-serif;font-size:14px;color:#585858;margin:14px 0 6px;text-transform:uppercase;letter-spacing:1px}p{color:#383838;line-height:1.5;margin-bottom:10px}.badge{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:#fff;margin-right:4px}table{border-collapse:collapse;width:100%}td{border-bottom:1px solid #D8D8C8}</style></head><body>
+            w.document.write(`<!DOCTYPE html><html><head><title>${pokemon.name} — PokeRole</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#35785F;color:#202020;font-family:Inter,sans-serif;padding:20px;font-size:13px}h1{font-family:'Exo 2',sans-serif;font-size:24px;margin-bottom:6px}h3{font-family:'Exo 2',sans-serif;font-size:14px;color:#585858;margin:14px 0 6px;text-transform:uppercase;letter-spacing:1px}p{color:#383838;line-height:1.5;margin-bottom:10px}.badge{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:#fff;margin-right:4px}table{border-collapse:collapse;width:100%}td{border-bottom:1px solid #2E6B58}</style></head><body>
             <h1>${pokemon.name} <span style="font-size:14px;color:#585858">#${String(pokemon.number).padStart(3,"0")} · ${pokemon.evolutiveStage} Stage</span></h1>
             ${pokemon.types.map(t=>`<span class="badge" style="background:#606878">${t}</span>`).join("")}
             <span style="font-size:11px;color:#383838;margin-left:8px">${pokemon.suggestedRank}</span>
@@ -141,34 +145,34 @@ function PokemonDetail({pokemon,onTrack}:{pokemon:PokemonEntry;onTrack:(p:Pokemo
             <h3>Moves</h3><table>${moves}</table>
             </body></html>`);
             w.document.close();
-          }} style={{background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:5,color:"#383838",padding:"6px 8px",cursor:"pointer",fontSize:13,fontWeight:700}} title="Pop out to new window">↗</button>
-          <button onClick={()=>onTrack(pokemon)} style={{background:"#2850A0",color:"#E8E8D8",border:"none",borderRadius:6,padding:"8px 16px",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Exo 2'",whiteSpace:"nowrap"}}>⚔️ Add to Battle Tracker</button>
+          }} style={{background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:5,color:"#383838",padding:"6px 8px",cursor:"pointer",fontSize:13,fontWeight:700}} title="Pop out to new window">↗</button>
+          <button onClick={()=>onTrack(pokemon)} style={{background:"#2850A0",color:"#FFFFFF",border:"none",borderRadius:6,padding:"8px 16px",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Exo 2'",whiteSpace:"nowrap"}}>⚔️ Add to Battle Tracker</button>
         </div>
       </div>
 
-      <p style={{color:"#383838",fontSize:13,lineHeight:1.6,padding:"10px 14px",background:"#FFFFFF",borderRadius:6,borderLeft:"3px solid #2850A0"}}>{pokemon.description}</p>
+      <p style={{color:"#383838",fontSize:13,lineHeight:1.6,padding:"10px 14px",background:"#F8F4D0",borderRadius:6,borderLeft:"3px solid #2850A0"}}>{pokemon.description}</p>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div className="frw" style={{padding:14}}>
-          <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Attributes</div>
+          <div style={{fontSize:10,color:"var(--fr-panel-label)",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Attributes</div>
           {attrs.map(a=>(
             <div key={a.k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              <span style={{width:32,fontSize:11,fontWeight:700,color:"#585858"}}>{a.l}</span>
+              <span style={{width:32,fontSize:11,fontWeight:700,color:"var(--fr-panel-label)"}}>{a.l}</span>
               <div style={{display:"flex",gap:3}}>
                 {Array.from({length:Math.max(pokemon.attributeLimits?.[a.k]??pokemon.attributes[a.k],pokemon.attributes[a.k],6)}).map((_,i)=>(
                   <div key={i} style={{width:12,height:12,borderRadius:2,border:`1px solid ${i<(pokemon.attributeLimits?.[a.k]??pokemon.attributes[a.k])?(i<pokemon.attributes[a.k]?"#2850A0":"rgba(0,212,170,0.3)"):"#2850A0"}`,background:i<pokemon.attributes[a.k]?"#2850A0":"transparent"}}/>
                 ))}
               </div>
-              <span style={{marginLeft:"auto",fontSize:12,color:"#202020",fontFamily:"'Exo 2'",fontWeight:700}}>{pokemon.attributes[a.k]}{pokemon.attributeLimits&&<span style={{color:"#585858",fontSize:10}}>/{pokemon.attributeLimits[a.k]}</span>}</span>
+              <span style={{marginLeft:"auto",fontSize:12,color:"#FFFFFF",fontFamily:"'Exo 2'",fontWeight:700}}>{pokemon.attributes[a.k]}{pokemon.attributeLimits&&<span style={{color:"var(--fr-panel-label)",fontSize:10}}>/{pokemon.attributeLimits[a.k]}</span>}</span>
             </div>
           ))}
         </div>
         <div className="frw" style={{padding:14}}>
-          <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Combat Stats</div>
+          <div style={{fontSize:10,color:"var(--fr-panel-label)",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Combat Stats</div>
           {[["Base HP",`${pokemon.baseHp} + VIT (${pokemon.baseHp+pokemon.attributes.vitality})`],["Will Points",`INS + 3 (${pokemon.attributes.insight+3})`],["Defense",`= VIT (${pokemon.attributes.vitality})`],["Sp. Defense",`= INS (${pokemon.attributes.insight})`],["Max Moves",`INS + 3 = ${pokemon.attributes.insight+3}`],["Height",pokemon.height],["Weight",pokemon.weight]].map(([l,v])=>(
             <div key={l} style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{fontSize:11,color:"#585858"}}>{l}</span>
-              <span style={{fontSize:12,color:"#202020",fontFamily:"'Exo 2'",fontWeight:600}}>{v}</span>
+              <span style={{fontSize:11,color:"var(--fr-panel-label)"}}>{l}</span>
+              <span style={{fontSize:12,color:"#FFFFFF",fontFamily:"'Exo 2'",fontWeight:600}}>{v}</span>
             </div>
           ))}
         </div>
@@ -176,12 +180,12 @@ function PokemonDetail({pokemon,onTrack}:{pokemon:PokemonEntry;onTrack:(p:Pokemo
 
       {/* Abilities with popups */}
       <div>
-        <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>Abilities <span style={{color:"#2850A0",fontWeight:400,letterSpacing:0,textTransform:"none"}}>(click to expand)</span></div>
+        <div style={{fontSize:10,color:"var(--fr-panel-label)",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>Abilities <span style={{color:"#E8F8F0",fontWeight:400,letterSpacing:0,textTransform:"none"}}>(click to expand)</span></div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {pokemon.abilities.map(a=>{
             const ab=ABILITIES.find(x=>x.name===a);
             return (
-              <button key={a} onClick={()=>ab&&setAbilityPopup(ab)} style={{flex:1,minWidth:160,background:"#FFFFFF",border:"1px solid #2850A0",borderRadius:6,padding:"8px 12px",cursor:ab?"pointer":"default",textAlign:"left",transition:"border-color 0.1s"}}
+              <button key={a} onClick={()=>ab&&setAbilityPopup(ab)} style={{flex:1,minWidth:160,background:"#F8F4D0",border:"1px solid #2850A0",borderRadius:6,padding:"8px 12px",cursor:ab?"pointer":"default",textAlign:"left",transition:"border-color 0.1s"}}
                 onMouseEnter={e=>{if(ab)(e.currentTarget as HTMLButtonElement).style.borderColor="#2850A0";}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor="#2850A0";}}>
                 <div style={{fontWeight:700,fontSize:13,color:"#2850A0",marginBottom:3}}>{a}</div>
@@ -194,10 +198,10 @@ function PokemonDetail({pokemon,onTrack}:{pokemon:PokemonEntry;onTrack:(p:Pokemo
 
       {/* Type matchups */}
       <div className="frw" style={{padding:14}}>
-        <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Type Matchups</div>
+        <div style={{fontSize:10,color:"var(--fr-panel-label)",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Type Matchups</div>
         {typeData.weaknesses.length>0&&(
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:11,color:"#C02820",width:56,fontWeight:600}}>Weak to</span>
+            <span style={{fontSize:11,color:"#FFD4D0",width:56,fontWeight:600}}>Weak to</span>
             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{typeData.weaknesses.map(t=><TypeBadge key={t} type={t} small/>)}</div>
           </div>
         )}
@@ -209,7 +213,7 @@ function PokemonDetail({pokemon,onTrack}:{pokemon:PokemonEntry;onTrack:(p:Pokemo
         )}
         {typeData.immunities.length>0&&(
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:11,color:"#A07000",width:56,fontWeight:600}}>Immune</span>
+            <span style={{fontSize:11,color:"#FFE8A8",width:56,fontWeight:600}}>Immune</span>
             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{typeData.immunities.map(t=><TypeBadge key={t} type={t} small/>)}</div>
           </div>
         )}
@@ -218,27 +222,30 @@ function PokemonDetail({pokemon,onTrack}:{pokemon:PokemonEntry;onTrack:(p:Pokemo
       {/* Evolution */}
       {pokemon.evolvesTo&&(
         <div className="frw" style={{padding:14}}>
-          <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>Evolution — Stage: {pokemon.evolutiveStage}</div>
+          <div style={{fontSize:10,color:"var(--fr-panel-label)",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>Evolution — Stage: {pokemon.evolutiveStage}</div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{fontWeight:700,fontSize:13,color:"#202020"}}>{pokemon.name}</span>
+            <span style={{fontWeight:700,fontSize:13,color:"#FFFFFF"}}>{pokemon.name}</span>
             <span style={{color:"#4A5468",fontSize:18}}>→</span>
-            <div><div style={{fontWeight:700,fontSize:13,color:"#2850A0"}}>{pokemon.evolvesTo}</div>{pokemon.evolvesWith&&<div style={{fontSize:11,color:"#585858"}}>via: {pokemon.evolvesWith}</div>}</div>
+            <div><div style={{fontWeight:700,fontSize:13,color:"#2850A0"}}>{pokemon.evolvesTo}</div>{pokemon.evolvesWith&&<div style={{fontSize:11,color:"var(--fr-panel-label)"}}>via: {pokemon.evolvesWith}</div>}</div>
           </div>
         </div>
       )}
 
       {/* Moves with popups */}
       <div>
-        <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Learnable Moves <span style={{color:"#2850A0",fontWeight:400,letterSpacing:0,textTransform:"none"}}>(click for details)</span></div>
+        <div style={{fontSize:10,color:"var(--fr-panel-label)",letterSpacing:"1px",textTransform:"uppercase",marginBottom:10}}>Learnable Moves <span style={{color:"#E8F8F0",fontWeight:400,letterSpacing:0,textTransform:"none"}}>(click for details)</span></div>
         {(Object.entries(rankGroups) as [Rank,typeof pokemon.moves][]).map(([rank,moves])=>(
           <div key={rank} style={{marginBottom:10}}>
-            <div style={{fontSize:10,fontWeight:700,color:RANK_COLORS[rank],letterSpacing:"0.5px",textTransform:"uppercase",padding:"3px 8px",background:RANK_COLORS[rank]+"12",borderRadius:4,marginBottom:5,borderLeft:`2px solid ${RANK_COLORS[rank]}`}}>{rank}</div>
+            {/* This band sits on the green field. The rank inks were darkened for
+                cream lists, so on green they read at ~1.2:1 — use white on a dark
+                scrim and keep the rank colour as the edge marker. */}
+            <div style={{fontSize:10,fontWeight:700,color:"#FFFFFF",letterSpacing:"0.5px",textTransform:"uppercase",padding:"3px 8px",background:"rgba(0,0,0,0.30)",borderRadius:4,marginBottom:5,borderLeft:`3px solid ${RANK_COLORS[rank]}`}}>{rank}</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,paddingLeft:8}}>
               {moves.map((m,i)=>{
                 const moveData=MOVES.find(mv=>mv.name===m.name);
                 return (
                   <button key={i} onClick={()=>moveData&&setMovePopup(moveData)}
-                    style={{display:"flex",alignItems:"center",gap:5,background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:4,padding:"4px 8px",cursor:moveData?"pointer":"default",transition:"border-color 0.1s"}}
+                    style={{display:"flex",alignItems:"center",gap:5,background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:4,padding:"4px 8px",cursor:moveData?"pointer":"default",transition:"border-color 0.1s"}}
                     onMouseEnter={e=>{if(moveData)(e.currentTarget as HTMLButtonElement).style.borderColor=TYPE_COLORS[m.type];}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor="#2850A0";}}>
                     <TypeBadge type={m.type} small/><span style={{fontSize:12,color:"#202020"}}>{m.name}</span>
@@ -282,7 +289,7 @@ function AddToInventoryModal({item, onClose}:{item:ItemData; onClose:()=>void}) 
 
   if(trainers.length===0) return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,padding:24,maxWidth:360}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,padding:24,maxWidth:360}} onClick={e=>e.stopPropagation()}>
         <p style={{color:"#383838",fontSize:13}}>No characters saved. Create trainers first.</p>
         <button onClick={onClose} style={{marginTop:12,padding:"6px 14px",borderRadius:5,border:"none",background:"#7888A8",color:"#202020",cursor:"pointer"}}>Close</button>
       </div>
@@ -291,7 +298,7 @@ function AddToInventoryModal({item, onClose}:{item:ItemData; onClose:()=>void}) 
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,width:380,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,width:380,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
         {/* Header */}
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:16}}>🎒</span>
@@ -319,10 +326,10 @@ function AddToInventoryModal({item, onClose}:{item:ItemData; onClose:()=>void}) 
           <div>
             <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:5}}>Quantity</div>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <button onClick={()=>setQty(q=>Math.max(1,q-1))} style={{width:28,height:28,borderRadius:4,border:"1px solid #7888A8",background:"#FFFFFF",color:"#2850A0",cursor:"pointer",fontSize:16}}>−</button>
+              <button onClick={()=>setQty(q=>Math.max(1,q-1))} style={{width:28,height:28,borderRadius:4,border:"1px solid #7888A8",background:"#F8F4D0",color:"#2850A0",cursor:"pointer",fontSize:16}}>−</button>
               <input type="number" min={1} value={qty} onChange={e=>setQty(Math.max(1,parseInt(e.target.value)||1))}
-                style={{width:56,textAlign:"center",background:"#FFFFFF",border:"1px solid #7888A8",borderRadius:4,color:"#202020",fontSize:14,padding:"4px 0"}}/>
-              <button onClick={()=>setQty(q=>q+1)} style={{width:28,height:28,borderRadius:4,border:"1px solid #7888A8",background:"#FFFFFF",color:"#2850A0",cursor:"pointer",fontSize:16}}>+</button>
+                style={{width:56,textAlign:"center",background:"#F8F4D0",border:"1px solid #7888A8",borderRadius:4,color:"#202020",fontSize:14,padding:"4px 0"}}/>
+              <button onClick={()=>setQty(q=>q+1)} style={{width:28,height:28,borderRadius:4,border:"1px solid #7888A8",background:"#F8F4D0",color:"#2850A0",cursor:"pointer",fontSize:16}}>+</button>
             </div>
           </div>
           {/* Mode */}
@@ -338,7 +345,7 @@ function AddToInventoryModal({item, onClose}:{item:ItemData; onClose:()=>void}) 
             <div>
               <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:5}}>Price per item (₽)</div>
               <input type="number" min={0} value={price} onChange={e=>setPrice(Math.max(0,parseInt(e.target.value)||0))}
-                style={{width:"100%",background:"#FFFFFF",border:`1px solid ${canAfford?"#A0700050":"#C0282050"}`,borderRadius:5,color:"#A07000",fontSize:16,padding:"6px 10px",fontFamily:"'Exo 2'",fontWeight:700}}/>
+                style={{width:"100%",background:"#F8F4D0",border:`1px solid ${canAfford?"#A0700050":"#C0282050"}`,borderRadius:5,color:"#A07000",fontSize:16,padding:"6px 10px",fontFamily:"'Exo 2'",fontWeight:700}}/>
               <div style={{marginTop:6,fontSize:11,color:canAfford?"#585858":"#C02820"}}>
                 Total: ₽{(price*qty).toLocaleString()}
                 {selTrainer&&<span style={{marginLeft:8}}>· {selTrainer.name} has ₽{(selTrainer.money??0).toLocaleString()}</span>}
@@ -425,13 +432,13 @@ function ReferenceTabs() {
   };
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#E8E8D8",overflow:"hidden"}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#35785F",overflow:"hidden"}}>
       <SiteNav active={tab}/>
       {/* Page sub-nav: the reference tabs, one level below the site bar */}
       <div style={{background:"#D8E0F0",borderBottom:"2px solid #2850A0",padding:"0 12px",height:34,display:"flex",alignItems:"center",gap:4,flexShrink:0,overflowX:"auto"}}>
         {(["pokedex","moves","abilities","items","types","status","weather"] as Tab[]).map(t=>(
           <button key={t} onClick={()=>changeTab(t)} style={{padding:"3px 10px",borderRadius:4,fontSize:12,fontWeight:700,cursor:"pointer",border:"none",fontFamily:"'Exo 2',sans-serif",whiteSpace:"nowrap",flexShrink:0,
-            color:tab===t?"#FFFFFF":"#2850A0",textShadow:tab===t?"1px 1px 0 #183868":"none",background:tab===t?"#2850A0":"transparent"}}>
+            color:tab===t?"#F8F4D0":"#2850A0",textShadow:tab===t?"1px 1px 0 #183868":"none",background:tab===t?"#2850A0":"transparent"}}>
             {t==="pokedex"?"Pokédex":t.charAt(0).toUpperCase()+t.slice(1)}
           </button>
         ))}
@@ -439,12 +446,12 @@ function ReferenceTabs() {
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {/* Sidebar */}
         {["pokedex","moves","abilities","items"].includes(tab)&&(
-          <div style={{width:260,display:"flex",flexDirection:"column",background:"#FFFFFF",borderRight:"1px solid #2850A0",flexShrink:0}}>
+          <div style={{width:260,display:"flex",flexDirection:"column",background:"#F8F4D0",borderRight:"1px solid #2850A0",flexShrink:0}}>
             <div style={{padding:"10px",display:"flex",flexDirection:"column",gap:7,borderBottom:"1px solid #2850A0"}}>
               <div style={{position:"relative"}}>
                 <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:"#585858",fontSize:12,pointerEvents:"none"}}>🔍</span>
                 <input type="text" placeholder={`Search ${tab==="pokedex"?"Pokémon":tab}…`} value={search} onChange={e=>setSearch(e.target.value)}
-                  style={{width:"100%",background:"#E8E8D8",border:"1px solid #2850A0",borderRadius:5,padding:"6px 8px 6px 28px",color:"#202020",fontSize:12,outline:"none"}}
+                  style={{width:"100%",background:"#35785F",border:"1px solid #2850A0",borderRadius:5,padding:"6px 8px 6px 28px",color:"#202020",fontSize:12,outline:"none"}}
                   onFocus={e=>{(e.target as HTMLInputElement).style.borderColor="#2850A0";}}
                   onBlur={e=>{(e.target as HTMLInputElement).style.borderColor="#2850A0";}}/>
               </div>
@@ -547,7 +554,7 @@ function ReferenceTabs() {
           </div>
         )}
         {/* Detail */}
-        <div style={{flex:1,overflowY:"auto",background:"#E8E8D8"}}>
+        <div style={{flex:1,overflowY:"auto",background:"#35785F"}}>
           {tab==="pokedex"&&selPokemon&&<PokemonDetail pokemon={selPokemon} onTrack={trackPokemon}/>}
           {tab==="moves"&&selMove&&(
             <div style={{padding:"20px 24px"}}>
@@ -555,13 +562,13 @@ function ReferenceTabs() {
                 <TypeBadge type={selMove.type}/>
                 <span style={{fontSize:12,fontWeight:700,color:CAT_COLORS[selMove.category].text,background:CAT_COLORS[selMove.category].bg,padding:"2px 8px",borderRadius:4}}>{selMove.category}</span>
                 {(selMove.priority??0)>0&&<span style={{fontSize:10,fontWeight:700,color:"#2850A0",background:"rgba(0,212,170,0.12)",padding:"1px 6px",borderRadius:3}}>PRIORITY {selMove.priority}</span>}
-                <button onClick={()=>{const w=window.open("","_blank","width=500,height=500,resizable=yes");if(!w)return;w.document.write(`<!DOCTYPE html><html><head><title>${selMove.name}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#E8E8D8;color:#202020;font-family:Inter,sans-serif;padding:20px;font-size:13px}h2{font-family:'Exo 2',sans-serif;margin-bottom:12px}p{color:#383838;line-height:1.5;margin-bottom:12px}.field{background:#F8F8F0;padding:10px 12px;border-radius:5px;margin-bottom:8px}.label{font-size:9px;color:#585858;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}</style></head><body><h2>${selMove.name}</h2><p>${selMove.type} · ${selMove.category}</p><p>${selMove.description}</p><div class="field"><div class="label">Power</div>${selMove.power}</div><div class="field"><div class="label">Accuracy Roll</div>${selMove.accuracy}</div><div class="field"><div class="label">Damage Pool</div>${selMove.damagePool}</div><div class="field"><div class="label">Effect</div>${selMove.effect}</div></body></html>`);w.document.close();}} style={{marginLeft:"auto",background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:4,color:"#383838",padding:"4px 8px",cursor:"pointer",fontSize:12}} title="Pop out">↗</button>
+                <button onClick={()=>{const w=window.open("","_blank","width=500,height=500,resizable=yes");if(!w)return;w.document.write(`<!DOCTYPE html><html><head><title>${selMove.name}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#35785F;color:#202020;font-family:Inter,sans-serif;padding:20px;font-size:13px}h2{font-family:'Exo 2',sans-serif;margin-bottom:12px}p{color:#383838;line-height:1.5;margin-bottom:12px}.field{background:#FBF8E4;padding:10px 12px;border-radius:5px;margin-bottom:8px}.label{font-size:9px;color:#585858;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}</style></head><body><h2>${selMove.name}</h2><p>${selMove.type} · ${selMove.category}</p><p>${selMove.description}</p><div class="field"><div class="label">Power</div>${selMove.power}</div><div class="field"><div class="label">Accuracy Roll</div>${selMove.accuracy}</div><div class="field"><div class="label">Damage Pool</div>${selMove.damagePool}</div><div class="field"><div class="label">Effect</div>${selMove.effect}</div></body></html>`);w.document.close();}} style={{marginLeft:"auto",background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:4,color:"#383838",padding:"4px 8px",cursor:"pointer",fontSize:12}} title="Pop out">↗</button>
               </div>
               <h2 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:24,color:"#202020",marginBottom:12}}>{selMove.name}</h2>
-              <p style={{color:"#383838",fontSize:13,lineHeight:1.6,marginBottom:14,padding:"10px 14px",background:"#FFFFFF",borderRadius:6,borderLeft:`3px solid ${TYPE_COLORS[selMove.type]}`}}>{selMove.description}</p>
+              <p style={{color:"#383838",fontSize:13,lineHeight:1.6,marginBottom:14,padding:"10px 14px",background:"#F8F4D0",borderRadius:6,borderLeft:`3px solid ${TYPE_COLORS[selMove.type]}`}}>{selMove.description}</p>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                 {[["Power",selMove.power],["Accuracy Roll",selMove.accuracy],["Damage Pool",selMove.damagePool],["Added Effect",selMove.effect]].map(([l,v])=>(
-                  <div key={l} style={{background:"#FFFFFF",borderRadius:5,padding:"10px 12px"}}>
+                  <div key={l} style={{background:"#F8F4D0",borderRadius:5,padding:"10px 12px"}}>
                     <div style={{fontSize:9,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:3}}>{l}</div>
                     <div style={{fontSize:13,color:"#202020",fontWeight:600}}>{v}</div>
                   </div>
@@ -579,7 +586,7 @@ function ReferenceTabs() {
                       {learners.map(p=>{
                         const learnedAt=p.moves.find(m=>m.name===selMove.name);
                         return(
-                          <div key={`${p.number}-${p.name}`} style={{display:"flex",alignItems:"center",gap:4,background:"#FFFFFF",borderRadius:4,padding:"3px 8px",cursor:"pointer"}}
+                          <div key={`${p.number}-${p.name}`} style={{display:"flex",alignItems:"center",gap:4,background:"#F8F4D0",borderRadius:4,padding:"3px 8px",cursor:"pointer"}}
                             onClick={()=>{/* Could select pokemon */}}>
                             <span style={{fontSize:9,color:"#4A5468",fontFamily:"'Exo 2'",fontWeight:700}}>#{String(p.number).padStart(3,"0")}</span>
                             <span style={{fontSize:11,color:"#202020"}}>{p.name}</span>
@@ -598,10 +605,10 @@ function ReferenceTabs() {
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
                 <h2 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:24,color:"#202020"}}>{selAbility.name}</h2>
                 {selAbility.isUnique&&<span style={{fontSize:11,fontWeight:700,color:"#A07000",background:"rgba(255,211,42,0.12)",padding:"2px 8px",borderRadius:4}}>UNIQUE</span>}
-                <button onClick={()=>{const w=window.open("","_blank","width=500,height=400,resizable=yes");if(!w)return;w.document.write(`<!DOCTYPE html><html><head><title>${selAbility.name}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#E8E8D8;color:#202020;font-family:Inter,sans-serif;padding:20px;font-size:13px}h2{font-family:'Exo 2',sans-serif;margin-bottom:12px}p{color:#383838;line-height:1.5;margin-bottom:12px}.effect{background:#F8F8F0;padding:12px;border-radius:5px;border-left:3px solid #2850A0;line-height:1.6}</style></head><body><h2>${selAbility.name}${selAbility.isUnique?" (UNIQUE)":""}</h2><p>${selAbility.description}</p><div class="effect">${selAbility.effect}</div></body></html>`);w.document.close();}} style={{marginLeft:"auto",background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:4,color:"#383838",padding:"4px 8px",cursor:"pointer",fontSize:12}} title="Pop out">↗</button>
+                <button onClick={()=>{const w=window.open("","_blank","width=500,height=400,resizable=yes");if(!w)return;w.document.write(`<!DOCTYPE html><html><head><title>${selAbility.name}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#35785F;color:#202020;font-family:Inter,sans-serif;padding:20px;font-size:13px}h2{font-family:'Exo 2',sans-serif;margin-bottom:12px}p{color:#383838;line-height:1.5;margin-bottom:12px}.effect{background:#FBF8E4;padding:12px;border-radius:5px;border-left:3px solid #2850A0;line-height:1.6}</style></head><body><h2>${selAbility.name}${selAbility.isUnique?" (UNIQUE)":""}</h2><p>${selAbility.description}</p><div class="effect">${selAbility.effect}</div></body></html>`);w.document.close();}} style={{marginLeft:"auto",background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:4,color:"#383838",padding:"4px 8px",cursor:"pointer",fontSize:12}} title="Pop out">↗</button>
               </div>
-              <p style={{color:"#383838",fontSize:13,lineHeight:1.6,marginBottom:14,padding:"10px 14px",background:"#FFFFFF",borderRadius:6,borderLeft:"3px solid #2850A0"}}>{selAbility.description}</p>
-              <div style={{background:"#FFFFFF",borderRadius:6,padding:"12px 16px"}}><div style={{fontSize:9,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Effect</div><div style={{fontSize:13,color:"#202020",lineHeight:1.6}}>{selAbility.effect}</div></div>
+              <p style={{color:"#383838",fontSize:13,lineHeight:1.6,marginBottom:14,padding:"10px 14px",background:"#F8F4D0",borderRadius:6,borderLeft:"3px solid #2850A0"}}>{selAbility.description}</p>
+              <div style={{background:"#F8F4D0",borderRadius:6,padding:"12px 16px"}}><div style={{fontSize:9,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Effect</div><div style={{fontSize:13,color:"#202020",lineHeight:1.6}}>{selAbility.effect}</div></div>
             </div>
           )}
           {addModalItem&&<AddToInventoryModal item={addModalItem} onClose={()=>setAddModalItem(null)}/>}
@@ -656,7 +663,7 @@ function ReferenceTabs() {
                               {items.map(item=>{
                                 const catCol=CAT_ITEM_COLORS[item.category]||"#585858";
                                 return(
-                                  <div key={item.name} style={{background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:7,padding:"10px 12px",borderLeft:`3px solid ${catCol}60`}}>
+                                  <div key={item.name} style={{background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:7,padding:"10px 12px",borderLeft:`3px solid ${catCol}60`}}>
                                     <div style={{display:"flex",alignItems:"flex-start",gap:6,marginBottom:6}}>
                                       <div style={{flex:1}}>
                                         <div style={{fontSize:13,fontWeight:700,color:"#202020",lineHeight:1.3}}>{item.name}</div>
@@ -694,16 +701,16 @@ function ReferenceTabs() {
               <div style={{overflowX:"auto"}}>
                 <table style={{borderCollapse:"collapse",width:"100%",fontSize:11}}>
                   <thead><tr>
-                    <th style={{padding:"8px 12px",textAlign:"left",color:"#585858",background:"#FFFFFF",borderBottom:"1px solid #2850A0"}}>Type</th>
-                    <th style={{padding:"8px 12px",color:"#C02820",background:"#FFFFFF",borderBottom:"1px solid #2850A0"}}>Weak to</th>
-                    <th style={{padding:"8px 12px",color:"#2850A0",background:"#FFFFFF",borderBottom:"1px solid #2850A0"}}>Resists</th>
-                    <th style={{padding:"8px 12px",color:"#A07000",background:"#FFFFFF",borderBottom:"1px solid #2850A0"}}>Immune to</th>
+                    <th style={{padding:"8px 12px",textAlign:"left",color:"#585858",background:"#F8F4D0",borderBottom:"1px solid #2850A0"}}>Type</th>
+                    <th style={{padding:"8px 12px",color:"#C02820",background:"#F8F4D0",borderBottom:"1px solid #2850A0"}}>Weak to</th>
+                    <th style={{padding:"8px 12px",color:"#2850A0",background:"#F8F4D0",borderBottom:"1px solid #2850A0"}}>Resists</th>
+                    <th style={{padding:"8px 12px",color:"#A07000",background:"#F8F4D0",borderBottom:"1px solid #2850A0"}}>Immune to</th>
                   </tr></thead>
                   <tbody>
                     {ALL_TYPES.map((t,i)=>{
                       const chart=TYPE_CHART[t];
                       return (
-                        <tr key={t} style={{background:i%2===0?"transparent":"#F8F8F040",borderBottom:"1px solid #2850A020"}}>
+                        <tr key={t} style={{background:i%2===0?"transparent":"#FBF8E440",borderBottom:"1px solid #2850A020"}}>
                           <td style={{padding:"6px 12px"}}><TypeBadge type={t}/></td>
                           <td style={{padding:"6px 12px"}}><div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{chart.weaknesses.map(w=><TypeBadge key={w} type={w} small/>)}</div></td>
                           <td style={{padding:"6px 12px"}}><div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{chart.resistances.map(r=><TypeBadge key={r} type={r} small/>)}</div></td>
@@ -721,7 +728,7 @@ function ReferenceTabs() {
               <h2 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:22,color:"#202020",marginBottom:16}}>Status Conditions</h2>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {Object.values(STATUS_EFFECTS).filter(s=>s.name!=="Healthy").map(s=>(
-                  <div key={s.name} style={{background:"#F8F8F0",border:`1px solid ${s.color}40`,borderRadius:8,padding:14}}>
+                  <div key={s.name} style={{background:"#FBF8E4",border:`1px solid ${s.color}40`,borderRadius:8,padding:14}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
                       <span style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:s.color}}>{s.name}</span>
                       {s.endOfRound&&<span style={{fontSize:10,color:"#C02820",background:"rgba(255,71,87,0.1)",padding:"2px 7px",borderRadius:3}}>End of Round Effect</span>}
@@ -738,7 +745,7 @@ function ReferenceTabs() {
               <h2 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:22,color:"#202020",marginBottom:16}}>Weather & Terrain Effects</h2>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {WEATHER_EFFECTS.map(w=>(
-                  <div key={w.name} style={{background:"#F8F8F0",border:`1px solid ${w.color}40`,borderRadius:8,padding:14}}>
+                  <div key={w.name} style={{background:"#FBF8E4",border:`1px solid ${w.color}40`,borderRadius:8,padding:14}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
                       <span style={{fontSize:18}}>{w.emoji.split(" ")[0]}</span>
                       <span style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#202020"}}>{w.name}</span>
@@ -768,7 +775,7 @@ function ReferenceTabs() {
 
 export default function ReferencePage() {
   return (
-    <Suspense fallback={<div style={{background:"#E8E8D8",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"#585858"}}>Loading…</div>}>
+    <Suspense fallback={<div style={{background:"#35785F",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",color:"#585858"}}>Loading…</div>}>
       <ReferenceTabs/>
     </Suspense>
   );

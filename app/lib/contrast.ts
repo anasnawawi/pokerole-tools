@@ -38,7 +38,7 @@ export function readableInk(bg: string): "#181818" | "#FFFFFF" {
  * preserving its hue. Used for palette colours that come from data (habitats)
  * and so can't be hand-corrected one by one.
  */
-export function inkOn(hex: string, bg = "#F8F8F0", target = 4.5): string {
+export function inkOn(hex: string, bg = "#F8F4D0", target = 5): string {
   const m = hex.replace("#", "").match(/.{2}/g);
   if (!m) return "#202020";
   let [r, g, b] = m.map(h => parseInt(h, 16));

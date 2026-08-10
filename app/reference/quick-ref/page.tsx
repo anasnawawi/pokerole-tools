@@ -4,7 +4,7 @@ import SiteNav from "../../components/SiteNav";
 
 export default function QuickRefPage() {
   return (
-    <div style={{minHeight:"100vh",background:"#E8E8D8",color:"#202020",overflow:"auto"}}>
+    <div style={{minHeight:"100vh",background:"#35785F",color:"#202020",overflow:"auto"}}>
       <div style={{position:"sticky",top:0,zIndex:10}}><SiteNav active="quick-ref"/></div>
       <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 24px 60px"}}>
         <h1 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:26,color:"#202020",marginBottom:20}}>PokeRole 3.0 — Quick Reference</h1>
@@ -111,7 +111,7 @@ export default function QuickRefPage() {
 
 function Sec({title,c,children}:{title:string;c:string;children:React.ReactNode}) {
   return (
-    <div style={{background:"#F8F8F0",border:`1px solid ${c}25`,borderRadius:8,padding:14,borderTop:`3px solid ${c}`}}>
+    <div style={{background:"#FBF8E4",border:`1px solid ${c}25`,borderRadius:8,padding:14,borderTop:`3px solid ${c}`}}>
       <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:14,color:c,marginBottom:10}}>{title}</h3>
       {children}
     </div>

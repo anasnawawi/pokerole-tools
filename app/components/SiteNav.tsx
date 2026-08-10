@@ -35,7 +35,7 @@ export default function SiteNav({active,children}:{active?:string;children?:Reac
       /* Scrolls rather than clipping — a nav that silently hides its tail is worse than one that scrolls */
       overflowX:"auto",overflowY:"hidden"}}>
       <Link href="/" style={{fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#FFFFFF",textDecoration:"none",textShadow:"1px 1px 0 #183868",flexShrink:0,marginRight:8,whiteSpace:"nowrap"}}>
-        PokeRole<span style={{color:"#F8D030"}}> Tools</span>
+        PokeRole<span style={{color:"#FFE070"}}> Tools</span>
       </Link>
       {SITE_LINKS.map(l=>{
         const on = current===l.match;

@@ -28,17 +28,31 @@
      Taken from the FRLG in-game windows (bag, party, start menu, battle menu):
      a white pane with a double blue keyline — dark outer rule, white gap, then
      a lighter inner rule — with black text carrying a 1px light-grey shadow. */
-  --fr-win:         #FFFFFF;   /* window fill */
-  --fr-win-edge:    #2850A0;   /* outer keyline */
-  --fr-win-bevel:   #78A8E0;   /* inner keyline */
+  /* Three-surface structure taken from the bag and party screens: a teal-green
+     field behind everything, blue content panels, and pale cream list menus. */
+  /* Deep enough that white text on the field clears 5:1; the lighter green it
+     started from only reached 3.9. */
+  --fr-page:        #35785F;   /* green field behind every screen */
+  /* Named -blue rather than --fr-panel, which is already the legacy cream HP
+     panel above; reusing that name silently overrode it.
+     Deep enough that white values clear 6:1 and pale labels still clear AA,
+     which a lighter blue could not carry at these text sizes. */
+  --fr-panel-blue:  #3A5FB0;   /* blue content panel (light ink) */
+  --fr-panel-edge:  #16305F;   /* panel keyline */
+  --fr-panel-label: #D8E4F8;   /* secondary label on a blue panel */
+  --fr-list:        #F8F4D0;   /* cream list / menu surface (dark ink) */
+
+  --fr-win:         #4870C8;   /* window fill — now the blue panel */
+  --fr-win-edge:    #1C3A78;   /* outer keyline */
+  --fr-win-bevel:   #90B0E8;   /* inner keyline */
   --fr-ink:         #202020;   /* body text */
   --fr-ink-shade:   #A8A8A8;   /* the signature GBA text shadow */
   --fr-ink-red:     #C02820;   /* values & secondary readouts */
   --fr-ink-blue:    #2850A0;   /* headings */
-  --fr-bar:         #3878C8;   /* system bars */
+  --fr-bar:         #2C5FA8;   /* system bars — dark enough for white labels */
   --fr-bar-ink:     #FFFFFF;
   --fr-row-sel:     #D8D8D8;   /* OPTION-style selected band */
-  --fr-sel-ring:    #D82820;   /* red selection outline */
+  --fr-sel-ring:    #B01810;   /* red selection outline */
 
   /* Legacy aliases used elsewhere */
   --bg-primary: var(--fr-field);
@@ -59,7 +73,7 @@
 
 html, body {
   height: 100%;
-  background: var(--fr-field);
+  background: var(--fr-page);
   color: var(--fr-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
@@ -106,11 +120,19 @@ html, body {
    from the bag / party / start menus. */
 
 .frw {
-  background: var(--fr-win);
-  border: 3px solid var(--fr-win);
+  background: var(--fr-panel-blue);
+  /* Light border stays light so the double keyline still reads against the
+     blue fill, as on the party screen's Pokémon plates. */
+  border: 3px solid #F0F4FF;
   border-radius: 7px;
-  /* outer dark rule + inner light rule = the FRLG double keyline */
-  box-shadow: 0 0 0 2px var(--fr-win-edge), inset 0 0 0 2px var(--fr-win-bevel);
+  box-shadow: 0 0 0 2px var(--fr-panel-edge), inset 0 0 0 2px var(--fr-win-bevel);
+  color: #FFFFFF;
+  text-shadow: 1px 1px 0 #14295C;
+}
+/* Cream list surface — the item-list half of the bag screen */
+.fr-list {
+  background: var(--fr-list);
+  color: var(--fr-ink);
 }
 /* Blue variant used for battle dialogue boxes */
 .frw-blue {

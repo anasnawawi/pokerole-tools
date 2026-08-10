@@ -108,9 +108,9 @@ function rollDice(pool:number):{rolls:number[];successes:number} {
 function HpBar({current,max}:{current:number;max:number}) {
   const pct=max>0?Math.max(0,Math.min(1,current/max)):0;
   const c=pct>0.5?"#2850A0":pct>0.25?"#A07000":"#C02820";
-  return <div style={{background:"#E8E8D8",borderRadius:3,height:5,overflow:"hidden"}}><div style={{width:`${pct*100}%`,height:"100%",background:c,transition:"width 0.3s"}}/></div>;
+  return <div style={{background:"#35785F",borderRadius:3,height:5,overflow:"hidden"}}><div style={{width:`${pct*100}%`,height:"100%",background:c,transition:"width 0.3s"}}/></div>;
 }
-const adjBtn:React.CSSProperties={width:20,height:20,background:"#D8D8C8",border:"1px solid #7888A8",borderRadius:3,color:"#2850A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
+const adjBtn:React.CSSProperties={width:20,height:20,background:"#2E6B58",border:"1px solid #7888A8",borderRadius:3,color:"#2850A0",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
 function getEffectiveAttrs(e:BattleEntry):AttrSet {
   const sc=STATUS_CONDITIONS[e.status];
   const accPen=sc?.accuracyPenalty??0;
@@ -365,11 +365,11 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,total
         if(!target)return null;
         const dr=defResults[tid];
         return (
-          <div key={tid} style={{marginBottom:8,background:"#FFFFFF",borderRadius:5,padding:"8px 10px"}}>
+          <div key={tid} style={{marginBottom:8,background:"#F8F4D0",borderRadius:5,padding:"8px 10px"}}>
             <div style={{fontSize:10,color:"#585858",textTransform:"uppercase",letterSpacing:"1px",marginBottom:6}}>Defender: {target.nickname||target.pokemon.name} — pick their counter move</div>
             <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
               {target.moves.map((m,i)=>(
-                <button key={i} onClick={()=>doDefRoll(tid,m)} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:4,border:`1px solid ${dr?.move.name===m.name?"#C02820":"#7888A8"}`,background:dr?.move.name===m.name?"rgba(255,71,87,0.15)":"#F8F8F0",cursor:"pointer",fontSize:10}}>
+                <button key={i} onClick={()=>doDefRoll(tid,m)} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:4,border:`1px solid ${dr?.move.name===m.name?"#C02820":"#7888A8"}`,background:dr?.move.name===m.name?"rgba(255,71,87,0.15)":"#FBF8E4",cursor:"pointer",fontSize:10}}>
                   <span style={{display:"inline-flex",padding:"0 4px",borderRadius:2,fontSize:8,fontWeight:700,color:"#fff",background:TYPE_COLORS[m.type as PokemonType]}}>{m.type}</span>
                   {m.name}
                 </button>
@@ -383,10 +383,10 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,total
 
       {/* Resolve */}
       {atkRoll&&Object.keys(defResults).length>0&&(
-        <button onClick={resolveClash} style={{width:"100%",background:"#2850A0",color:"#E8E8D8",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer",marginTop:4}}>⚡ Resolve Clash & Apply Damage</button>
+        <button onClick={resolveClash} style={{width:"100%",background:"#2850A0",color:"#FFFFFF",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer",marginTop:4}}>⚡ Resolve Clash & Apply Damage</button>
       )}
       {clashResult&&(
-        <div style={{marginTop:8,background:"#FFFFFF",borderRadius:4,padding:"8px 10px",fontSize:11,color:"#202020",lineHeight:1.5,whiteSpace:"pre-line"}}>{clashResult}</div>
+        <div style={{marginTop:8,background:"#F8F4D0",borderRadius:4,padding:"8px 10px",fontSize:11,color:"#202020",lineHeight:1.5,whiteSpace:"pre-line"}}>{clashResult}</div>
       )}
     </div>
   );
@@ -509,7 +509,7 @@ function MoveAttackPopup({move,attacker,allEntries,weather,onClose,onApplyDmg,on
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,width:500,maxWidth:"95vw",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,width:500,maxWidth:"95vw",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",alignItems:"center",gap:8}}>
           <TypeBadge type={move.type as PokemonType}/>
           <span style={{fontSize:11,fontWeight:700,color:move.category==="Physical"?"#f08030":move.category==="Special"?"#6890f0":"#78c850",background:move.category==="Physical"?"rgba(240,128,48,0.15)":move.category==="Special"?"rgba(104,144,240,0.15)":"rgba(120,200,80,0.15)",padding:"2px 7px",borderRadius:3}}>{move.category}</span>
@@ -520,7 +520,7 @@ function MoveAttackPopup({move,attacker,allEntries,weather,onClose,onApplyDmg,on
         </div>
         <div style={{padding:16,overflowY:"auto",display:"flex",flexDirection:"column",gap:12}}>
           <p style={{fontSize:12,color:"#383838",lineHeight:1.5,margin:0}}>{move.description}</p>
-          <div style={{background:"#FFFFFF",borderRadius:5,padding:"7px 10px",fontSize:11,color:"#202020"}}><strong style={{color:"#585858"}}>Effect: </strong>{move.effect}</div>
+          <div style={{background:"#F8F4D0",borderRadius:5,padding:"7px 10px",fontSize:11,color:"#202020"}}><strong style={{color:"#585858"}}>Effect: </strong>{move.effect}</div>
 
           {/* Action count penalty */}
           {attacker.actionCount>0&&(
@@ -623,7 +623,7 @@ function MoveAttackPopup({move,attacker,allEntries,weather,onClose,onApplyDmg,on
             const finalDmg=dr?Math.max(1,(tm.dmgMod===2?Math.ceil(dr.successes*1.5):tm.dmgMod===-1?Math.max(1,dr.successes-1):dr.successes)-def):null;
             const wasApplied=applied.has(tid);
             return (
-              <div key={tid} style={{background:"#FFFFFF",borderRadius:6,padding:"10px 12px"}}>
+              <div key={tid} style={{background:"#F8F4D0",borderRadius:6,padding:"10px 12px"}}>
                 <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>2. Damage → {t.nickname||t.pokemon.name} ({pool}d base)</div>
                 <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:6}}>
                   <button onClick={()=>doDmgForTarget(tid)} disabled={!!dr} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:dr?"#585858":"#f08030",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:dr?"default":"pointer"}}>🎲 Roll Damage ({pool}d)</button>
@@ -644,7 +644,7 @@ function MoveAttackPopup({move,attacker,allEntries,weather,onClose,onApplyDmg,on
 
           {/* Stat effects */}
           {canAct&&accResult&&accResult.successes>=actReq&&statEffects.length>0&&targets.length>0&&(
-            <div style={{background:"#FFFFFF",borderRadius:6,padding:"10px 12px"}}>
+            <div style={{background:"#F8F4D0",borderRadius:6,padding:"10px 12px"}}>
               <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>Stat Changes (on hit)</div>
               {statEffects.map((se,i)=>targets.map(tid=>{
                 const t=allEntries.find(e=>e.id===tid);
@@ -676,7 +676,7 @@ function EndOfRoundPopup({entries,weather,round,onApply,onClose}:{entries:Battle
   });
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,width:440,maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,width:440,maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#A07000",margin:0}}>🔄 End of Round {round}</h3>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:18}}>✕</button>
@@ -685,7 +685,7 @@ function EndOfRoundPopup({entries,weather,round,onApply,onClose}:{entries:Battle
           {effects.length===0?(
             <div style={{color:"#585858",textAlign:"center",padding:20}}>No end-of-round effects this round.</div>
           ):effects.map((ef,i)=>(
-            <div key={i} style={{background:"#FFFFFF",borderRadius:6,padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <div key={i} style={{background:"#F8F4D0",borderRadius:6,padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
               <div>
                 <div style={{fontSize:12,fontWeight:700,color:"#202020"}}>{ef.entry.nickname||ef.entry.pokemon.name}</div>
                 <div style={{fontSize:11,color:"#383838",marginTop:2}}>{ef.desc}</div>
@@ -725,7 +725,7 @@ function PriorityPhasePopup({entries,weather,onClose}:{entries:BattleEntry[];wea
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#F8F8F0",border:"1px solid #2850A040",borderRadius:10,width:460,maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#FBF8E4",border:"1px solid #2850A040",borderRadius:10,width:460,maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#2850A0",margin:0}}>⚡ Priority Phase — Declare before normal turns</h3>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:18}}>✕</button>
@@ -733,7 +733,7 @@ function PriorityPhasePopup({entries,weather,onClose}:{entries:BattleEntry[];wea
         <div style={{padding:16,overflowY:"auto"}}>
           <p style={{fontSize:12,color:"#383838",marginBottom:12,lineHeight:1.5}}>These Pokémon have Priority Reaction moves available. Declare usage now (highest priority first). Declared moves count as their first action.</p>
           {priorityEntries.map(({entry,move})=>(
-            <div key={entry.id} style={{background:"#FFFFFF",border:`1px solid ${TYPE_COLORS[move.type as PokemonType]||"#2850A0"}30`,borderRadius:6,padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
+            <div key={entry.id} style={{background:"#F8F4D0",border:`1px solid ${TYPE_COLORS[move.type as PokemonType]||"#2850A0"}30`,borderRadius:6,padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:10}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:TYPE_COLORS[entry.pokemon.types[0]],flexShrink:0}}/>
               <div style={{flex:1}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#202020"}}>{entry.nickname||entry.pokemon.name}</div>
@@ -746,7 +746,7 @@ function PriorityPhasePopup({entries,weather,onClose}:{entries:BattleEntry[];wea
               <span style={{fontSize:11,color:entry.currentHp/entry.maxHp>0.5?"#2850A0":entry.currentHp/entry.maxHp>0.25?"#A07000":"#C02820"}}>{entry.currentHp}/{entry.maxHp} HP</span>
             </div>
           ))}
-          <button onClick={onClose} style={{width:"100%",background:"#2850A0",color:"#E8E8D8",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer",marginTop:4}}>Continue to Normal Turn Order</button>
+          <button onClick={onClose} style={{width:"100%",background:"#2850A0",color:"#FFFFFF",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer",marginTop:4}}>Continue to Normal Turn Order</button>
         </div>
       </div>
     </div>
@@ -771,14 +771,14 @@ function CapturePopup({target,allEntries,onClose}:{target:BattleEntry;allEntries
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,width:440,maxHeight:"85vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,width:440,maxHeight:"85vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#A07000",margin:0}}>🎯 Capture Attempt — {target.nickname||target.pokemon.name}</h3>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:18}}>✕</button>
         </div>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:12}}>
           {/* Status */}
-          <div style={{background:"#FFFFFF",borderRadius:6,padding:"10px 12px"}}>
+          <div style={{background:"#F8F4D0",borderRadius:6,padding:"10px 12px"}}>
             <div style={{fontSize:11,fontWeight:700,color:"#202020",marginBottom:6}}>Target Condition</div>
             <div style={{display:"flex",gap:12,fontSize:11,flexWrap:"wrap"}}>
               <span style={{color:"#585858"}}>Rank: <strong style={{color:"#A07000"}}>{target.pokemon.suggestedRank}</strong></span>
@@ -862,7 +862,7 @@ function CharactersPanel({onAddToTracker}:{onAddToTracker:(p:PokemonEntry)=>void
       <div style={{width:130,borderRight:"1px solid #2850A0",overflowY:"auto",flexShrink:0}}>
         {trainers.map(t=>(
           <div key={t.id} onClick={()=>setSelId(t.id)} style={{padding:"8px 10px",cursor:"pointer",background:selId===t.id?"#D8D8D8":"transparent",borderLeft:`2px solid ${selId===t.id?"#2850A0":"transparent"}`}}
-            onMouseEnter={e=>{if(selId!==t.id)(e.currentTarget as HTMLDivElement).style.background="#F8F8F0";}}
+            onMouseEnter={e=>{if(selId!==t.id)(e.currentTarget as HTMLDivElement).style.background="#FBF8E4";}}
             onMouseLeave={e=>{if(selId!==t.id)(e.currentTarget as HTMLDivElement).style.background="transparent";}}>
             <div style={{fontSize:12,fontWeight:700,color:"#202020",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name||"Unnamed"}</div>
             <div style={{fontSize:10,color:"#585858"}}>{t.rank}</div>
@@ -900,7 +900,7 @@ function CharactersPanel({onAddToTracker}:{onAddToTracker:(p:PokemonEntry)=>void
               const p=POKEMON.find(x=>x.number===sheet.number);
               if(!p) return null;
               return (
-                <div key={key} style={{background:"#F8F8F0",border:`1px solid ${TYPE_COLORS[p.types[0]]}30`,borderRadius:5,padding:"8px 10px",marginBottom:6}}>
+                <div key={key} style={{background:"#FBF8E4",border:`1px solid ${TYPE_COLORS[p.types[0]]}30`,borderRadius:5,padding:"8px 10px",marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                     <span style={{fontSize:12,fontWeight:700,color:"#202020"}}>{sheet.nickname||p.name}</span>
                     {sheet.nickname&&<span style={{fontSize:9,color:"#585858"}}>({p.name})</span>}
@@ -970,7 +970,7 @@ function TrainerSkillPopup({trainerData,trainerEntry,allEntries,onClose}:{
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
-      <div style={{background:"#F8F8F0",border:"1px solid #2850A040",borderRadius:10,width:490,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
+      <div style={{background:"#FBF8E4",border:"1px solid #2850A040",borderRadius:10,width:490,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2850A0",display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:18}}>👤</span>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#2850A0",margin:0,flex:1}}>{trainerData?.name||"Trainer"} — Skill Action</h3>
@@ -978,7 +978,7 @@ function TrainerSkillPopup({trainerData,trainerEntry,allEntries,onClose}:{
         </div>
         <div style={{padding:16,overflowY:"auto",display:"flex",flexDirection:"column",gap:12}}>
           {/* Trainer stats */}
-          <div style={{background:"#FFFFFF",borderRadius:6,padding:"10px 12px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+          <div style={{background:"#F8F4D0",borderRadius:6,padding:"10px 12px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
             {[["STR","strength"],["DEX","dexterity"],["VIT","vitality"],["INS","insight"]].map(([l,k])=>(
               <div key={k} style={{textAlign:"center"}}>
                 <div style={{fontSize:9,color:"#585858"}}>{l}</div>
@@ -994,7 +994,7 @@ function TrainerSkillPopup({trainerData,trainerEntry,allEntries,onClose}:{
               const sv=skills[skill]||0; const av=attrVal(def.attr1);
               const active=selSkill===skill;
               return (
-                <button key={skill} onClick={()=>{setSelSkill(skill);setRollResult(null);setTargets([]);setBrawlDmgRoll(null);}} style={{display:"flex",gap:8,padding:"8px 10px",borderRadius:5,cursor:"pointer",border:`1px solid ${active?"#2850A0":"#2850A0"}`,background:active?"rgba(61,139,255,0.12)":"#FFFFFF",textAlign:"left"}}>
+                <button key={skill} onClick={()=>{setSelSkill(skill);setRollResult(null);setTargets([]);setBrawlDmgRoll(null);}} style={{display:"flex",gap:8,padding:"8px 10px",borderRadius:5,cursor:"pointer",border:`1px solid ${active?"#2850A0":"#2850A0"}`,background:active?"rgba(61,139,255,0.12)":"#F8F4D0",textAlign:"left"}}>
                   <div style={{flex:1}}>
                     <div style={{fontSize:12,fontWeight:700,color:active?"#2850A0":"#202020",textTransform:"capitalize"}}>{skill}</div>
                     <div style={{fontSize:9,color:"#585858"}}>{def.attr1.slice(0,3).toUpperCase()} {av} + {sv} = {av+sv}d</div>
@@ -1007,7 +1007,7 @@ function TrainerSkillPopup({trainerData,trainerEntry,allEntries,onClose}:{
 
           {selSkill&&skillDef&&(
             <>
-              <div style={{background:"#FFFFFF",borderRadius:6,padding:"10px 12px"}}>
+              <div style={{background:"#F8F4D0",borderRadius:6,padding:"10px 12px"}}>
                 <div style={{fontSize:12,color:"#202020",marginBottom:4}}>{skillDef.desc}</div>
                 <div style={{fontSize:11,color:"#383838",lineHeight:1.5}}><strong style={{color:"#585858"}}>Combat: </strong>{skillDef.combatEffect}</div>
                 <div style={{fontSize:11,color:"#2850A0",marginTop:5}}>Pool: {skillDef.attr1} ({attrVal(skillDef.attr1)}){skillDef.attr2?<span> or {skillDef.attr2} ({attrVal(skillDef.attr2)})</span>:null} + {selSkill} ({skills[selSkill]||0}) = <strong>{pool}d</strong></div>
@@ -1037,7 +1037,7 @@ function TrainerSkillPopup({trainerData,trainerEntry,allEntries,onClose}:{
               </div>
 
               {rollResult&&rollResult.successes>=actReq&&selSkill==="brawl"&&targets.length>0&&(
-                <div style={{background:"#FFFFFF",borderRadius:5,padding:"10px 12px"}}>
+                <div style={{background:"#F8F4D0",borderRadius:5,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#202020",marginBottom:4}}>Damage Roll (Brawl)</div>
                   <div style={{fontSize:10,color:"#383838",marginBottom:6}}>STR ({attrVal("strength")}) dice → successes − target VIT = damage</div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -1094,7 +1094,7 @@ function TrainerCardView({trainer,entry,allEntries,onClose}:{trainer:any|null;en
         {/* Stats row */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4,marginBottom:8}}>
           {[["STR",attrs.strength],["DEX",attrs.dexterity],["VIT",attrs.vitality],["INS",attrs.insight]].map(([l,v])=>(
-            <div key={l as string} style={{textAlign:"center",background:"#FFFFFF",borderRadius:4,padding:"5px 0"}}>
+            <div key={l as string} style={{textAlign:"center",background:"#F8F4D0",borderRadius:4,padding:"5px 0"}}>
               <div style={{fontSize:9,color:"#585858"}}>{l}</div>
               <div style={{fontSize:16,fontFamily:"'Exo 2'",fontWeight:700,color:"#2850A0"}}>{v}</div>
             </div>
@@ -1114,7 +1114,7 @@ function TrainerCardView({trainer,entry,allEntries,onClose}:{trainer:any|null;en
             const attrV=(def?.attr1&&(attrs as any)[def.attr1])||1;
             const pool=attrV+(val as number);
             return (
-              <button key={skill} onClick={()=>setShowSkillPopup(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",background:"#FFFFFF",border:"1px solid #2850A025",borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%",transition:"border-color 0.1s"}}
+              <button key={skill} onClick={()=>setShowSkillPopup(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",background:"#F8F4D0",border:"1px solid #2850A025",borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%",transition:"border-color 0.1s"}}
                 onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.borderColor="#2850A0"}
                 onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.borderColor="#2850A025"}>
                 <span style={{fontSize:9,background:"rgba(61,139,255,0.15)",color:"#2850A0",padding:"1px 5px",borderRadius:3,fontWeight:700,textTransform:"capitalize"}}>{skill}</span>
@@ -1187,11 +1187,11 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onDragS
     <>
       {movePopup&&<MoveAttackPopup move={movePopup} attacker={entry} allEntries={allEntries} weather={weather} onClose={()=>setMovePopup(null)} onApplyDmg={applyDmg} onApplyEffect={applyEffect}/>}
       {showCapture&&<CapturePopup target={entry} allEntries={allEntries} onClose={()=>setShowCapture(false)}/>}
-      <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} style={{background:entry.hasTakenTurn?"#FFFFFF":"#F8F8F0",border:`1px solid ${isActive?sideColor:entry.hasTakenTurn?"#2850A0":sideColor+"40"}`,borderLeft:`3px solid ${isActive?sideColor:entry.hasTakenTurn?"#2850A0":sideColor}`,borderRadius:8,opacity:entry.hasTakenTurn&&!isActive?0.65:1,boxShadow:isActive?`0 0 0 2px ${sideColor}30,0 4px 20px rgba(0,0,0,0.4)`:undefined,marginBottom:10,cursor:"default"}}>
+      <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} style={{background:entry.hasTakenTurn?"#F8F4D0":"#FBF8E4",border:`1px solid ${isActive?sideColor:entry.hasTakenTurn?"#2850A0":sideColor+"40"}`,borderLeft:`3px solid ${isActive?sideColor:entry.hasTakenTurn?"#2850A0":sideColor}`,borderRadius:8,opacity:entry.hasTakenTurn&&!isActive?0.65:1,boxShadow:isActive?`0 0 0 2px ${sideColor}30,0 4px 20px rgba(0,0,0,0.4)`:undefined,marginBottom:10,cursor:"default"}}>
         {/* Header */}
-        <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:isActive?sideColor+"15":"#FFFFFF",borderRadius:"8px 8px 0 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:isActive?sideColor+"15":"#F8F4D0",borderRadius:"8px 8px 0 0"}}>
           <span style={{color:"#4A5468",cursor:"grab",fontSize:12}}>⠿</span>
-          <button onClick={()=>upd({hasTakenTurn:!entry.hasTakenTurn})} style={{width:18,height:18,borderRadius:"50%",border:"none",background:entry.hasTakenTurn?"#2850A0":"#2850A0",color:entry.hasTakenTurn?"#E8E8D8":"#585858",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✓</button>
+          <button onClick={()=>upd({hasTakenTurn:!entry.hasTakenTurn})} style={{width:18,height:18,borderRadius:"50%",border:"none",background:entry.hasTakenTurn?"#2850A0":"#2850A0",color:entry.hasTakenTurn?"#35785F":"#585858",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✓</button>
           <div style={{width:8,height:8,borderRadius:"50%",background:TYPE_COLORS[entry.pokemon.types[0]],flexShrink:0}}/>
           <input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={entry.pokemon.name}
             style={{flex:1,background:"transparent",border:"none",color:"#202020",fontFamily:"'Exo 2'",fontWeight:700,fontSize:13,outline:"none",minWidth:0}}/>
@@ -1203,14 +1203,14 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onDragS
               style={{width:28,background:"transparent",border:"none",color:"#6890f0",fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,textAlign:"center",outline:"none"}}/>
           </div>
           <select value={entry.side} onChange={e=>upd({side:e.target.value as BattleEntry["side"]})}
-            style={{background:"#E8E8D8",border:"none",color:sideColor,fontSize:9,borderRadius:2,padding:"1px 3px"}}>
+            style={{background:"#35785F",border:"none",color:sideColor,fontSize:9,borderRadius:2,padding:"1px 3px"}}>
             <option value="player">Player</option><option value="enemy">Enemy</option><option value="neutral">Neutral</option>
           </select>
           <span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#2850A0":entry.currentHp/entry.maxHp>0.25?"#A07000":"#C02820"}}>{entry.currentHp}/{entry.maxHp}</span>
           <button onClick={()=>upd({isExpanded:!entry.isExpanded})} style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:11}}>{entry.isExpanded?"▲":"▼"}</button>
           {entry.side==="enemy"&&<button onClick={()=>setShowCapture(true)} title="Capture this Pokémon" style={{background:"none",border:"none",color:"#A07000",cursor:"pointer",fontSize:13,padding:"0 2px"}}>🎯</button>}
           {(linkedTrainer||entry.side==="player")&&<button onClick={()=>setShowTrainerView(!showTrainerView)} title="Toggle trainer view" style={{background:showTrainerView?"rgba(61,139,255,0.2)":"none",border:showTrainerView?"1px solid #2850A040":"none",borderRadius:3,color:showTrainerView?"#2850A0":"#585858",cursor:"pointer",fontSize:11,padding:"0 4px"}}>👤</button>}
-          <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:12}}>✕</button>
+          <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#D8E4F8",cursor:"pointer",fontSize:12}}>✕</button>
         </div>
         <HpBar current={entry.currentHp} max={entry.maxHp}/>
 
@@ -1243,7 +1243,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onDragS
             {/* Status */}
             <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-start"}}>
               <select value={entry.status} onChange={e=>upd({status:e.target.value,statusTurnsLeft:e.target.value==="Asleep"?3:0})}
-                style={{background:"#E8E8D8",border:`1px solid ${sc?.color??"#2850A0"}`,borderRadius:4,color:sc?.color??"#585858",fontSize:11,padding:"2px 6px",fontWeight:700,flexShrink:0}}>
+                style={{background:"#35785F",border:`1px solid ${sc?.color??"#2850A0"}`,borderRadius:4,color:sc?.color??"#585858",fontSize:11,padding:"2px 6px",fontWeight:700,flexShrink:0}}>
                 {Object.keys(STATUS_CONDITIONS).map(s=><option key={s} value={s}>{s}</option>)}
               </select>
               {sc&&sc.name!=="Healthy"&&(
@@ -1272,7 +1272,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onDragS
                   <div style={{display:"flex",gap:4,alignItems:"center"}}>
                     <button onClick={()=>upd({[f.f]:Math.max(0,f.cur-1)})} style={adjBtn}>−</button>
                     <input type="number" value={f.cur} onChange={e=>upd({[f.f]:Math.max(0,Math.min(f.max,+e.target.value||0))})}
-                      style={{width:34,textAlign:"center",background:"#E8E8D8",border:"1px solid #2850A0",borderRadius:3,color:f.color,fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,padding:"1px 2px"}}/>
+                      style={{width:34,textAlign:"center",background:"#35785F",border:"1px solid #2850A0",borderRadius:3,color:f.color,fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,padding:"1px 2px"}}/>
                     <span style={{fontSize:10,color:"#585858"}}>/{f.max}</span>
                     <button onClick={()=>upd({[f.f]:Math.min(f.max,f.cur+1)})} style={adjBtn}>+</button>
                   </div>
@@ -1335,7 +1335,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onDragS
               })}
               {entry.pokemon.number===0&&(
                 <select onChange={e=>{if(e.target.value)upd({abilities:[...entry.abilities,{name:e.target.value,active:true}]});e.target.value="";}}
-                  style={{width:"100%",background:"#E8E8D8",border:"1px solid #2850A0",borderRadius:4,color:"#383838",fontSize:11,padding:"3px 6px",marginTop:4}}>
+                  style={{width:"100%",background:"#35785F",border:"1px solid #2850A0",borderRadius:4,color:"#383838",fontSize:11,padding:"3px 6px",marginTop:4}}>
                   <option value="">+ Add ability…</option>
                   {ABILITIES.map(a=><option key={a.name} value={a.name}>{a.name}</option>)}
                 </select>
@@ -1368,7 +1368,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onDragS
                     const wBoost=weather.typeBoost===m.type;
                     const abilMods=calcAbilityBonus(entry,m,weather);
                     return (
-                      <button key={i} onClick={()=>setMovePopup(m)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 8px",background:"#FFFFFF",border:`1px solid ${TYPE_COLORS[m.type as PokemonType]||"#2850A0"}25`,borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%",transition:"border-color 0.1s"}}
+                      <button key={i} onClick={()=>setMovePopup(m)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 8px",background:"#F8F4D0",border:`1px solid ${TYPE_COLORS[m.type as PokemonType]||"#2850A0"}25`,borderRadius:4,cursor:"pointer",textAlign:"left",width:"100%",transition:"border-color 0.1s"}}
                         onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.borderColor=TYPE_COLORS[m.type as PokemonType]||"#2850A0"}
                         onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.borderColor=`${TYPE_COLORS[m.type as PokemonType]||"#2850A0"}25`}>
                         <TypeBadge type={m.type as PokemonType} small/>
@@ -1388,7 +1388,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onDragS
             </div>
 
             <textarea value={entry.notes} onChange={e=>upd({notes:e.target.value})} placeholder="Notes…"
-              style={{width:"100%",background:"#E8E8D8",border:"1px solid #2850A0",borderRadius:4,color:"#383838",fontSize:10,padding:5,resize:"none",minHeight:32,fontFamily:"inherit",lineHeight:1.4,outline:"none"}}/>
+              style={{width:"100%",background:"#35785F",border:"1px solid #2850A0",borderRadius:4,color:"#383838",fontSize:10,padding:5,resize:"none",minHeight:32,fontFamily:"inherit",lineHeight:1.4,outline:"none"}}/>
 
             <label style={{fontSize:10,color:"#383838",display:"flex",alignItems:"center",gap:5,cursor:"pointer"}}>
               <input type="checkbox" checked={entry.weatherImmune} onChange={e=>upd({weatherImmune:e.target.checked})}/>
@@ -1440,10 +1440,10 @@ function EncounterPanel({onAddToTracker}:{onAddToTracker:(p:PokemonEntry)=>void}
         ))}
       </div>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <button onClick={rollRandom} style={{background:"#2850A0",color:"#E8E8D8",border:"none",borderRadius:5,padding:"6px 14px",fontWeight:700,fontSize:11,cursor:"pointer"}}>🎲 Roll ({filtered.length})</button>
+        <button onClick={rollRandom} style={{background:"#2850A0",color:"#FFFFFF",border:"none",borderRadius:5,padding:"6px 14px",fontWeight:700,fontSize:11,cursor:"pointer"}}>🎲 Roll ({filtered.length})</button>
       </div>
       {rolled&&(
-        <div style={{background:"#FFFFFF",border:`2px solid ${TYPE_COLORS[rolled.types[0]]}`,borderRadius:6,padding:"10px 12px"}}>
+        <div style={{background:"#F8F4D0",border:`2px solid ${TYPE_COLORS[rolled.types[0]]}`,borderRadius:6,padding:"10px 12px"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
             <span style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:15,color:"#202020"}}>{rolled.name}</span>
             <span style={{fontSize:10,color:"#585858"}}>#{String(rolled.number).padStart(3,"0")}</span>
@@ -1457,7 +1457,7 @@ function EncounterPanel({onAddToTracker}:{onAddToTracker:(p:PokemonEntry)=>void}
       <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
         {filtered.slice(0,40).map(p=>(
           <div key={`${p.number}-${p.name}`} onClick={()=>setRolled(p)} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",borderRadius:4,cursor:"pointer",transition:"background 0.1s"}}
-            onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="#F8F8F0"}
+            onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="#FBF8E4"}
             onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background="transparent"}>
             <span style={{fontSize:9,color:"#4A5468",width:28,fontFamily:"'Exo 2'",fontWeight:700}}>#{String(p.number).padStart(3,"0")}</span>
             <span style={{fontSize:11,color:"#202020",flex:1}}>{p.name}</span>
@@ -1479,11 +1479,11 @@ function PopoutButton({panelType,panelLabel}:{panelType:PanelType;panelLabel:str
     if(panelType==="quick_roll"){
       const w=window.open("","_blank","width=320,height=500,resizable=yes");if(!w)return;
       const rows=[1,2,3,4,5,6,8,10,12].map(n=>`<div class="row"><button onclick="roll(${n})">${n}d</button><span id="r${n}"></span></div>`).join("");
-      w.document.write(`<!DOCTYPE html><html><head><title>Quick Roller</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#E8E8D8;color:#202020;font-family:Inter,sans-serif;padding:16px}.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}button{background:#F8F8F0;border:1px solid #7888A8;border-radius:4px;color:#6890f0;padding:4px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}span{font-size:12px;color:#202020;font-family:'Exo 2',sans-serif}h2{font-family:'Exo 2',sans-serif;margin-bottom:12px;font-size:16px;color:#6890f0}</style></head><body><h2>🎲 Quick Roller</h2>${rows}<script>function roll(n){const rolls=Array.from({length:n},()=>Math.floor(Math.random()*6)+1);const succ=rolls.filter(r=>r>=4).length;document.getElementById('r'+n).textContent='['+rolls.join(',')+'] = '+succ+'✓';}</script></body></html>`);
+      w.document.write(`<!DOCTYPE html><html><head><title>Quick Roller</title><style>*{box-sizing:border-box;margin:0;padding:0}body{background:#35785F;color:#202020;font-family:Inter,sans-serif;padding:16px}.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}button{background:#FBF8E4;border:1px solid #7888A8;border-radius:4px;color:#6890f0;padding:4px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}span{font-size:12px;color:#202020;font-family:'Exo 2',sans-serif}h2{font-family:'Exo 2',sans-serif;margin-bottom:12px;font-size:16px;color:#6890f0}</style></head><body><h2>🎲 Quick Roller</h2>${rows}<script>function roll(n){const rolls=Array.from({length:n},()=>Math.floor(Math.random()*6)+1);const succ=rolls.filter(r=>r>=4).length;document.getElementById('r'+n).textContent='['+rolls.join(',')+'] = '+succ+'✓';}</script></body></html>`);
       w.document.close();return;
     }
     // Reference panels — write static content
-    const styles=`*{box-sizing:border-box;margin:0;padding:0}body{background:#E8E8D8;color:#202020;font-family:Inter,sans-serif;padding:12px;font-size:12px}h2{font-family:'Exo 2',sans-serif;font-size:16px;margin-bottom:10px}h3{font-family:'Exo 2',sans-serif;font-size:12px;color:#585858;text-transform:uppercase;letter-spacing:1px;margin:12px 0 5px}.card{background:#F8F8F0;border-radius:5px;padding:9px 11px;margin-bottom:7px}.row{display:flex;justify-content:space-between;padding:2px 0}`;
+    const styles=`*{box-sizing:border-box;margin:0;padding:0}body{background:#35785F;color:#202020;font-family:Inter,sans-serif;padding:12px;font-size:12px}h2{font-family:'Exo 2',sans-serif;font-size:16px;margin-bottom:10px}h3{font-family:'Exo 2',sans-serif;font-size:12px;color:#585858;text-transform:uppercase;letter-spacing:1px;margin:12px 0 5px}.card{background:#FBF8E4;border-radius:5px;padding:9px 11px;margin-bottom:7px}.row{display:flex;justify-content:space-between;padding:2px 0}`;
     const w=window.open("","_blank","width=520,height=700,resizable=yes,scrollbars=yes");if(!w)return;
     let body=`<h2>${panelLabel}</h2>`;
     const SC={"Burned":{"color":"#f08030","desc":"Loses 1 HP/round. Physical moves −2 dice."},"Frozen":{"color":"#98d8d8","desc":"Cannot act. Roll 1d6 each turn (5–6 thaws)."},"Paralyzed":{"color":"#f8d030","desc":"Accuracy −2 dice. Roll 1d6 (1–2 = cannot act)."},"Poisoned":{"color":"#a040a0","desc":"Loses 1 HP/round."},"Badly Poisoned":{"color":"#7038f8","desc":"Loses 2 HP/round."},"Asleep":{"color":"#705898","desc":"Cannot act. Roll 1d6 (4–6 wake). Auto-wakes after 3 turns."},"Confused":{"color":"#f85888","desc":"Roll 1d6 before each action. 1–3 = hits itself (STR+Brawl vs own VIT)."},"Flinched":{"color":"#c0c0d0","desc":"Cannot act this turn. Clears at end of turn."},"Infatuated":{"color":"#ff69b4","desc":"Must roll WP (2+ successes) to act each turn."}};
@@ -1495,7 +1495,7 @@ function PopoutButton({panelType,panelLabel}:{panelType:PanelType;panelLabel:str
     w.document.write(`<!DOCTYPE html><html><head><title>${panelLabel} — PokeRole</title><style>${styles}</style></head><body>${body}</body></html>`);
     w.document.close();
   };
-  return <button onClick={openPopout} title="Pop out" style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:12,padding:"0 4px"}}>↗</button>;
+  return <button onClick={openPopout} title="Pop out" style={{background:"none",border:"none",color:"#BCD8CC",cursor:"pointer",fontSize:12,padding:"0 4px"}}>↗</button>;
 }
 /* ─── Draggable Tracker List ─────────────────────────────────────────────────── */
 function DraggableTrackerList({entries,setEntries,allEntries,weather,activeId}:{
@@ -1558,10 +1558,13 @@ function TrackerOverviewPanel({entries,setEntries}:{entries:BattleEntry[];setEnt
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",fontSize:11}}>
       {/* Header */}
-      <div style={{padding:"5px 8px",background:"#E8E8D8",borderBottom:"1px solid #2850A0",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-        <span style={{color:sideColor,fontWeight:700,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active?(active.nickname||active.pokemon.name):"—"}</span>
-        <button onClick={nextTurn} style={{background:"#2850A0",color:"#E8E8D8",border:"none",borderRadius:3,padding:"2px 8px",fontWeight:700,fontSize:10,cursor:"pointer"}}>Next ▶</button>
-        <a href="/battle-tracker" target="_blank" style={{background:"rgba(61,139,255,0.15)",border:"1px solid #2850A030",borderRadius:3,color:"#2850A0",padding:"2px 7px",fontSize:9,textDecoration:"none",whiteSpace:"nowrap"}}>Open Full ↗</a>
+      <div style={{padding:"5px 8px",background:"#24523F",borderBottom:"1px solid #2850A0",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        {/* Side is shown as a colour chip; the name stays white, since the side
+            colours are tuned for light surfaces and sit at ~1.5:1 on this strip. */}
+        <span style={{width:8,height:8,borderRadius:"50%",background:sideColor,border:"1px solid rgba(255,255,255,0.6)",flexShrink:0}}/>
+        <span style={{color:"#FFFFFF",fontWeight:700,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active?(active.nickname||active.pokemon.name):"—"}</span>
+        <button onClick={nextTurn} style={{background:"#2850A0",color:"#FFFFFF",border:"none",borderRadius:3,padding:"2px 8px",fontWeight:700,fontSize:10,cursor:"pointer"}}>Next ▶</button>
+        <a href="/battle-tracker" target="_blank" style={{background:"rgba(0,0,0,0.28)",border:"1px solid rgba(255,255,255,0.45)",borderRadius:3,color:"#FFFFFF",padding:"2px 7px",fontSize:9,textDecoration:"none",whiteSpace:"nowrap"}}>Open Full ↗</a>
       </div>
       {/* Combatant list */}
       <div style={{flex:1,overflowY:"auto",padding:"4px"}}>
@@ -1641,18 +1644,18 @@ function SelfContainedTracker({entries,setEntries,onAddToTracker}:{
       {showPriority&&<PriorityPhasePopup entries={entries} weather={weather} onClose={()=>setShowPriority(false)}/>}
 
       {/* Tracker top bar — weather, round, turn controls */}
-      <div style={{padding:"5px 8px",background:"#E8E8D8",borderBottom:"1px solid #2850A0",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+      <div style={{padding:"5px 8px",background:"#24523F",borderBottom:"1px solid #2850A0",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
         <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)}
-          style={{background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:4,color:"#A07000",fontSize:10,padding:"2px 4px",flexShrink:0}}>
+          style={{background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:4,color:"#A07000",fontSize:10,padding:"2px 4px",flexShrink:0}}>
           {WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}
         </select>
-        <div style={{display:"flex",alignItems:"center",gap:4,background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:4,padding:"2px 6px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:4,padding:"2px 6px",flexShrink:0}}>
           <span style={{fontSize:9,color:"#585858"}}>Rnd</span>
           <span style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:12,color:"#202020"}}>{round}</span>
           <span style={{fontSize:9,color:"#585858",marginLeft:3}}>·</span>
           <span style={{fontSize:9,color:sideColor,fontWeight:600,maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeEntry?.nickname||activeEntry?.pokemon.name||"—"}</span>
         </div>
-        <button onClick={nextTurn} style={{background:"#2850A0",color:"#E8E8D8",border:"none",borderRadius:4,padding:"3px 8px",fontWeight:700,fontSize:10,cursor:"pointer",flexShrink:0}}>Next Turn ▶</button>
+        <button onClick={nextTurn} style={{background:"#2850A0",color:"#FFFFFF",border:"none",borderRadius:4,padding:"3px 8px",fontWeight:700,fontSize:10,cursor:"pointer",flexShrink:0}}>Next Turn ▶</button>
         <button onClick={rollAllIni} style={{background:"#6890f015",border:"1px solid #6890f040",borderRadius:4,color:"#6890f0",padding:"2px 6px",fontSize:10,fontWeight:700,cursor:"pointer",flexShrink:0}}>🎲 INI</button>
         <button onClick={()=>setShowPriority(true)} style={{background:"#2850A015",border:"1px solid #2850A040",borderRadius:4,color:"#2850A0",padding:"2px 6px",fontSize:10,cursor:"pointer",flexShrink:0}} title="Show priority phase">⚡ Priority</button>
         <button onClick={()=>setShowEOR(true)} style={{background:"#A0700010",border:"1px solid #A0700030",borderRadius:4,color:"#A07000",padding:"2px 6px",fontSize:10,cursor:"pointer",flexShrink:0}} title="End of round effects">🔄 EOR</button>
@@ -1704,14 +1707,14 @@ function PanelContent({type,entries,setEntries,onAddToTracker,gmNotes,setGmNotes
       <div style={{overflowY:"auto",height:"100%",padding:"6px"}}>
         <table style={{borderCollapse:"collapse",width:"100%",fontSize:9}}>
           <thead><tr>
-            {["Type","Weak to","Resists","Immune"].map(h=><th key={h} style={{padding:"4px 6px",color:"#585858",background:"#FFFFFF",borderBottom:"1px solid #2850A0",textAlign:"left"}}>{h}</th>)}
+            {["Type","Weak to","Resists","Immune"].map(h=><th key={h} style={{padding:"4px 6px",color:"#585858",background:"#F8F4D0",borderBottom:"1px solid #2850A0",textAlign:"left"}}>{h}</th>)}
           </tr></thead>
           <tbody>
             {ALL_TYPES.map((t,i)=>{
               const c=TYPE_CHART[t];
               const badge=(types:PokemonType[])=>(<div style={{display:"flex",gap:2,flexWrap:"wrap"}}>{types.map(w=><span key={w} style={{display:"inline-flex",padding:"0px 3px",borderRadius:2,fontSize:7,fontWeight:700,color:"#fff",background:TYPE_COLORS[w]}}>{w}</span>)}</div>);
               return (
-                <tr key={t} style={{background:i%2===0?"transparent":"#F8F8F020"}}>
+                <tr key={t} style={{background:i%2===0?"transparent":"#FBF8E420"}}>
                   <td style={{padding:"3px 6px"}}><span style={{display:"inline-flex",padding:"1px 5px",borderRadius:2,fontSize:8,fontWeight:700,color:"#fff",background:TYPE_COLORS[t]}}>{t}</span></td>
                   <td style={{padding:"3px 6px"}}>{badge(c.weaknesses)}</td>
                   <td style={{padding:"3px 6px"}}>{badge(c.resistances)}</td>
@@ -1726,7 +1729,7 @@ function PanelContent({type,entries,setEntries,onAddToTracker,gmNotes,setGmNotes
     case "status_ref": return (
       <div style={{overflowY:"auto",height:"100%",padding:"8px 10px"}}>
         {Object.values(STATUS_CONDITIONS).filter(s=>s.name!=="Healthy").map(sc=>(
-          <div key={sc.name} style={{marginBottom:8,background:"#FFFFFF",borderRadius:6,padding:"8px 10px",border:`1px solid ${sc.color}30`}}>
+          <div key={sc.name} style={{marginBottom:8,background:"#F8F4D0",borderRadius:6,padding:"8px 10px",border:`1px solid ${sc.color}30`}}>
             <div style={{fontWeight:700,fontSize:12,color:sc.color,marginBottom:3}}>{sc.name}</div>
             <div style={{fontSize:10,color:"#383838",lineHeight:1.5}}>{sc.fullDesc}</div>
             {sc.endOfRoundEffect&&<div style={{fontSize:10,color:"#C02820",marginTop:2}}>🔄 {sc.endOfRoundEffect}</div>}
@@ -1737,7 +1740,7 @@ function PanelContent({type,entries,setEntries,onAddToTracker,gmNotes,setGmNotes
     case "weather_ref": return (
       <div style={{overflowY:"auto",height:"100%",padding:"8px 10px"}}>
         {WEATHER_DATA.map(w=>(
-          <div key={w.name} style={{marginBottom:8,background:"#FFFFFF",borderRadius:6,padding:"8px 10px",border:`1px solid ${w.color}30`}}>
+          <div key={w.name} style={{marginBottom:8,background:"#F8F4D0",borderRadius:6,padding:"8px 10px",border:`1px solid ${w.color}30`}}>
             <div style={{fontWeight:700,fontSize:12,color:"#202020",marginBottom:3}}>{w.emoji?.split(" ")[0]} {w.name}</div>
             <div style={{fontSize:10,color:"#383838",lineHeight:1.4}}>{w.description}</div>
             {w.endOfRoundDmg&&<div style={{fontSize:10,color:"#C02820",marginTop:2}}>🔄 {w.endOfRoundDesc}</div>}
@@ -1800,7 +1803,7 @@ function QuickRollRow({n}:{n:number}) {
   const [res,setRes]=useState<{rolls:number[];s:number}|null>(null);
   return (
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-      <button onClick={()=>{const r=rollDice(n);setRes({rolls:r.rolls,s:r.successes});}} style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:4,color:"#6890f0",padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Exo 2'",minWidth:36}}>{n}d</button>
+      <button onClick={()=>{const r=rollDice(n);setRes({rolls:r.rolls,s:r.successes});}} style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:4,color:"#6890f0",padding:"3px 10px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Exo 2'",minWidth:36}}>{n}d</button>
       {res&&<span style={{fontSize:10,fontFamily:"'Exo 2'",color:"#202020"}}>[{res.rolls.join(",")}] <span style={{color:"#2850A0",fontWeight:700}}>{res.s}✓</span></span>}
     </div>
   );
@@ -1816,11 +1819,11 @@ function TrackerSearch({onAdd}:{onAdd:(p:PokemonEntry)=>void}) {
   return (
     <div style={{position:"relative"}}>
       <input type="text" placeholder="Search & add Pokémon…" value={q} onChange={e=>setQ(e.target.value)}
-        style={{width:"100%",background:"#E8E8D8",border:"1px solid #2850A0",borderRadius:5,padding:"5px 8px",color:"#202020",fontSize:11,outline:"none"}}
+        style={{width:"100%",background:"#35785F",border:"1px solid #2850A0",borderRadius:5,padding:"5px 8px",color:"#202020",fontSize:11,outline:"none"}}
         onFocus={e=>(e.target as HTMLInputElement).style.borderColor="#2850A0"}
         onBlur={e=>(e.target as HTMLInputElement).style.borderColor="#2850A0"}/>
       {filtered.length>0&&(
-        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:5,zIndex:100,maxHeight:240,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.6)"}}>
+        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:5,zIndex:100,maxHeight:240,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.6)"}}>
           <div onClick={()=>{onAdd(MISSINGNO);setQ("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #2850A0"}}
             onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background="#D8D8D8"}
             onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background="transparent"}>
@@ -1855,13 +1858,13 @@ function MenuItem({label,onClick,danger}:{label:string;onClick:()=>void;danger?:
 function PanelPicker({onPick,onClose,addTab}:{onPick:(type:PanelType)=>void;onClose:()=>void;addTab:boolean;}) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:10,padding:20,width:420,maxWidth:"95vw"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:10,padding:20,width:420,maxWidth:"95vw"}} onClick={e=>e.stopPropagation()}>
         <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#a040a0",marginBottom:14}}>{addTab?"Add a Tab":"Choose a Panel"}</h3>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {PANEL_CATALOG.map(p=>(
-            <button key={p.type} onClick={()=>{onPick(p.type);onClose();}} style={{background:"#FFFFFF",border:"1px solid #2850A0",borderRadius:6,padding:"12px 14px",cursor:"pointer",textAlign:"left",transition:"all 0.15s"}}
-              onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor="#a040a0";(e.currentTarget as HTMLButtonElement).style.background="#F8F8F0";}}
-              onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor="#2850A0";(e.currentTarget as HTMLButtonElement).style.background="#FFFFFF";}}>
+            <button key={p.type} onClick={()=>{onPick(p.type);onClose();}} style={{background:"#F8F4D0",border:"1px solid #2850A0",borderRadius:6,padding:"12px 14px",cursor:"pointer",textAlign:"left",transition:"all 0.15s"}}
+              onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor="#a040a0";(e.currentTarget as HTMLButtonElement).style.background="#FBF8E4";}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor="#2850A0";(e.currentTarget as HTMLButtonElement).style.background="#F8F4D0";}}>
               <div style={{fontSize:18,marginBottom:4}}>{p.icon}</div>
               <div style={{fontSize:12,fontWeight:700,color:"#202020",marginBottom:2}}>{p.label}</div>
               <div style={{fontSize:10,color:"#585858",lineHeight:1.3}}>{p.desc}</div>
@@ -2179,32 +2182,32 @@ export default function GMScreen() {
   };
 
   // Every hook has run by here, so this early return is safe.
-  if(!mounted)return <div style={{height:"100vh",background:"#E8E8D8"}}/>;
+  if(!mounted)return <div style={{height:"100vh",background:"#35785F"}}/>;
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#E8E8D8",overflow:"hidden"}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#35785F",overflow:"hidden"}}>
       {pickerSlot!==null&&<PanelPicker addTab={pickerSlot.addTab} onPick={(type)=>setPanel(pickerSlot.slot,type,pickerSlot.addTab)} onClose={()=>setPickerSlot(null)}/>}
 
       {/* Nav */}
       <SiteNav active="gm-screen">
         <div style={{display:"flex",gap:8,alignItems:"center",position:"relative"}}>
           {/* Grid dimensions — these sit on the blue system bar, so labels are white */}
-          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#FFFFFF",textShadow:"1px 1px 0 #183868"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#F8F4D0",textShadow:"1px 1px 0 #183868"}}>
             <span>Grid</span>
             <input type="number" min={MIN_COLS} max={MAX_COLS} value={cols} onChange={e=>applyDims(Number(e.target.value),rows)}
-              style={{width:40,background:"#E8E8D8",border:"1px solid #2850A0",borderRadius:4,color:"#202020",padding:"3px 5px",fontSize:11}} title="Columns"/>
+              style={{width:40,background:"#35785F",border:"1px solid #2850A0",borderRadius:4,color:"#202020",padding:"3px 5px",fontSize:11}} title="Columns"/>
             <span>×</span>
             <input type="number" min={MIN_ROWS} max={MAX_ROWS} value={rows} onChange={e=>applyDims(cols,Number(e.target.value))}
-              style={{width:40,background:"#E8E8D8",border:"1px solid #2850A0",borderRadius:4,color:"#202020",padding:"3px 5px",fontSize:11}} title="Rows"/>
+              style={{width:40,background:"#35785F",border:"1px solid #2850A0",borderRadius:4,color:"#202020",padding:"3px 5px",fontSize:11}} title="Rows"/>
           </div>
-          <button onClick={toggleFullscreen} style={{background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.5)",borderRadius:4,color:"#FFFFFF",textShadow:"1px 1px 0 #183868",padding:"4px 8px",fontSize:11,cursor:"pointer"}} title="Toggle fullscreen">
+          <button onClick={toggleFullscreen} style={{background:"rgba(0,0,0,0.20)",border:"1px solid rgba(255,255,255,0.5)",borderRadius:4,color:"#FFFFFF",textShadow:"1px 1px 0 #183868",padding:"4px 8px",fontSize:11,cursor:"pointer"}} title="Toggle fullscreen">
             {isFullscreen?"⤡ Exit":"⛶ Fullscreen"}
           </button>
-          <button onClick={()=>setMenuOpen(o=>!o)} style={{background:"rgba(255,255,255,0.16)",border:"1px solid rgba(255,255,255,0.5)",borderRadius:4,color:"#FFFFFF",textShadow:"1px 1px 0 #183868",padding:"4px 8px",fontSize:11,cursor:"pointer"}}>☰ Menu</button>
+          <button onClick={()=>setMenuOpen(o=>!o)} style={{background:"rgba(0,0,0,0.20)",border:"1px solid rgba(255,255,255,0.5)",borderRadius:4,color:"#FFFFFF",textShadow:"1px 1px 0 #183868",padding:"4px 8px",fontSize:11,cursor:"pointer"}}>☰ Menu</button>
           {menuOpen&&(
             <>
               <div style={{position:"fixed",inset:0,zIndex:400}} onClick={()=>setMenuOpen(false)}/>
-              <div style={{position:"absolute",top:34,right:0,zIndex:401,background:"#F8F8F0",border:"1px solid #7888A8",borderRadius:8,padding:6,minWidth:190,boxShadow:"0 6px 20px rgba(0,0,0,0.5)"}}>
+              <div style={{position:"absolute",top:34,right:0,zIndex:401,background:"#FBF8E4",border:"1px solid #7888A8",borderRadius:8,padding:6,minWidth:190,boxShadow:"0 6px 20px rgba(0,0,0,0.5)"}}>
                 <MenuItem label="💾 Save layout to file" onClick={saveToFile}/>
                 <MenuItem label="📂 Load layout from file" onClick={()=>fileInputRef.current?.click()}/>
                 <MenuItem label="🔗 Copy shareable URL" onClick={copyShareUrl}/>
@@ -2221,7 +2224,7 @@ export default function GMScreen() {
 
       {/* First-run guidance — explains the grid and offers starter layouts */}
       {grid.every(p=>p===null)&&(
-        <div style={{background:"#FFFFFF",borderBottom:"1px solid #2850A0",padding:"14px 16px",flexShrink:0,display:"flex",gap:20,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{background:"#F8F4D0",borderBottom:"1px solid #2850A0",padding:"14px 16px",flexShrink:0,display:"flex",gap:20,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{flex:"1 1 320px",minWidth:260}}>
             <div style={{fontSize:13,fontWeight:700,color:"#202020",marginBottom:4}}>Build your GM screen</div>
             <div style={{fontSize:11,color:"#383838",lineHeight:1.6}}>
@@ -2264,8 +2267,8 @@ export default function GMScreen() {
           const colSpan=panel?.colSpan??1;const rowSpan=panel?.rowSpan??1;
           const isDropTarget=dragOver===i&&dragFrom!==null&&dragFrom!==i;
           const cell:React.CSSProperties={
-            background:"#FFFFFF",
-            border:`1px solid ${isDropTarget?"#a040a0":resizingSlot===i?"#A040A0":"#D8D8C8"}`,
+            background:"#F8F4D0",
+            border:`1px solid ${isDropTarget?"#a040a0":resizingSlot===i?"#A040A0":"#2E6B58"}`,
             borderRadius:4,display:"flex",flexDirection:"column",overflow:"hidden",position:"relative",
             gridColumn:`${col+1}/span ${colSpan}`,gridRow:`${row+1}/span ${rowSpan}`,
             opacity:dragFrom===i?0.45:1,
@@ -2286,9 +2289,11 @@ export default function GMScreen() {
                 return(
                 <>
                   {/* Header: drag handle + tab strip + panel actions */}
-                  <div style={{display:"flex",alignItems:"stretch",gap:2,background:"#E8E8D8",borderBottom:"1px solid #D8D8C8",flexShrink:0}}>
+                  <div style={{display:"flex",alignItems:"stretch",gap:2,background:"#24523F",borderBottom:"1px solid #2E6B58",flexShrink:0}}>
+                    {/* Header is a dark green strip, so every control on it is
+                        light — except inside an active tab, which is cream. */}
                     <span onPointerDown={startMove(i)} title="Drag to move panel"
-                      style={{display:"flex",alignItems:"center",padding:"0 4px 0 6px",color:dragFrom===i?"#a040a0":"#4A5468",fontSize:11,flexShrink:0,cursor:"grab",touchAction:"none"}}>⠿</span>
+                      style={{display:"flex",alignItems:"center",padding:"0 4px 0 6px",color:dragFrom===i?"#E8B0E8":"#BCD8CC",fontSize:11,flexShrink:0,cursor:"grab",touchAction:"none"}}>⠿</span>
                     {/* Tabs */}
                     <div style={{display:"flex",alignItems:"stretch",gap:2,flex:1,overflowX:"auto",minWidth:0}}>
                       {panel.tabs.map((t,ti)=>{
@@ -2297,23 +2302,25 @@ export default function GMScreen() {
                           <div key={`${t}-${ti}`} onClick={()=>selectTab(i,ti)}
                             title={meta(t)?.label}
                             style={{display:"flex",alignItems:"center",gap:3,padding:"4px 6px",cursor:"pointer",flexShrink:0,maxWidth:150,
-                              background:on?"#FFFFFF":"transparent",borderTop:`2px solid ${on?"#a040a0":"transparent"}`,color:on?"#202020":"#585858"}}>
+                              background:on?"#F8F4D0":"transparent",borderTop:`2px solid ${on?"#a040a0":"transparent"}`,color:on?"#202020":"#BCD8CC"}}>
                             <span style={{fontSize:11}}>{meta(t)?.icon}</span>
                             <span style={{fontSize:10,fontWeight:on?700:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta(t)?.label}</span>
+                            {/* Inherits the tab's own ink: dark on the cream active
+                                tab, light on the dark header for inactive ones. */}
                             <button onClick={e=>{e.stopPropagation();closeTab(i,ti);}} title="Close tab"
-                              style={{background:"none",border:"none",color:"#4A5468",cursor:"pointer",fontSize:10,padding:"0 1px",lineHeight:1}}>✕</button>
+                              style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:10,padding:"0 1px",lineHeight:1}}>✕</button>
                           </div>
                         );
                       })}
                       <button onClick={()=>setPickerSlot({slot:i,addTab:true})} title="Add a tab to this panel"
-                        style={{background:"none",border:"none",color:"#4A5468",cursor:"pointer",fontSize:12,padding:"0 6px",flexShrink:0}}>+</button>
+                        style={{background:"none",border:"none",color:"#D8E4F8",cursor:"pointer",fontSize:12,padding:"0 6px",flexShrink:0}}>+</button>
                     </div>
                     {/* Actions */}
                     <div style={{display:"flex",alignItems:"center",gap:2,padding:"0 5px",flexShrink:0}}>
-                      <span style={{fontSize:8,color:"#4A5468",padding:"0 2px"}}>{colSpan}×{rowSpan}</span>
+                      <span style={{fontSize:8,color:"#BCD8CC",padding:"0 2px"}}>{colSpan}×{rowSpan}</span>
                       <PopoutButton panelType={activeType} panelLabel={meta(activeType)?.label||"Panel"}/>
-                      <button onClick={()=>setPickerSlot({slot:i,addTab:false})} style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:11,padding:"0 2px"}} title="Replace this tab">⇄</button>
-                      <button onClick={()=>clearPanel(i)} style={{background:"none",border:"none",color:"#585858",cursor:"pointer",fontSize:12}} title="Remove panel">✕</button>
+                      <button onClick={()=>setPickerSlot({slot:i,addTab:false})} style={{background:"none",border:"none",color:"#D8E4F8",cursor:"pointer",fontSize:11,padding:"0 2px"}} title="Replace this tab">⇄</button>
+                      <button onClick={()=>clearPanel(i)} style={{background:"none",border:"none",color:"#D8E4F8",cursor:"pointer",fontSize:12}} title="Remove panel">✕</button>
                     </div>
                   </div>
                   <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>

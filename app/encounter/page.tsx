@@ -49,11 +49,11 @@ export default function EncounterPage() {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:"#E8E8D8",color:"#202020",display:"flex",flexDirection:"column"}}>
+    <div style={{minHeight:"100vh",background:"#35785F",color:"#202020",display:"flex",flexDirection:"column"}}>
       <SiteNav active="encounter"/>
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {/* Habitat sidebar */}
-        <div style={{width:200,background:"#FFFFFF",borderRight:"1px solid #2850A0",overflowY:"auto",flexShrink:0}}>
+        <div style={{width:200,background:"#F8F4D0",borderRight:"1px solid #2850A0",overflowY:"auto",flexShrink:0}}>
           <div style={{padding:"10px 8px"}}>
             <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>Habitats</div>
             {HABITATS.map(h=>(
@@ -66,7 +66,7 @@ export default function EncounterPage() {
         {/* Main */}
         <div style={{flex:1,overflowY:"auto",padding:24}}>
           {/* Habitat info */}
-          <div style={{background:"#F8F8F0",border:`1px solid ${habitat.color}40`,borderRadius:8,padding:16,marginBottom:20}}>
+          <div style={{background:"#FBF8E4",border:`1px solid ${habitat.color}40`,borderRadius:8,padding:16,marginBottom:20}}>
             <h2 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:22,color:inkOn(habitat.color),marginBottom:8}}>{habitat.emoji} {habitat.name}</h2>
             <p style={{fontSize:13,color:"#383838",lineHeight:1.6,marginBottom:12}}>{habitat.description}</p>
             <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
@@ -81,23 +81,29 @@ export default function EncounterPage() {
 
           {/* Rank filter */}
           <div style={{marginBottom:16}}>
-            <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Filter by Rank</div>
+            <div style={{fontSize:10,color:"#FFFFFF",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Filter by Rank</div>
             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+              {/* Chips sit on the green field, where the cream-tuned rank inks fall
+                  to ~1.2:1. Keep the rank colour as the border and fill, and put the
+                  label in white on a dark scrim. */}
               {RANK_ORDER.map(r=>(
-                <button key={r} onClick={()=>toggleRank(r)} style={{padding:"3px 8px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",border:`1px solid ${RANK_COLORS[r]}60`,background:rankFilter.has(r)?RANK_COLORS[r]+"20":"transparent",color:rankFilter.has(r)?RANK_COLORS[r]:"#585858"}}>{r}</button>
+                <button key={r} onClick={()=>toggleRank(r)} style={{padding:"3px 8px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",
+                  border:`1px solid ${rankFilter.has(r)?RANK_COLORS[r]:"rgba(255,255,255,0.45)"}`,
+                  background:rankFilter.has(r)?RANK_COLORS[r]:"rgba(0,0,0,0.28)",
+                  color:"#FFFFFF"}}>{r}</button>
               ))}
             </div>
           </div>
 
           {/* Roll */}
           <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:20}}>
-            <button onClick={rollRandom} style={{background:"#2850A0",color:"#E8E8D8",border:"none",borderRadius:6,padding:"10px 20px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"'Exo 2'"}}>🎲 Roll Random Encounter</button>
-            <span style={{fontSize:13,color:"#585858"}}>{filtered.length} Pokémon available</span>
+            <button onClick={rollRandom} style={{background:"#2850A0",color:"#FFFFFF",border:"none",borderRadius:6,padding:"10px 20px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"'Exo 2'"}}>🎲 Roll Random Encounter</button>
+            <span style={{fontSize:13,color:"#FFFFFF"}}>{filtered.length} Pokémon available</span>
           </div>
 
           {/* Rolled result */}
           {rolled && (
-            <div style={{background:"#F8F8F0",border:`2px solid ${TYPE_COLORS[rolled.types[0]]}`,borderRadius:8,padding:16,marginBottom:20}}>
+            <div style={{background:"#FBF8E4",border:`2px solid ${TYPE_COLORS[rolled.types[0]]}`,borderRadius:8,padding:16,marginBottom:20}}>
               <div style={{fontSize:10,color:"#585858",letterSpacing:"1px",textTransform:"uppercase",marginBottom:4}}>Wild Encounter!</div>
               <div style={{display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
                 <div style={{flex:1,minWidth:220}}>
@@ -131,7 +137,7 @@ export default function EncounterPage() {
           {/* Pokemon grid */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
             {filtered.map(p=>(
-              <div key={`${p.number}-${p.name}`} onClick={()=>{setRolled(p);setAddedMsg(false);}} style={{background:"#F8F8F0",border:"1px solid #2850A0",borderRadius:6,padding:"10px 12px",cursor:"pointer",transition:"all 0.12s"}}
+              <div key={`${p.number}-${p.name}`} onClick={()=>{setRolled(p);setAddedMsg(false);}} style={{background:"#FBF8E4",border:"1px solid #2850A0",borderRadius:6,padding:"10px 12px",cursor:"pointer",transition:"all 0.12s"}}
                 onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=TYPE_COLORS[p.types[0]];}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor="#2850A0";}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>

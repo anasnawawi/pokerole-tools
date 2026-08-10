@@ -19,7 +19,7 @@ export default function HintBar({hints, align = "right"}:{hints:Hint[];align?:"l
     }}>
       {hints.map(h=>(
         <span key={h.key+h.label} style={{display:"inline-flex",alignItems:"center",gap:3,whiteSpace:"nowrap",flexShrink:0}}>
-          <span style={{fontSize:9,color:"#F8D030"}}>{h.key}</span>
+          <span style={{fontSize:9,color:"#FFE070"}}>{h.key}</span>
           <span style={{fontSize:8,letterSpacing:"0.5px"}}>{h.label}</span>
         </span>
       ))}

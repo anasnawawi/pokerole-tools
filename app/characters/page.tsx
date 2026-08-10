@@ -309,7 +309,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
   }, [eggGroupMovePool, sheet.rank]);
 
   return (
-    <div style={{ background: "#F8F8F0", border: `2px solid ${TYPE_COLORS[pokemon.types[0]]}40`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
+    <div style={{ background: "#FBF8E4", border: `2px solid ${TYPE_COLORS[pokemon.types[0]]}40`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <div style={{ width: 10, height: 10, borderRadius: "50%", background: TYPE_COLORS[pokemon.types[0]], flexShrink: 0 }} />
@@ -319,7 +319,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
         <span style={{ fontSize: 11, color: "#585858" }}>({pokemon.name})</span>
         {pokemon.types.map(t => <TypeBadge key={t} type={t} />)}
         <select value={sheet.rank} onChange={e => upd({ rank: e.target.value as Rank })}
-          style={{ background: "#FFFFFF", border: "none", color: RANK_COLORS[sheet.rank], fontSize: 11, fontWeight: 700, borderRadius: 3, padding: "2px 6px" }}>
+          style={{ background: "#F8F4D0", border: "none", color: RANK_COLORS[sheet.rank], fontSize: 11, fontWeight: 700, borderRadius: 3, padding: "2px 6px" }}>
           {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
         <button onClick={onSendToBox} title="Send to PC Box" style={{ background: "none", border: "none", color: "#6890f0", cursor: "pointer", fontSize: 11, padding: "0 4px" }}>📦</button>
@@ -334,7 +334,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
             const o = e.target.value as "wild" | "egg" | "trade";
             const defaults = { wild: { happiness: 1, loyalty: 1 }, egg: { happiness: 3, loyalty: 3 }, trade: { happiness: 0, loyalty: 0 } };
             if (window.confirm(`Reset happiness and loyalty to ${o} defaults?`)) upd({ origin: o, ...defaults[o] });
-          }} style={{ background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 3, color: "#383838", fontSize: 10, padding: "2px 5px" }}>
+          }} style={{ background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 3, color: "#383838", fontSize: 10, padding: "2px 5px" }}>
             <option value="wild">Wild (Caught)</option>
             <option value="egg">Hatched (Egg)</option>
             <option value="trade">Trade</option>
@@ -342,7 +342,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 9, color: "#585858", textTransform: "uppercase", letterSpacing: "0.5px" }}>Nature</span>
-          <select value={nature} onChange={e => upd({ nature: e.target.value })} style={{ background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 3, color: "#383838", fontSize: 10, padding: "2px 5px" }}>
+          <select value={nature} onChange={e => upd({ nature: e.target.value })} style={{ background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 3, color: "#383838", fontSize: 10, padding: "2px 5px" }}>
             {NATURES.map(n => <option key={n} value={n}>{n}{NATURE_FLAVORS[n] ? ` (${NATURE_FLAVORS[n].liked})` : ""}</option>)}
           </select>
         </div>
@@ -360,7 +360,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
           ) : (
             <select value="" onChange={e => {
               if (e.target.value) { onTransferItemFromTrainer(e.target.value); upd({ heldItem: e.target.value }); }
-            }} style={{ background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 3, color: "#585858", fontSize: 10, padding: "2px 5px" }}>
+            }} style={{ background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 3, color: "#585858", fontSize: 10, padding: "2px 5px" }}>
               <option value="">— none —</option>
               {trainerInventory.filter(i => i.quantity > 0).map(i => (
                 <option key={i.name} value={i.name}>{i.name} ×{i.quantity}</option>
@@ -393,7 +393,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
           <span style={{ fontSize: 11, color: "#A07000" }}>
             {partyHasPartner ? "This Pokémon is ready — designating it will replace the current Partner." : "This Pokémon has reached its full potential and is ready to become a Partner!"}
           </span>
-          <button onClick={onDesignatePartner} style={{ marginLeft: "auto", background: "#A07000", border: "none", borderRadius: 4, color: "#E8E8D8", fontSize: 11, fontWeight: 700, padding: "3px 10px", cursor: "pointer" }}>
+          <button onClick={onDesignatePartner} style={{ marginLeft: "auto", background: "#A07000", border: "none", borderRadius: 4, color: "#35785F", fontSize: 11, fontWeight: 700, padding: "3px 10px", cursor: "pointer" }}>
             {partyHasPartner ? "Switch Partner" : "Designate as Partner"}
           </button>
         </div>
@@ -439,7 +439,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
           </div>
           {/* Training Roll Calculator */}
           {trainingMode && (
-            <div style={{ marginTop: 10, background: "#FFFFFF", border: "1px solid #A0700030", borderRadius: 6, padding: "8px 10px" }}>
+            <div style={{ marginTop: 10, background: "#F8F4D0", border: "1px solid #A0700030", borderRadius: 6, padding: "8px 10px" }}>
               <div style={{ fontSize: 9, color: "#A07000", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8, fontWeight: 700 }}>Training Rolls (roll 4+ to succeed)</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {(["strength","dexterity","vitality","special","insight"] as const).map(attr => {
@@ -487,7 +487,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
             return (
               <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center" }}
                 onClick={() => setTrainingRoll(null)}>
-                <div style={{ background: "#F8F8F0", border: "1px solid #A0700040", borderRadius: 10, width: 360, overflow: "hidden" }}
+                <div style={{ background: "#FBF8E4", border: "1px solid #A0700040", borderRadius: 10, width: 360, overflow: "hidden" }}
                   onClick={e => e.stopPropagation()}>
                   <div style={{ padding: "12px 16px", borderBottom: "1px solid #2850A0", display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{ flex: 1 }}>
@@ -502,7 +502,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                       {trainingRoll.rolls.map((r, i) => {
                         const hit = r >= 4;
                         return (
-                          <div key={i} style={{ width: 44, height: 44, borderRadius: 8, border: `2px solid ${hit ? "#2850A0" : "#7888A8"}`, background: hit ? "rgba(0,212,170,0.12)" : "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
+                          <div key={i} style={{ width: 44, height: 44, borderRadius: 8, border: `2px solid ${hit ? "#2850A0" : "#7888A8"}`, background: hit ? "rgba(0,212,170,0.12)" : "#F8F4D0", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
                             <span style={{ fontSize: 18, fontWeight: 800, color: hit ? "#2850A0" : "#585858", fontFamily: "'Exo 2'" }}>{r}</span>
                             <span style={{ fontSize: 7, color: hit ? "#2850A0" : "#7888A8", letterSpacing: "0.5px" }}>{hit ? "HIT" : "MISS"}</span>
                           </div>
@@ -520,7 +520,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                       <button onClick={() => {
                         const rolls = Array.from({ length: trainingRoll.pool }, () => Math.ceil(Math.random() * 6));
                         setTrainingRoll({ ...trainingRoll, rolls });
-                      }} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid #7888A8", background: "#FFFFFF", color: "#383838", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                      }} style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "1px solid #7888A8", background: "#F8F4D0", color: "#383838", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                         🎲 Reroll
                       </button>
                       <button
@@ -593,7 +593,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
               </div>
               {/* Feed panel */}
               {showFeedPanel && (
-                <div style={{ marginTop: 6, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 5, padding: 6, maxHeight: 180, overflowY: "auto" }}>
+                <div style={{ marginTop: 6, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 5, padding: 6, maxHeight: 180, overflowY: "auto" }}>
                   <div style={{ fontSize: 9, color: "#585858", marginBottom: 4 }}>
                     {NATURE_FLAVORS[nature] ? `${nature}: likes ${NATURE_FLAVORS[nature].liked} · dislikes ${NATURE_FLAVORS[nature].disliked}` : `${nature}: neutral taste`}
                     {hasSootherBell && <span style={{ color: "#A07000", marginLeft: 6 }}>🔔 +1 to all gains</span>}
@@ -615,7 +615,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                         setShowFeedPanel(false);
                       }}
                         style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 5px", borderRadius: 3, cursor: "pointer", opacity: delta === 0 ? 0.4 : 1 }}
-                        onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "#F8F8F0"}
+                        onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"}
                         onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = "transparent"}>
                         <span style={{ fontSize: 13 }}>{item.emoji}</span>
                         <span style={{ fontSize: 10, color: "#202020", flex: 1 }}>{item.name}</span>
@@ -745,7 +745,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
           { key: "perform",    label: "Perform",    desc: "Contests & performance" },
         ];
         return (
-          <div style={{ marginTop: 12, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 6, padding: 10 }}>
+          <div style={{ marginTop: 12, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 6, padding: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: "#383838", letterSpacing: "1px", textTransform: "uppercase" }}>Skills</span>
               <span style={{ fontSize: 9, color: usedPts > skillInfo.skillPoints ? "#C02820" : "#585858" }}>{usedPts}/{skillInfo.skillPoints} pts · max {skillInfo.skillLimit}/skill</span>
@@ -775,7 +775,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
         );
       })()}
       <textarea value={sheet.notes} onChange={e => upd({ notes: e.target.value })} placeholder="Notes about this Pokémon..."
-        style={{ width: "100%", marginTop: 10, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#383838", fontSize: 11, padding: 6, resize: "none", minHeight: 40, fontFamily: "inherit", lineHeight: 1.5, outline: "none" }} />
+        style={{ width: "100%", marginTop: 10, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#383838", fontSize: 11, padding: 6, resize: "none", minHeight: 40, fontFamily: "inherit", lineHeight: 1.5, outline: "none" }} />
     </div>
   );
 }
@@ -903,14 +903,14 @@ export default function CharactersPage() {
   }, []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#E8E8D8", color: "#202020", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#35785F", color: "#202020", overflow: "hidden" }}>
       <SiteNav active="characters">
-        <span style={{ fontSize: 11, color: "#FFFFFF", textShadow: "1px 1px 0 #183868" }}>All changes auto-saved</span>
+        <span style={{ fontSize: 11, color: "#F8F4D0", textShadow: "1px 1px 0 #183868" }}>All changes auto-saved</span>
       </SiteNav>
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* Sidebar */}
-        <div style={{ width: 220, background: "#FFFFFF", borderRight: "1px solid #2850A0", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div style={{ width: 220, background: "#F8F4D0", borderRight: "1px solid #2850A0", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "10px 8px", borderBottom: "1px solid #2850A0" }}>
             <button onClick={createTrainer}
               style={{ width: "100%", background: "#2850A0", color: "#fff", border: "none", borderRadius: 5, padding: 7, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ New Trainer</button>
@@ -920,7 +920,7 @@ export default function CharactersPage() {
             {trainers.map(t => (
               <div key={t.id} onClick={() => setSelId(t.id)}
                 style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 5, cursor: "pointer", background: selId === t.id ? "#D8D8D8" : "transparent", borderLeft: `2px solid ${selId === t.id ? "#2850A0" : "transparent"}` }}
-                onMouseEnter={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "#F8F8F0"; }}
+                onMouseEnter={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"; }}
                 onMouseLeave={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#202020", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name || "Unnamed"}</div>
@@ -943,8 +943,8 @@ export default function CharactersPage() {
             ) : (
               <div style={{ maxWidth: 520 }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#202020", marginBottom: 6 }}>No trainers yet</div>
-                <div style={{ fontSize: 13, color: "#383838", lineHeight: 1.6, marginBottom: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", marginBottom: 6 }}>No trainers yet</div>
+                <div style={{ fontSize: 13, color: "#D8E8DC", lineHeight: 1.6, marginBottom: 20 }}>
                   Create a trainer to keep their whole character in one place. Everything saves automatically
                   and their party can be dropped straight into the Battle Tracker.
                 </div>
@@ -954,7 +954,7 @@ export default function CharactersPage() {
                     ["🎮", "Pokémon Party", "Up to six Pokémon with HP, moves, loyalty, happiness and Partner status"],
                     ["📦", "PC Box", "Everyone else you've caught, ready to swap into the party"],
                   ].map(([icon, title, desc]) => (
-                    <div key={title} style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 6, padding: "10px 12px", textAlign: "left" }}>
+                    <div key={title} style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 6, padding: "10px 12px", textAlign: "left" }}>
                       <span style={{ fontSize: 16, flexShrink: 0 }}>{icon}</span>
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: "#202020" }}>{title}</div>
@@ -982,34 +982,34 @@ export default function CharactersPage() {
             {tab === "sheet" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
                 {/* Identity */}
-                <div style={{ gridColumn: "1/-1", background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
+                <div style={{ gridColumn: "1/-1", background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
                   <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 15, color: "#2850A0", marginBottom: 14 }}>Trainer Identity</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
                     {[["Trainer Name", "name"], ["Player Name", "playerName"], ["Concept", "concept"]].map(([l, k]) => (
                       <div key={k}>
                         <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>{l}</div>
                         <input value={(sel as any)[k]} onChange={e => upd(sel.id, { [k]: e.target.value })}
-                          style={{ width: "100%", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13, outline: "none" }} />
+                          style={{ width: "100%", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13, outline: "none" }} />
                       </div>
                     ))}
                     <div>
                       <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>Age</div>
                       <select value={sel.age} onChange={e => upd(sel.id, { age: e.target.value as TrainerAge })}
-                        style={{ width: "100%", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13 }}>
+                        style={{ width: "100%", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13 }}>
                         {AGES.map(a => <option key={a}>{a}</option>)}
                       </select>
                     </div>
                     <div>
                       <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>Rank</div>
                       <select value={sel.rank} onChange={e => upd(sel.id, { rank: e.target.value as Rank })}
-                        style={{ width: "100%", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: RANK_COLORS[sel.rank], fontSize: 13 }}>
+                        style={{ width: "100%", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: RANK_COLORS[sel.rank], fontSize: 13 }}>
                         {RANKS.map(r => <option key={r}>{r}</option>)}
                       </select>
                     </div>
                     <div>
                       <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>Nature</div>
                       <select value={sel.nature} onChange={e => upd(sel.id, { nature: e.target.value })}
-                        style={{ width: "100%", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13 }}>
+                        style={{ width: "100%", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13 }}>
                         {NATURES.map(n => <option key={n}>{n}</option>)}
                       </select>
                     </div>
@@ -1019,7 +1019,7 @@ export default function CharactersPage() {
                     <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Will = INS+3</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#6890f0" }}>{sel.attributes.insight + 3}</div></div>
                     <div><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Money ₽</div>
                       <input type="number" value={sel.money} onChange={e => upd(sel.id, { money: +e.target.value })}
-                        style={{ width: 80, textAlign: "center", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#A07000", fontSize: 16, fontFamily: "'Exo 2'", fontWeight: 700, padding: "2px 6px" }} /></div>
+                        style={{ width: 80, textAlign: "center", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#A07000", fontSize: 16, fontFamily: "'Exo 2'", fontWeight: 700, padding: "2px 6px" }} /></div>
                     <div><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Gym Badges</div>
                       <div style={{ display: "flex", gap: 4 }}>
                         {sel.gymBadges.map((b, i) => (
@@ -1032,7 +1032,7 @@ export default function CharactersPage() {
                 </div>
 
                 {/* Attributes */}
-                <div style={{ background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
+                <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                     <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", margin: 0 }}>Attributes</h3>
                     <PointBudget used={usedAttrPoints} total={totalAttrPoints} label="pts distributed" />
@@ -1065,7 +1065,7 @@ export default function CharactersPage() {
                 </div>
 
                 {/* Skills */}
-                <div style={{ background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
+                <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                     <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", margin: 0 }}>Skills</h3>
                     <PointBudget used={usedSkillPoints} total={rankInfo.skillPoints} label={`pts (limit ${rankInfo.skillLimit}/skill)`} />
@@ -1086,9 +1086,9 @@ export default function CharactersPage() {
                     {(sel.customSkills||[]).map((cs, i) => (
                       <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 5 }}>
                         <input value={cs.name} onChange={e => { const arr=[...(sel.customSkills||[])];arr[i]={...arr[i],name:e.target.value};upd(sel.id,{customSkills:arr}); }}
-                          placeholder="Skill name" style={{ flex: 1, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#202020", fontSize: 12, padding: "4px 8px" }} />
+                          placeholder="Skill name" style={{ flex: 1, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#202020", fontSize: 12, padding: "4px 8px" }} />
                         <input type="number" min={0} max={rankInfo.skillLimit} value={cs.points} onChange={e => { const arr=[...(sel.customSkills||[])];const budget=rankInfo.skillPoints-usedSkillPoints+cs.points;arr[i]={...arr[i],points:Math.min(rankInfo.skillLimit,Math.min(budget,Math.max(0,+e.target.value||0)))};upd(sel.id,{customSkills:arr}); }}
-                          style={{ width: 40, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#2850A0", fontSize: 12, padding: "4px 6px", textAlign: "center" }} />
+                          style={{ width: 40, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#2850A0", fontSize: 12, padding: "4px 6px", textAlign: "center" }} />
                         <button onClick={() => upd(sel.id,{customSkills:(sel.customSkills||[]).filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#585858",cursor:"pointer"}}>✕</button>
                       </div>
                     ))}
@@ -1098,7 +1098,7 @@ export default function CharactersPage() {
                 </div>
 
                 {/* Inventory */}
-                <div style={{ background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
+                <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
                   <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 10 }}>🎒 Inventory</h3>
                   {/* Use Item Modal */}
                   {useItemIdx !== null && sel.inventory[useItemIdx] && (() => {
@@ -1140,7 +1140,7 @@ export default function CharactersPage() {
                     return (
                       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center" }}
                         onClick={() => setUseItemIdx(null)}>
-                        <div style={{ background: "#F8F8F0", border: "1px solid #7888A8", borderRadius: 10, width: 380, maxHeight: "80vh", overflow: "auto" }}
+                        <div style={{ background: "#FBF8E4", border: "1px solid #7888A8", borderRadius: 10, width: 380, maxHeight: "80vh", overflow: "auto" }}
                           onClick={e => e.stopPropagation()}>
                           {/* Header */}
                           <div style={{ padding: "12px 16px", borderBottom: "1px solid #2850A0", display: "flex", alignItems: "center", gap: 10 }}>
@@ -1157,7 +1157,7 @@ export default function CharactersPage() {
                           </div>
                           {/* Description */}
                           {itemData?.description && (
-                            <div style={{ padding: "10px 16px", fontSize: 12, color: "#383838", lineHeight: 1.6, borderBottom: "1px solid #2850A0", background: "#FFFFFF" }}>
+                            <div style={{ padding: "10px 16px", fontSize: 12, color: "#383838", lineHeight: 1.6, borderBottom: "1px solid #2850A0", background: "#F8F4D0" }}>
                               {itemData.description}
                             </div>
                           )}
@@ -1237,11 +1237,11 @@ export default function CharactersPage() {
                   {(sel.inventory||[]).map((item, i) => (
                     <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
                       <input value={item.name} onChange={e => { const arr=[...(sel.inventory||[])];arr[i]={...arr[i],name:e.target.value};upd(sel.id,{inventory:arr}); }}
-                        placeholder="Item name" style={{ flex: 2, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#202020", fontSize: 12, padding: "4px 8px" }} />
+                        placeholder="Item name" style={{ flex: 2, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#202020", fontSize: 12, padding: "4px 8px" }} />
                       <input type="number" min={1} value={item.quantity} onChange={e => { const arr=[...(sel.inventory||[])];arr[i]={...arr[i],quantity:Math.max(1,+e.target.value||1)};upd(sel.id,{inventory:arr}); }}
-                        style={{ width: 48, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#A07000", fontSize: 12, padding: "4px 6px", textAlign: "center" }} />
+                        style={{ width: 48, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#A07000", fontSize: 12, padding: "4px 6px", textAlign: "center" }} />
                       <button onClick={() => setUseItemIdx(i)}
-                        style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontWeight: 700, border: "1px solid #7888A8", background: "#FFFFFF", color: "#383838", whiteSpace: "nowrap" }}>
+                        style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontWeight: 700, border: "1px solid #7888A8", background: "#F8F4D0", color: "#383838", whiteSpace: "nowrap" }}>
                         Use
                       </button>
                       <button onClick={() => upd(sel.id,{inventory:(sel.inventory||[]).filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#585858",cursor:"pointer"}}>✕</button>
@@ -1261,7 +1261,7 @@ export default function CharactersPage() {
                   });
                   const battleItems = invNames.filter(n => BATTLE_ITEMS.includes(n));
                   return (
-                    <div style={{ background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
+                    <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
                       <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 12 }}>⚙️ Equipment</h3>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                         {/* Equipped Item */}
@@ -1269,7 +1269,7 @@ export default function CharactersPage() {
                           <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>Equipped Item</div>
                           <div style={{ fontSize: 9, color: "#4A5468", marginBottom: 6 }}>Bike, fishing rod, etc. — always active</div>
                           <select value={sel.equippedItem || ""} onChange={e => upd(sel.id, { equippedItem: e.target.value })}
-                            style={{ width: "100%", background: "#FFFFFF", border: "1px solid #7888A8", borderRadius: 4, color: sel.equippedItem ? "#202020" : "#585858", fontSize: 12, padding: "5px 8px" }}>
+                            style={{ width: "100%", background: "#F8F4D0", border: "1px solid #7888A8", borderRadius: 4, color: sel.equippedItem ? "#202020" : "#585858", fontSize: 12, padding: "5px 8px" }}>
                             <option value="">— none —</option>
                             {equippableItems.map(n => <option key={n} value={n}>{n}</option>)}
                           </select>
@@ -1279,7 +1279,7 @@ export default function CharactersPage() {
                           <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>Battle Item</div>
                           <div style={{ fontSize: 9, color: "#4A5468", marginBottom: 6 }}>Key Stone / Z-Power Ring / Dynamax Band / Tera Orb — one use per battle</div>
                           <select value={sel.battleItem || ""} onChange={e => upd(sel.id, { battleItem: e.target.value })}
-                            style={{ width: "100%", background: "#FFFFFF", border: `1px solid ${sel.battleItem ? "#A0700050" : "#7888A8"}`, borderRadius: 4, color: sel.battleItem ? "#A07000" : "#585858", fontSize: 12, padding: "5px 8px" }}>
+                            style={{ width: "100%", background: "#F8F4D0", border: `1px solid ${sel.battleItem ? "#A0700050" : "#7888A8"}`, borderRadius: 4, color: sel.battleItem ? "#A07000" : "#585858", fontSize: 12, padding: "5px 8px" }}>
                             <option value="">— none —</option>
                             {battleItems.map(n => <option key={n} value={n}>{n}</option>)}
                           </select>
@@ -1299,22 +1299,22 @@ export default function CharactersPage() {
 
                 {/* Achievements & Notes */}
                 <div style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  <div style={{ background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
+                  <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
                     <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 10 }}>Achievements</h3>
                     {sel.achievements.map((a, i) => (
                       <div key={i} style={{ display: "flex", gap: 6, marginBottom: 5 }}>
                         <input value={a} onChange={e => { const arr = [...sel.achievements]; arr[i] = e.target.value; upd(sel.id, { achievements: arr }); }}
-                          style={{ flex: 1, background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#202020", fontSize: 12, padding: "4px 8px" }} />
+                          style={{ flex: 1, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#202020", fontSize: 12, padding: "4px 8px" }} />
                         <button onClick={() => upd(sel.id, { achievements: sel.achievements.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", color: "#585858", cursor: "pointer" }}>✕</button>
                       </div>
                     ))}
                     <button onClick={() => upd(sel.id, { achievements: [...sel.achievements, ""] })}
                       style={{ fontSize: 11, color: "#2850A0", background: "none", border: "1px dashed #2850A040", borderRadius: 4, padding: "4px 10px", cursor: "pointer", width: "100%" }}>+ Add</button>
                   </div>
-                  <div style={{ background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
+                  <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
                     <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 10 }}>Notes</h3>
                     <textarea value={sel.notes} onChange={e => upd(sel.id, { notes: e.target.value })}
-                      style={{ width: "100%", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 4, color: "#383838", fontSize: 12, padding: 8, resize: "none", height: 110, fontFamily: "inherit", lineHeight: 1.5, outline: "none" }} />
+                      style={{ width: "100%", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#383838", fontSize: 12, padding: 8, resize: "none", height: 110, fontFamily: "inherit", lineHeight: 1.5, outline: "none" }} />
                   </div>
                 </div>
               </div>
@@ -1338,7 +1338,7 @@ export default function CharactersPage() {
                     const p = POKEMON.find(x => x.number === sheet.number);
                     if (!p) return null;
                     return (
-                      <div key={key} style={{ background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 8, padding: 12 }}>
+                      <div key={key} style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 12 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6890f0", flexShrink: 0 }} />
                           <span style={{ fontWeight: 700, fontSize: 13, color: "#202020", flex: 1 }}>{sheet.nickname || p.name}</span>
@@ -1370,7 +1370,7 @@ export default function CharactersPage() {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                     <h2 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 18, color: "#2850A0", margin: 0 }}>Pokémon Party ({sel.pokemon.length}/6)</h2>
-                    <Link href="/gm-screen" style={{ display: "inline-block", background: "#2850A0", color: "#E8E8D8", borderRadius: 4, padding: "6px 14px", fontWeight: 700, fontSize: 12, textDecoration: "none" }}>
+                    <Link href="/gm-screen" style={{ display: "inline-block", background: "#2850A0", color: "#35785F", borderRadius: 4, padding: "6px 14px", fontWeight: 700, fontSize: 12, textDecoration: "none" }}>
                       ⚔️ Open Battle Tracker
                     </Link>
                   </div>
@@ -1421,7 +1421,7 @@ export default function CharactersPage() {
                 <div>
                   <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>Add Pokémon</div>
                   <input type="text" placeholder="Search by name or #…" value={pSearch} onChange={e => setPSearch(e.target.value)}
-                    style={{ width: "100%", background: "#F8F8F0", border: "1px solid #2850A0", borderRadius: 5, padding: "6px 10px", color: "#202020", fontSize: 12, marginBottom: 6, outline: "none" }} />
+                    style={{ width: "100%", background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 5, padding: "6px 10px", color: "#202020", fontSize: 12, marginBottom: 6, outline: "none" }} />
                   <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
                     {(["dex","name","rank"] as const).map(s => (
                       <button key={s} onClick={() => setPSort(s)}
@@ -1434,7 +1434,7 @@ export default function CharactersPage() {
                     {filtPokemon.map((p, i) => (
                       <div key={i} onClick={() => addPokemon(p.number)}
                         style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 4, cursor: sel.pokemon.length >= 6 ? "not-allowed" : "pointer", opacity: sel.pokemon.length >= 6 ? 0.4 : 1 }}
-                        onMouseEnter={e => { if (sel.pokemon.length < 6) (e.currentTarget as HTMLDivElement).style.background = "#F8F8F0"; }}
+                        onMouseEnter={e => { if (sel.pokemon.length < 6) (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                         <span style={{ fontSize: 9, color: "#4A5468", width: 26, fontFamily: "'Exo 2'", fontWeight: 700 }}>#{String(p.number).padStart(3, "0")}</span>
                         <span style={{ fontSize: 12, color: "#202020", flex: 1 }}>{p.name}</span>
