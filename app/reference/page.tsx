@@ -6,6 +6,7 @@ import type { ItemData } from "../data/pokerole-data";
 import { loadFromStorage, saveToStorage } from "../lib/storage";
 import { readableInk } from "../lib/contrast";
 import SiteNav from "../components/SiteNav";
+import HintBar, { ScrollList } from "../components/HintBar";
 
 const RANK_COLORS: Record<Rank,string> = {Starter:"#2F6B1E",Rookie:"#2A54B8",Standard:"#7A6100",Advanced:"#99450A",Expert:"#7A2E7A",Ace:"#B02525",Master:"#4C3B6B",Champion:"#7D6800"};
 const CAT_COLORS: Record<MoveCategory,{text:string;bg:string}> = {Physical:{text:"#f08030",bg:"rgba(240,128,48,0.15)"},Special:{text:"#6890f0",bg:"rgba(104,144,240,0.15)"},Support:{text:"#78c850",bg:"rgba(120,200,80,0.15)"}};
@@ -471,7 +472,7 @@ function ReferenceTabs() {
                 </div>
               )}
             </div>
-            <div style={{flex:1,overflowY:"auto",padding:4}}>
+            <ScrollList style={{padding:4}}>
               {tab==="pokedex"&&(
                 <>
                   {/* Column headers */}
@@ -482,33 +483,32 @@ function ReferenceTabs() {
                   </div>
                   {filtPokemon.length===0&&<div style={{textAlign:"center",color:"#585858",padding:20,fontSize:11}}>No Pokémon match "{search}"</div>}
                   {filtPokemon.map(p=>(
-                    <div key={`${p.number}-${p.name}`} onClick={()=>setSelPokemon(p)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:4,cursor:"pointer",background:selPokemon?.number===p.number&&selPokemon?.name===p.name?"#D8D8D8":"transparent",borderLeft:`2px solid ${selPokemon?.number===p.number&&selPokemon?.name===p.name?"#2850A0":"transparent"}`}}
-                      onMouseEnter={e=>{if(!(selPokemon?.number===p.number&&selPokemon?.name===p.name))(e.currentTarget as HTMLDivElement).style.background="#F8F8F0";}}
-                      onMouseLeave={e=>{if(!(selPokemon?.number===p.number&&selPokemon?.name===p.name))(e.currentTarget as HTMLDivElement).style.background="transparent";}}>
-                      <span style={{fontSize:9,color:"#4A5468",fontFamily:"'Exo 2'",fontWeight:700,width:28,flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
+                    /* Gen 3 marks the selected row with a ▶ cursor and a grey band */
+                    <div key={`${p.number}-${p.name}`} className="fr-row" onClick={()=>setSelPokemon(p)}
+                      aria-selected={selPokemon?.number===p.number&&selPokemon?.name===p.name}
+                      style={{gap:8,padding:"6px 8px",borderRadius:4}}>
+                      <span style={{fontSize:9,color:"#4A5468",fontFamily:"'Exo 2'",fontWeight:700,width:28,flexShrink:0,textShadow:"none"}}>#{String(p.number).padStart(3,"0")}</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:12,fontWeight:600,color:"#202020",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
                         <div style={{display:"flex",gap:3,marginTop:1}}>{p.types.map(t=><TypeBadge key={t} type={t} small/>)}</div>
                       </div>
-                      <div style={{fontSize:9,color:RANK_COLORS[p.suggestedRank],flexShrink:0,fontWeight:600}}>{p.suggestedRank}</div>
+                      <div style={{fontSize:9,color:RANK_COLORS[p.suggestedRank],flexShrink:0,fontWeight:600,textShadow:"none"}}>{p.suggestedRank}</div>
                     </div>
                   ))}
                 </>
               )}
               {tab==="moves"&&filtMoves.map(m=>(
-                <div key={m.name} onClick={()=>setSelMove(m)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",borderRadius:4,cursor:"pointer",background:selMove?.name===m.name?"#D8D8D8":"transparent",borderLeft:`2px solid ${selMove?.name===m.name?TYPE_COLORS[m.type]:"transparent"}`}}
-                  onMouseEnter={e=>{if(selMove?.name!==m.name)(e.currentTarget as HTMLDivElement).style.background="#F8F8F0";}}
-                  onMouseLeave={e=>{if(selMove?.name!==m.name)(e.currentTarget as HTMLDivElement).style.background="transparent";}}>
+                <div key={m.name} className="fr-row" onClick={()=>setSelMove(m)} aria-selected={selMove?.name===m.name}
+                  style={{gap:8,padding:"6px 8px",borderRadius:4}}>
                   <TypeBadge type={m.type} small/>
-                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#202020"}}>{m.name}</div><div style={{fontSize:9,color:CAT_COLORS[m.category].text,fontWeight:600}}>{m.category}</div></div>
-                  {m.power!=="-"&&<span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:"#383838"}}>PWR {m.power}</span>}
+                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#202020"}}>{m.name}</div><div style={{fontSize:9,color:CAT_COLORS[m.category].text,fontWeight:600,textShadow:"none"}}>{m.category}</div></div>
+                  {m.power!=="-"&&<span className="fr-val" style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700}}>PWR {m.power}</span>}
                 </div>
               ))}
               {tab==="abilities"&&filtAbilities.map(a=>(
-                <div key={a.name} onClick={()=>setSelAbility(a)} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"6px 8px",borderRadius:4,cursor:"pointer",background:selAbility?.name===a.name?"#D8D8D8":"transparent",borderLeft:`2px solid ${selAbility?.name===a.name?"#2850A0":"transparent"}`}}
-                  onMouseEnter={e=>{if(selAbility?.name!==a.name)(e.currentTarget as HTMLDivElement).style.background="#F8F8F0";}}
-                  onMouseLeave={e=>{if(selAbility?.name!==a.name)(e.currentTarget as HTMLDivElement).style.background="transparent";}}>
-                  <div><div style={{fontSize:12,fontWeight:600,color:"#202020"}}>{a.name}{a.isUnique&&<span style={{fontSize:8,color:"#A07000",marginLeft:4}}>UNIQUE</span>}</div><div style={{fontSize:10,color:"#585858",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180}}>{a.effect.slice(0,50)}…</div></div>
+                <div key={a.name} className="fr-row" onClick={()=>setSelAbility(a)} aria-selected={selAbility?.name===a.name}
+                  style={{alignItems:"flex-start",gap:8,padding:"6px 8px",borderRadius:4}}>
+                  <div><div style={{fontSize:12,fontWeight:600,color:"#202020"}}>{a.name}{a.isUnique&&<span className="fr-val" style={{fontSize:8,marginLeft:4}}>UNIQUE</span>}</div><div style={{fontSize:10,color:"#585858",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:180,textShadow:"none"}}>{a.effect.slice(0,50)}…</div></div>
                 </div>
               ))}
               {tab==="items"&&(
@@ -543,7 +543,7 @@ function ReferenceTabs() {
                   <div style={{padding:"4px 8px",fontSize:9,color:"#585858"}}>{filtItems.length} item{filtItems.length!==1?"s":""}</div>
                 </>
               )}
-            </div>
+            </ScrollList>
           </div>
         )}
         {/* Detail */}
@@ -757,6 +757,11 @@ function ReferenceTabs() {
           )}
         </div>
       </div>
+      <HintBar hints={[
+        {key:"◆",label:"BROWSE"},
+        {key:"◎",label:"SELECT"},
+        {key:"◉",label:tab==="items"?"ADD TO PARTY":"DETAILS"},
+      ]}/>
     </div>
   );
 }

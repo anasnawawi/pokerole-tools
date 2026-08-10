@@ -135,26 +135,38 @@ html, body {
   text-shadow: 1px 1px 0 #183868;
 }
 
-/* Menu row: selection is a ▶ cursor, not a fill. The cursor keeps its width when
-   hidden so labels never shift as the highlight moves. */
+/* Menu row: selection is a ▶ cursor plus a grey band, as in the bag and party
+   screens — not a coloured edge. The cursor keeps its width when hidden so
+   labels never shift as the highlight moves. Font is inherited so callers can
+   use the pixel face for short labels and the UI face for long names. */
 .fr-row {
   display: flex; align-items: center; gap: 6px;
   background: none; border: none; width: 100%;
   padding: 3px 6px; cursor: pointer; text-align: left;
-  font-family: var(--pixel-font);
   color: var(--fr-ink); text-shadow: 1px 1px 0 var(--fr-ink-shade);
 }
 .fr-row::before {
   content: "\25B6";
   flex-shrink: 0;
+  font-size: 0.8em;
   color: transparent;
   text-shadow: none;
 }
-.fr-row:hover, .fr-row[aria-selected="true"] { background: var(--fr-row-sel); }
+.fr-row:hover { background: color-mix(in srgb, var(--fr-row-sel) 55%, transparent); }
+.fr-row[aria-selected="true"] { background: var(--fr-row-sel); }
 .fr-row:hover::before, .fr-row[aria-selected="true"]::before { color: var(--fr-ink); }
 
 /* Red outline marking the active entry, as on the KNOWN MOVES screen */
 .fr-ring { box-shadow: 0 0 0 2px var(--fr-sel-ring); border-radius: 4px; }
+
+/* Red scroll chevrons the Gen 3 lists show when there is more above/below */
+.fr-arrow {
+  color: var(--fr-sel-ring);
+  text-shadow: 1px 1px 0 #FFFFFF;
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
 
 /* ── Battle scene FX keyframes (weather / terrain / status / hazards) ────── */
 @keyframes fxRainFall { from { background-position: 0 0; } to { background-position: -24px 220px; } }
