@@ -206,7 +206,3 @@ html, body {
 @keyframes fxRippleExpand { 0% { transform: scale(0.4); opacity: 0.7; } 100% { transform: scale(1.9); opacity: 0; } }
 @keyframes fxIceShimmer { 0%,100% { opacity: 0.5; } 50% { opacity: 0.85; } }
 
-/* Rotom's grin, idling side to side on its own loop — independent of the
-   look-tracking the eyes do on selection, so the mouth stays alive even
-   while the cursor sits still. */
-@keyframes rotomGrin { 0%,100% { transform: translateX(-8%); } 50% { transform: translateX(8%); } }
