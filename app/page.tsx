@@ -85,13 +85,13 @@ function RotomFace({look,blink,narrow,eyeH,eyeW}:{look:number;blink:boolean;narr
     <div style={{position:"relative",zIndex:2,flexShrink:0,alignSelf:"center",display:"flex",alignItems:"center",justifyContent:"center",
       gap:narrow?"2.6vw":"1.4vw"}}>
       {eye(-1)}
-      {/* The bridge: now that the eyes sit outside the screen (see Home),
-          the elaborate arc-clipped cap that used to sit above them no
-          longer applies — there's nothing here to clip it to. Just a small
-          dark bar bridging the gap between the two eyes, pulled slightly
-          over each one's inner edge with negative margins. */}
-      <span aria-hidden style={{flexShrink:0,alignSelf:"center",width:narrow?"6vw":"3.4vw",height:"22%",
-        background:"#101010",margin:narrow?"0 -1.8vw":"0 -1vw"}}/>
+      {/* The bridge: a rounded pill hanging between the eyes, not a thin
+          bar — per the mockup it's a genuinely sized shape in its own
+          right (roughly 60% of the eye's own height), pulled slightly over
+          each eye's inner edge with negative margins so it reads as one
+          connected piece rather than three separate shapes. */}
+      <span aria-hidden style={{flexShrink:0,alignSelf:"center",width:narrow?"7vw":"3.8vw",height:"58%",
+        borderRadius:"45%",background:"#101010",margin:narrow?"0 -2vw":"0 -1.1vw"}}/>
       {eye(1)}
     </div>
   );
@@ -293,11 +293,13 @@ export default function Home() {
               screen, which this element's own overflow:hidden would
               otherwise clip away. Only the mouth stays here, in flow,
               pushed down to clear the (now much bigger, chassis-level)
-              eyes. eyeH*0.75 is the approximate depth the eyes reach down
-              to from this fill's own top, given where the chassis-level
-              overlay below positions them. */}
+              eyes with a visible gap of screen between them — eyeH*0.65 is
+              roughly where the eyes themselves end (from this fill's own
+              top), and the extra 0.3 is deliberate empty space, not just
+              clearance, matching a mockup where the mouth sits clearly
+              separated from the eyes rather than flush against them. */}
           <div style={{position:"relative",zIndex:1,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
-            paddingTop:`calc(${eyeH} * 0.75 - ${narrow?9:12}px)`}}>
+            paddingTop:`calc(${eyeH} * 0.95 - ${narrow?9:12}px)`}}>
             <RotomMouth narrow={narrow}/>
           </div>
 
