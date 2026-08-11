@@ -61,12 +61,15 @@ function RotomFace({look,blink,narrow,eyeH,eyeW}:{look:number;blink:boolean;narr
       transform:`rotate(${side*18}deg)`,transformOrigin:"center",
       overflow:"hidden",flexShrink:0,
       display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-      {/* The seam sits behind the pupil (earlier in DOM + lower z-index) and
-          mostly hidden by it — only its outer end shows past the pupil's
-          edge, as in the reference. It had been drawn after the pupil (so
-          on top of it) and at the ring's own border weight (so too thick). */}
-      <span style={{position:"absolute",zIndex:0,width:"46%",height:seamW,background:"#101010",
-        top:"57%",left:"11%",transform:"rotate(-38deg)",opacity:0.85}}/>
+      {/* The seam actually bisects the eye — it needs to be long enough to
+          poke out past the pupil at both ends, not a short segment tucked
+          entirely into the ring where the pupil covers all of it (which
+          is what made it invisible last pass). It sits behind the pupil
+          (lower z-index) so only those two ends show, with the middle
+          hidden — the bisecting line "behind the pupil" that was asked
+          for, rather than a stub that never reaches the pupil at all. */}
+      <span style={{position:"absolute",zIndex:0,width:"88%",height:seamW,background:"#101010",
+        top:"50%",left:"6%",transform:"translateY(-50%) rotate(-36deg)",opacity:0.85}}/>
       {/* Solid flat iris — no gradient, no border, no glossy highlight dot.
           Blink scales this vertically toward a line (a slit) rather than
           covering the eye with an opaque lid — "closing into the slit"
@@ -96,13 +99,27 @@ function RotomMouth({narrow}:{narrow:boolean}) {
      pass sized it independently and it came out roughly half that. */
   const w = narrow ? "clamp(46px, 13vw, 82px)" : "clamp(78px, 10.5vw, 220px)";
   const h = narrow ? "clamp(18px, 5.4vw, 32px)" : "clamp(30px, 4.4vw, 88px)";
+  /* A pill (border-radius) can't reproduce the reference's actual silhouette:
+     pointed corners at both ends, a shallow dip at top-centre between two
+     raised points, and a deeper convex curve along the bottom. clip-path
+     polygon (percentage-based, unlike path()) approximates that with
+     straight segments between enough points to read as curved at this size. */
+  const grin = "polygon(2% 52%, 9% 26%, 24% 8%, 38% 20%, 50% 14%, 62% 20%, 76% 8%, 91% 26%, 98% 52%, 82% 82%, 50% 96%, 18% 82%)";
   return (
     <div style={{width:w,height:h,marginTop:narrow?4:6,position:"relative",flexShrink:0,
-      background:"#FFFFFF",border:"2px solid #101010",overflow:"hidden",
-      borderRadius:"18% 18% 40% 40% / 30% 30% 70% 70%",
       animation:"rotomGrin 2.6s ease-in-out infinite"}}>
-      <span style={{position:"absolute",left:"32%",top:"6%",width:"6%",height:"70%",background:"#101010",transform:"rotate(6deg)"}}/>
-      <span style={{position:"absolute",left:"63%",top:"6%",width:"6%",height:"70%",background:"#101010",transform:"rotate(-6deg)"}}/>
+      {/* Outline: the same polygon, drawn larger (inset:-2 vs 0) so the black
+          shows only as a ring around the white fill on top of it — clip-path
+          shapes don't take a CSS `border`, since border still follows the
+          box's rectangle, not the clipped silhouette. */}
+      <div aria-hidden style={{position:"absolute",inset:-2,background:"#101010",clipPath:grin}}/>
+      <div style={{position:"absolute",inset:0,background:"#FFFFFF",clipPath:grin}}>
+        {/* Full-height dividers, clipped by the parent's own clip-path (which
+            applies to children too), so they start and end exactly on the
+            grin's outline instead of floating short of it with a gap. */}
+        <span style={{position:"absolute",left:"36%",top:0,width:"3%",height:"100%",background:"#101010"}}/>
+        <span style={{position:"absolute",left:"63%",top:0,width:"3%",height:"100%",background:"#101010"}}/>
+      </div>
     </div>
   );
 }
@@ -213,7 +230,10 @@ export default function Home() {
 
   // Vertical reach of the screen's domed top — scales with viewport for the
   // same reason the face does, so the arch stays proportionate at any width.
-  const archR = narrow ? "clamp(46px, 11vw, 76px)" : "clamp(64px, 7vw, 150px)";
+  /* Taller than before: at the old reach the curve had already flattened out
+     well above where the eyes sit, so they rendered entirely in the flat
+     lower area with no visible overlap with the arc at all. */
+  const archR = narrow ? "clamp(70px, 18vw, 120px)" : "clamp(100px, 11vw, 240px)";
   // Eye size lives here (not inside RotomFace) because the brow cap below
   // needs the exact same numbers to size itself against — two independently
   // maintained copies is exactly how the cap and the eyes drifted apart
@@ -272,7 +292,7 @@ export default function Home() {
               was far wider than the eye row it's meant to sit over. */}
           <div aria-hidden style={{position:"absolute",zIndex:1,top:0,left:"50%",transform:"translateX(-50%)",
             width:`calc(${eyeW} * 2.6 + ${narrow?"2.6vw":"1.4vw"})`,
-            height:`calc(${archR} * 0.4 + ${eyeH} * 0.3)`,
+            height:`calc(${archR} * 0.22 + ${eyeH} * 0.35)`,
             background:"#101010",borderRadius:`0 0 50% 50% / 0 0 40% 40%`}}/>
 
           {/* The face is part of the screen itself — sitting in the domed
@@ -282,7 +302,7 @@ export default function Home() {
               independent vw value, so it sits inset within the arch at
               every size instead of crowding its curved top edge. */}
           <div style={{position:"relative",zIndex:1,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
-            paddingTop:`calc(${archR} * 0.4)`}}>
+            paddingTop:`calc(${archR} * 0.22)`}}>
             <RotomFace look={look} blink={blink} narrow={narrow} eyeH={eyeH} eyeW={eyeW}/>
             <RotomMouth narrow={narrow}/>
           </div>
