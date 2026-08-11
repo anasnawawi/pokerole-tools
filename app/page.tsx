@@ -38,27 +38,29 @@ const SECTIONS = [
    toward whichever column is selected and it blinks on its own, so the device
    reads as alive rather than as a static frame. */
 function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean}) {
-  const w = narrow ? 42 : 54;
-  const h = narrow ? 36 : 46;
-  /* Each eye is tilted outward-up, and the only black is the bridge between
-     them — in the artwork there is no band wrapping the pair. */
+  const w = narrow ? 50 : 64;
+  const h = narrow ? 44 : 56;
+  /* Rotom's eye: a big white lens with a heavy black rim, a blue iris filling
+     most of it, and a point at the inner corner. The pair is joined only by a
+     short black bridge — no band wraps around them. */
   const eye = (side:-1|1) => (
-    <span key={side} style={{position:"relative",width:w,height:blink?6:h,
-      borderRadius:blink?3:"52% 52% 50% 50%",background:"#FFFFFF",border:"3px solid #101010",
-      transform:`rotate(${side*-14}deg)`,transformOrigin:"center",
+    <span key={side} style={{position:"relative",width:w,height:blink?7:h,
+      /* Inner corner is tighter than the outer, which is what gives the eye its
+         angled, determined shape rather than reading as a plain oval. */
+      borderRadius: blink ? 4 : (side===-1 ? "58% 42% 44% 56%" : "42% 58% 56% 44%"),
+      background:"#FFFFFF",border:`${narrow?4:5}px solid #101010`,
+      transform:`rotate(${side*-16}deg)`,transformOrigin:"center",
       transition:"height 90ms, border-radius 90ms",overflow:"hidden",flexShrink:0,
       display:"inline-flex",alignItems:"center",justifyContent:"center",
-      boxShadow:"0 2px 0 rgba(0,0,0,0.28)"}}>
-      {!blink&&(
-        <>
-          {/* Iris, then the highlight that gives Rotom its glassy look */}
-          <span style={{position:"absolute",width:w*0.56,height:w*0.56,borderRadius:"50%",
-            background:"radial-gradient(circle at 36% 30%, #7FB4F4 0%, #3A72D8 52%, #163A8E 100%)",
-            border:"2px solid #10285E",transform:`translateX(${look*(w*0.15)}px)`,transition:"transform 140ms ease"}}/>
-          <span style={{position:"absolute",width:w*0.17,height:w*0.17,borderRadius:"50%",background:"#FFFFFF",
-            transform:`translate(${look*(w*0.15)-w*0.12}px, -${w*0.11}px)`,transition:"transform 140ms ease"}}/>
-        </>
-      )}
+      boxShadow:"0 2px 0 rgba(0,0,0,0.3)"}}>
+      {/* The iris stays mounted through a blink so the lid closes over it —
+          unmounting it left a blank white eye for the length of the animation. */}
+      <span style={{position:"absolute",width:w*0.68,height:w*0.68,borderRadius:"50%",
+        background:"radial-gradient(circle at 34% 28%, #8FC2FF 0%, #3A72D8 46%, #14337F 100%)",
+        border:"2px solid #0C2360",transform:`translateX(${look*(w*0.13)}px)`,transition:"transform 140ms ease"}}/>
+      {/* Glass highlight */}
+      <span style={{position:"absolute",width:w*0.20,height:w*0.20,borderRadius:"50%",background:"#FFFFFF",
+        transform:`translate(${look*(w*0.13)-w*0.15}px, -${w*0.14}px)`,transition:"transform 140ms ease"}}/>
     </span>
   );
 
@@ -226,11 +228,24 @@ export default function Home() {
       <div style={{background:"#FFFFFF",borderRadius:10,padding:narrow?6:9,flex:1,minHeight:0,display:"flex",flexDirection:"column",
         position:"relative",zIndex:1,border:"3px solid #101010",
         boxShadow:"inset 0 2px 6px rgba(0,0,0,0.18), 6px 7px 0 rgba(0,0,0,0.28)"}}>
-        <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden",
-          borderRadius:6,border:"2px solid #101010",background:"linear-gradient(180deg,#CDEAF6 0%,#A8DCF0 100%)"}}>
+        <div style={{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden",
+          borderRadius:6,border:"2px solid #101010",background:"#FFFFFF"}}>
+
+          {/* The screen motif: the cyan plate that sits inset on the white
+              display in the artwork, its lower-right corner swept away. Purely
+              a backdrop — the grid and readout draw over it. */}
+          <div aria-hidden style={{position:"absolute",inset:narrow?6:10,zIndex:0,pointerEvents:"none",
+            background:"linear-gradient(150deg,#D8F0FA 0%,#A8DCF0 45%,#7FC8E8 100%)",
+            borderRadius:"14px 14px 14px 60px",
+            clipPath:"polygon(0% 0%, 100% 0%, 100% 78%, 78% 100%, 0% 100%)"}}/>
+          {/* Faint sheen across the plate, as on a glossy panel */}
+          <div aria-hidden style={{position:"absolute",inset:narrow?6:10,zIndex:0,pointerEvents:"none",
+            background:"linear-gradient(115deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 42%)",
+            borderRadius:"14px 14px 14px 60px",
+            clipPath:"polygon(0% 0%, 100% 0%, 100% 78%, 78% 100%, 0% 100%)"}}/>
 
           {/* Page title + page dots */}
-          <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0,margin:"0 8px",
+          <div style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",gap:9,flexShrink:0,margin:narrow?"10px 12px 0":"14px 18px 0",
             background:section.accent,borderRadius:8,padding:"5px 10px",border:"2px solid #101010"}}>
             <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?8:10,color:"#FFFFFF",textShadow:"1px 1px 0 rgba(0,0,0,0.5)"}}>{section.title}</span>
             <div style={{flex:1}}/>
@@ -247,7 +262,8 @@ export default function Home() {
           </div>
 
           {/* ── App grid ────────────────────────────────────────────────── */}
-          <div ref={gridRef} style={{flex:1,minHeight:0,overflowY:"auto",padding:narrow?"9px 8px 12px":"12px 12px 16px",
+          <div ref={gridRef} style={{position:"relative",zIndex:1,flex:1,minHeight:0,overflowY:"auto",
+            padding:narrow?"9px 12px 12px":"12px 18px 16px",
             display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:narrow?8:12,alignContent:"start"}}>
             {APPS.map((it,i)=>{
               const on = i===idx;
@@ -280,7 +296,7 @@ export default function Home() {
           </div>
 
           {/* Selected-app readout */}
-          <div style={{flexShrink:0,background:"#101010",padding:narrow?"7px 10px":"9px 13px",
+          <div style={{position:"relative",zIndex:1,flexShrink:0,background:"#101010",padding:narrow?"7px 10px":"9px 13px",
             display:"flex",alignItems:"center",gap:10}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?8:9,color:"#8FD8F0",marginBottom:4}}>{entry.label}</div>
