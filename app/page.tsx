@@ -52,23 +52,36 @@ function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean
   /* At 6.5vw the face measured ~21% of the screen's width at a 1400px window —
      the reference photos run closer to 35-40%. 11vw with a taller ceiling
      gets there without the face swallowing the shell on an ultra-wide monitor. */
-  const eyeD = narrow ? "clamp(40px, 11vw, 70px)" : "clamp(70px, 11vw, 190px)";
+  const eyeW = narrow ? "clamp(40px, 11vw, 70px)" : "clamp(70px, 11vw, 190px)";
+  /* Flattened to ~55% of the width — the artwork's eyes are a narrow,
+     alien-like slit, not a round lens. This also means the box has a FIXED
+     height, unlike the earlier version, which is what fixes the blink: that
+     one shrank the eye's own box on blink, which shrank the band around it
+     (the band sizes itself from padding), which shifted the whole screen
+     below it on every blink. */
+  const eyeH = narrow ? "clamp(22px, 6vw, 38px)" : "clamp(38px, 6vw, 104px)";
   const eyeBorder = narrow ? "clamp(3px, 1vw, 5px)" : "clamp(4px, 0.6vw, 7px)";
 
   const eye = (side:-1|1) => (
-    <span key={side} style={{position:"relative",width:eyeD,height:blink?"14%":eyeD,
-      borderRadius:blink?"30%":"50%",background:"#FFFFFF",border:`${eyeBorder} solid #101010`,
-      transition:"height 90ms",overflow:"hidden",flexShrink:0,
-      display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-      {/* Iris stays mounted through a blink so the lid closes over it, rather
-          than the eye flashing blank white for the length of the animation.
-          Sized and shifted in %, both relative to the eye's own box, so the
-          look-tracking offset scales with it automatically. */}
+    <span key={side} style={{position:"relative",width:eyeW,height:eyeH,
+      borderRadius:"50%",background:"#FFFFFF",border:`${eyeBorder} solid #101010`,
+      transform:`rotate(${side*-20}deg)`,transformOrigin:"center",
+      overflow:"hidden",flexShrink:0,
+      display:"inline-flex",alignItems:"center",justifyContent:"center",
+      boxShadow:"0 2px 0 rgba(0,0,0,0.3)"}}>
+      {/* The iris is a full circle, but the flat oval eye clips it top and
+          bottom — only a horizontal sliver shows through, which is what
+          actually reads as a slit rather than a round pupil. */}
       <span style={{position:"absolute",width:"64%",height:"64%",borderRadius:"50%",
         background:"radial-gradient(circle at 34% 28%, #8FC2FF 0%, #3A72D8 48%, #14337F 100%)",
         border:"2px solid #0C2360",transform:`translateX(${look*18}%)`,transition:"transform 140ms ease"}}/>
       <span style={{position:"absolute",width:"18%",height:"18%",borderRadius:"50%",background:"#FFFFFF",
         transform:`translate(${look*18-15}%, -14%)`,transition:"transform 140ms ease"}}/>
+      {/* Eyelid: an opaque cover that scales in over the fixed-size eye,
+          rather than the eye's box itself changing size. */}
+      <span style={{position:"absolute",inset:0,background:"#101010",
+        transform:`scaleY(${blink?1:0})`,transformOrigin:"center",
+        transition:"transform 90ms ease"}}/>
     </span>
   );
 
