@@ -33,51 +33,39 @@ const SECTIONS = [
   },
 ];
 
-/* Rotom's face, following the Pokédex artwork: a black visor band carrying two
-   large blue eyes, with a toothy grin sitting just below it. The pupils drift
-   toward whichever column is selected and it blinks on its own, so the device
-   reads as alive rather than as a static frame. */
-/* Rotom's face, redrawn against the actual Pokédex artwork: both eyes sit
-   inside one black band (not just a bridge between two separate rims), each
-   eye is a bold white lens with a thick black ring and a blue iris, and the
-   mouth is a small pale-blue bubble — much smaller than the eyes, not a wide
-   grin. */
+/* Rotom's face, matched against a close-up reference: eyes are tilted ovals
+   TALLER than they are wide (not the flattened horizontal slit the previous
+   pass used), the black shape is a shallow dome/brow sitting ABOVE the eye
+   row rather than a band wrapping fully around it, and the mouth is a white
+   toothy grin with tooth dividers, not a plain blue bubble. The whole face
+   now renders inside the screen itself (see the panel below), so the mouth
+   is part of the display rather than sitting on the shell above it. */
 function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean}) {
-  /* Fixed pixel eyes read as a small icon bolted onto the shell rather than
-     as a face that's part of it, because the shell itself scales with the
-     browser window while a px size doesn't. Scale with viewport width
-     instead, clamped so the face can't outgrow the shell on an ultra-wide
-     monitor or vanish on a small phone. Children below are sized in %, which
-     resolves against this element's own box, so they scale for free. */
-  /* At 6.5vw the face measured ~21% of the screen's width at a 1400px window —
-     the reference photos run closer to 35-40%. 11vw with a taller ceiling
-     gets there without the face swallowing the shell on an ultra-wide monitor. */
-  const eyeW = narrow ? "clamp(40px, 11vw, 70px)" : "clamp(70px, 11vw, 190px)";
-  /* Flattened to ~55% of the width — the artwork's eyes are a narrow,
-     alien-like slit, not a round lens. This also means the box has a FIXED
-     height, unlike the earlier version, which is what fixes the blink: that
-     one shrank the eye's own box on blink, which shrank the band around it
-     (the band sizes itself from padding), which shifted the whole screen
-     below it on every blink. */
-  const eyeH = narrow ? "clamp(22px, 6vw, 38px)" : "clamp(38px, 6vw, 104px)";
+  /* Major axis (height) scales with viewport, same reasoning as before: a
+     fixed px size reads as a small icon bolted onto a shell that itself
+     scales with the window. Width is ~72% of that — taller than wide, per
+     the reference — derived from the same clamp rather than a second
+     independent one, so the ratio holds at every size instead of drifting. */
+  const eyeH = narrow ? "clamp(38px, 10vw, 64px)" : "clamp(64px, 10vw, 168px)";
+  const eyeW = narrow ? "clamp(27px, 7.2vw, 46px)" : "clamp(46px, 7.2vw, 121px)";
   const eyeBorder = narrow ? "clamp(3px, 1vw, 5px)" : "clamp(4px, 0.6vw, 7px)";
 
-  /* Flat throughout, per reference: solid colours only, no gradients, no
-     glossy highlight dot, no drop shadows on the eye or the band. */
   const eye = (side:-1|1) => (
     <span key={side} style={{position:"relative",width:eyeW,height:eyeH,
       borderRadius:"50%",background:"#FFFFFF",border:`${eyeBorder} solid #101010`,
-      transform:`rotate(${side*-20}deg)`,transformOrigin:"center",
+      transform:`rotate(${side*-18}deg)`,transformOrigin:"center",
       overflow:"hidden",flexShrink:0,
       display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-      {/* The iris is a full circle, but the flat oval eye clips it top and
-          bottom — only a horizontal sliver shows through, which is what
-          actually reads as a slit rather than a round pupil. Solid fill,
-          no border, no gradient, no highlight dot. */}
-      <span style={{position:"absolute",width:"64%",height:"64%",borderRadius:"50%",
-        background:"#2E63C8",transform:`translateX(${look*18}%)`,transition:"transform 140ms ease"}}/>
-      {/* Eyelid: an opaque cover that scales in over the fixed-size eye,
-          rather than the eye's box itself changing size. */}
+      {/* Solid flat iris — no gradient, no border, no glossy highlight dot. */}
+      <span style={{position:"absolute",width:"70%",height:"78%",borderRadius:"50%",
+        background:"#2451B8",transform:`translateX(${look*14}%)`,transition:"transform 140ms ease"}}/>
+      {/* The diagonal seam the reference draws across the upper ring, as a
+          faint construction line rather than a full ring segment. */}
+      <span style={{position:"absolute",width:"120%",height:eyeBorder,background:"#101010",
+        top:"20%",left:"-10%",transform:"rotate(-32deg)",opacity:0.9}}/>
+      {/* Eyelid: an opaque cover that scales in over the fixed-size eye box,
+          rather than the box itself changing size — that was what made an
+          earlier version shift the whole screen on every blink. */}
       <span style={{position:"absolute",inset:0,background:"#101010",
         transform:`scaleY(${blink?1:0})`,transformOrigin:"center",
         transition:"transform 90ms ease"}}/>
@@ -85,28 +73,41 @@ function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean
   );
 
   return (
-    <div style={{position:"relative",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
-      alignSelf:"center",zIndex:2}}>
-      {/* One black band the eyes sit inside — not a thin bridge connecting two
-          separate rims. Sized by its padding around the (now responsive)
-          eyes rather than a fixed width/height, so it keeps hugging them at
-          every size instead of drifting loose or tight. */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center",
-        gap:narrow?"3vw":"1.6vw",padding:narrow?"3vw 4vw":"1.6vw 2.2vw",
-        background:"#101010",borderRadius:"50% 50% 42% 42% / 60% 60% 40% 40%"}}>
+    /* Height is pinned to the eye's own height so the dome above it can be
+       positioned in %, which resolves against a defined height — an auto
+       height here would make the dome's %-based position/size invalid. */
+    <div style={{position:"relative",flexShrink:0,alignSelf:"center",zIndex:2,height:eyeH}}>
+      {/* The brow: a shallow dome sitting above the eye row, not a band that
+         wraps fully around it. Positioned in % of this wrapper, which always
+         equals the eye row's own rendered width — so it keeps matching
+         regardless of the eye's actual computed pixel size. */}
+      <div aria-hidden style={{position:"absolute",left:"-10%",right:"-10%",top:"-42%",height:"72%",
+        background:"#101010",borderRadius:"50% 50% 0 0 / 100% 100% 0 0"}}/>
+      <div style={{position:"relative",zIndex:1,height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
+        gap:narrow?"2.6vw":"1.4vw"}}>
         {eye(-1)}
         {eye(1)}
       </div>
-      {/* Mouth: a small pale-blue bubble, sized as ~45% of the eye's own vw
-          coefficient (not its own fixed pixels or an unrelated vw value) so
-          it stays visibly smaller than the eyes at every viewport width —
-          it had been sized close to eye-width and read as too dominant. */}
-      <div style={{marginTop:narrow?"-1.4vw":"-0.8vw",
-        width:"5vw",height:"3.4vw",
-        maxWidth:narrow?32:85,maxHeight:narrow?22:58,
-        minWidth:18,minHeight:12,
-        background:"#A8DCF0",border:"2px solid #101010",
-        borderRadius:"45% 45% 50% 50% / 55% 55% 45% 45%"}}/>
+    </div>
+  );
+}
+
+/* The grin: a white toothy smile with two tooth dividers, idling side to
+   side on its own animation loop (see @keyframes rotomGrin in globals.css) —
+   independent of the eyes' look-tracking, so the mouth stays alive even
+   while the cursor sits still. */
+function RotomMouth({narrow}:{narrow:boolean}) {
+  /* The grin spans most of the eye row's width in the reference — the first
+     pass sized it independently and it came out roughly half that. */
+  const w = narrow ? "clamp(46px, 13vw, 82px)" : "clamp(78px, 10.5vw, 220px)";
+  const h = narrow ? "clamp(18px, 5.4vw, 32px)" : "clamp(30px, 4.4vw, 88px)";
+  return (
+    <div style={{width:w,height:h,marginTop:narrow?4:6,position:"relative",flexShrink:0,
+      background:"#FFFFFF",border:"2px solid #101010",overflow:"hidden",
+      borderRadius:"18% 18% 40% 40% / 30% 30% 70% 70%",
+      animation:"rotomGrin 2.6s ease-in-out infinite"}}>
+      <span style={{position:"absolute",left:"32%",top:"6%",width:"6%",height:"70%",background:"#101010",transform:"rotate(6deg)"}}/>
+      <span style={{position:"absolute",left:"63%",top:"6%",width:"6%",height:"70%",background:"#101010",transform:"rotate(-6deg)"}}/>
     </div>
   );
 }
@@ -215,6 +216,10 @@ export default function Home() {
   // -1 / 0 / +1 depending on which side of the grid the selection sits.
   const look = (idx % cols) / Math.max(1, cols-1) * 2 - 1;
 
+  // Vertical reach of the screen's domed top — scales with viewport for the
+  // same reason the face does, so the arch stays proportionate at any width.
+  const archR = narrow ? "clamp(46px, 11vw, 76px)" : "clamp(64px, 7vw, 150px)";
+
   const pageBtn:React.CSSProperties = {
     width:narrow?40:44,height:narrow?40:44,borderRadius:"50%",flexShrink:0,cursor:"pointer",touchAction:"manipulation",
     background:"linear-gradient(180deg,#FFFFFF 0%,#D6E8F4 100%)",border:"3px solid #101010",
@@ -235,15 +240,25 @@ export default function Home() {
 
       <RotomBits narrow={narrow}/>
 
-      {/* Face sits on the shell, above the screen, as in the artwork */}
-      <RotomFace look={look} blink={blink} narrow={narrow}/>
-
       {/* ── Panel — the white screen bezel with its cyan inner display ────── */}
-      <div style={{background:"#FFFFFF",borderRadius:10,padding:narrow?6:9,flex:1,minHeight:0,display:"flex",flexDirection:"column",
+      {/* Arched top instead of a flat rectangle: 50% horizontal radius makes
+          it a true dome regardless of the panel's actual width, and archR
+          controls how tall that dome is. Bottom corners stay a plain small
+          rounded rect, matching the reference's screen shape. */}
+      <div style={{background:"#FFFFFF",borderRadius:`50% 50% 10px 10px / ${archR} ${archR} 10px 10px`,padding:narrow?6:9,flex:1,minHeight:0,display:"flex",flexDirection:"column",
         position:"relative",zIndex:1,border:"3px solid #101010",
         boxShadow:"inset 0 2px 6px rgba(0,0,0,0.18), 6px 7px 0 rgba(0,0,0,0.28)"}}>
         <div style={{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden",
-          borderRadius:6,border:"2px solid #101010",background:"#FFFFFF"}}>
+          borderRadius:`50% 50% 6px 6px / ${archR} ${archR} 6px 6px`,border:"2px solid #101010",background:"#FFFFFF"}}>
+
+          {/* The face is now part of the screen itself — sitting in the
+              domed top, with the grin drawn on the display below the eyes —
+              rather than perched on the shell above a flat-topped panel. */}
+          <div style={{position:"relative",zIndex:1,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
+            paddingTop:narrow?"6vw":"3vw"}}>
+            <RotomFace look={look} blink={blink} narrow={narrow}/>
+            <RotomMouth narrow={narrow}/>
+          </div>
 
           {/* The screen motif: the cyan plate that sits inset on the white
               display in the artwork, its lower-right corner swept away. Purely
