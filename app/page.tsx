@@ -2,57 +2,78 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-/* The device's three "pages" — the category keys select between them. */
+/* The three home-screen pages of the device. */
 const SECTIONS = [
   {
-    id:"players", title:"TRAINER TOOLS", accent:"#2858C0",
+    id:"players", title:"TRAINER TOOLS", accent:"#1E7BB0",
     items:[
       {href:"/reference?tab=pokedex",icon:"📖",label:"Pokédex",desc:"Browse all 1025 Pokémon with stats, types, abilities and learnable moves."},
       {href:"/reference?tab=moves",icon:"⚡",label:"Moves",desc:"All 894 moves with power, accuracy, category and full effect text."},
       {href:"/reference?tab=abilities",icon:"✨",label:"Abilities",desc:"305 ability descriptions, including unique signature abilities."},
       {href:"/reference?tab=items",icon:"🎒",label:"Items",desc:"236 items by pocket, with costs and give-to-party support."},
-      {href:"/characters",icon:"👤",label:"Character Creator",desc:"Build trainers and their Pokémon party, saved automatically."},
+      {href:"/characters",icon:"👤",label:"Characters",desc:"Build trainers and their Pokémon party, saved automatically."},
     ],
   },
   {
-    id:"gm", title:"GAME MASTER", accent:"#D82808",
+    id:"gm", title:"GAME MASTER", accent:"#C43A24",
     items:[
       {href:"/gm-screen",icon:"🖥️",label:"GM Screen",desc:"A modular panel grid you arrange yourself, with shareable layouts."},
-      {href:"/encounter",icon:"🌿",label:"Encounter Generator",desc:"Roll random wild encounters by habitat and rank."},
-      {href:"/battle-tracker",icon:"⚔️",label:"Battle Tracker",desc:"Full initiative and combat on a FireRed battle stage."},
+      {href:"/encounter",icon:"🌿",label:"Encounters",desc:"Roll random wild encounters by habitat and rank."},
+      {href:"/battle-tracker",icon:"⚔️",label:"Battle",desc:"Full initiative and combat on a FireRed battle stage."},
     ],
   },
   {
-    id:"rules", title:"RULES DATA", accent:"#B08808",
+    id:"rules", title:"RULES DATA", accent:"#9A6E00",
     items:[
-      {href:"/reference/quick-ref",icon:"📚",label:"Quick Reference",desc:"Roll rules, difficulty, damage and the pain penalty at a glance."},
+      {href:"/reference/quick-ref",icon:"📚",label:"Quick Ref",desc:"Roll rules, difficulty, damage and the pain penalty at a glance."},
       {href:"/reference?tab=types",icon:"🔣",label:"Type Chart",desc:"The full defensive effectiveness matrix for every type."},
-      {href:"/reference?tab=status",icon:"💢",label:"Status Conditions",desc:"Every status effect and exactly what it does each round."},
-      {href:"/reference?tab=weather",icon:"🌤️",label:"Weather Effects",desc:"Weather and terrain, and how each changes a battle."},
+      {href:"/reference?tab=status",icon:"💢",label:"Status",desc:"Every status effect and exactly what it does each round."},
+      {href:"/reference?tab=weather",icon:"🌤️",label:"Weather",desc:"Weather and terrain, and how each changes a battle."},
     ],
   },
 ];
 
-/* Faint horizontal banding, as on a backlit handheld panel. */
-function Scanlines(){
-  return <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:2,
-    background:"repeating-linear-gradient(0deg, rgba(0,0,0,0.07) 0px, rgba(0,0,0,0.07) 1px, transparent 1px, transparent 3px)"}}/>;
+/* Rotom's face sits at the top of the panel. The pupils drift toward whichever
+   column is selected, and it blinks on its own, so the device reads as alive
+   rather than as a static frame. */
+function RotomFace({look,blink}:{look:number;blink:boolean}) {
+  const eye = (
+    <span style={{position:"relative",width:34,height:blink?4:30,borderRadius:blink?3:"50%",
+      background:"#F8FDFF",border:"3px solid #0E2E42",transition:"height 90ms, border-radius 90ms",
+      display:"inline-flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+      {!blink&&(
+        <span style={{position:"absolute",width:13,height:13,borderRadius:"50%",background:"#0E2E42",
+          transform:`translateX(${look*5}px)`,transition:"transform 140ms ease"}}/>
+      )}
+    </span>
+  );
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,padding:"6px 0 4px",flexShrink:0}}>
+      {eye}
+      {/* Mouth */}
+      <span style={{width:26,height:12,borderTop:"none",border:"3px solid #0E2E42",borderTopColor:"transparent",
+        borderRadius:"0 0 16px 16px",background:"#F26A4B"}}/>
+      {eye}
+    </div>
+  );
 }
+
+/* Every app on one home screen, the way a PDA shows them — paging through
+   three near-empty screens made the panel feel unfinished. Each app keeps its
+   section so the grid can stay colour-coded and grouped. */
+const APPS = SECTIONS.flatMap((s,si)=>s.items.map(it=>({...it,si,accent:s.accent})));
 
 export default function Home() {
   const router = useRouter();
-  const [sec,setSec] = useState(0);
   const [idx,setIdx] = useState(0);
-  const [blink,setBlink] = useState(true);
-  /* Below this the chassis switches to a portrait handheld: screen stacked
-     over the controls, and the entry detail below the list rather than beside. */
+  const [blink,setBlink] = useState(false);
   const [narrow,setNarrow] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
+  const entry = APPS[idx];
+  const sec = entry.si;
   const section = SECTIONS[sec];
-  const entry = section.items[idx];
-
-  useEffect(()=>{const t=setInterval(()=>setBlink(b=>!b),600);return()=>clearInterval(t);},[]);
+  const cols = narrow ? 3 : 4;
 
   useEffect(()=>{
     const mq = window.matchMedia("(max-width: 760px)");
@@ -62,181 +83,158 @@ export default function Home() {
     return () => mq.removeEventListener("change", sync);
   },[]);
 
-  const pickSection = useCallback((n:number)=>{
-    setSec(((n % SECTIONS.length) + SECTIONS.length) % SECTIONS.length);
-    setIdx(0);
+  // Blink on a loop, with the eye shut only briefly.
+  useEffect(()=>{
+    let shut:ReturnType<typeof setTimeout>;
+    const t = setInterval(()=>{
+      setBlink(true);
+      shut = setTimeout(()=>setBlink(false),130);
+    },3400);
+    return ()=>{clearInterval(t);clearTimeout(shut);};
   },[]);
-  const move = useCallback((d:number)=>{
-    setIdx(i=>{
-      const len = SECTIONS[sec].items.length;
-      return ((i + d) % len + len) % len;
-    });
-  },[sec]);
-  const open = useCallback(()=>{ router.push(SECTIONS[sec].items[idx].href); },[router,sec,idx]);
 
-  // The device is keyboard-driven, like the handheld it imitates.
+  /* Jump the selection to the first app of the neighbouring section. */
+  const pickSection = useCallback((n:number)=>{
+    const s = ((n % SECTIONS.length) + SECTIONS.length) % SECTIONS.length;
+    setIdx(APPS.findIndex(a=>a.si===s));
+  },[]);
+
+  const step = useCallback((d:number)=>{
+    setIdx(i=>((i + d) % APPS.length + APPS.length) % APPS.length);
+  },[]);
+
+  const stepRow = useCallback((d:number)=>{
+    setIdx(i=>Math.max(0,Math.min(APPS.length-1, i + d*cols)));
+  },[cols]);
+
+  const open = useCallback(()=>{ router.push(APPS[idx].href); },[router,idx]);
+
   useEffect(()=>{
     const onKey=(e:KeyboardEvent)=>{
-      if(e.key==="ArrowDown"){e.preventDefault();move(1);}
-      else if(e.key==="ArrowUp"){e.preventDefault();move(-1);}
-      else if(e.key==="ArrowRight"){e.preventDefault();pickSection(sec+1);}
-      else if(e.key==="ArrowLeft"){e.preventDefault();pickSection(sec-1);}
+      if(e.key==="ArrowRight"){e.preventDefault();step(1);}
+      else if(e.key==="ArrowLeft"){e.preventDefault();step(-1);}
+      else if(e.key==="ArrowDown"){e.preventDefault();stepRow(1);}
+      else if(e.key==="ArrowUp"){e.preventDefault();stepRow(-1);}
       else if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}
     };
     window.addEventListener("keydown",onKey);
     return()=>window.removeEventListener("keydown",onKey);
-  },[move,pickSection,open,sec]);
+  },[step,stepRow,open]);
 
-  // Keep the cursor row in view when it moves off the visible part of the list.
   useEffect(()=>{
-    listRef.current?.querySelector<HTMLElement>('[data-on="true"]')
-      ?.scrollIntoView({block:"nearest"});
+    gridRef.current?.querySelector<HTMLElement>('[data-on="true"]')?.scrollIntoView({block:"nearest"});
   },[idx,sec]);
 
-  const dpadKey:React.CSSProperties = {
-    background:"linear-gradient(180deg,#4A4A4A 0%,#282828 100%)",border:"2px solid #181818",
-    color:"#F8F8F8",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
-    fontSize:13,lineHeight:1,padding:0,touchAction:"manipulation",
+  // -1 / 0 / +1 depending on which side of the grid the selection sits.
+  const look = (idx % cols) / Math.max(1, cols-1) * 2 - 1;
+
+  const pageBtn:React.CSSProperties = {
+    width:narrow?40:44,height:narrow?40:44,borderRadius:"50%",flexShrink:0,cursor:"pointer",touchAction:"manipulation",
+    background:"linear-gradient(180deg,#FFFFFF 0%,#D6E8F4 100%)",border:"3px solid #0E2E42",
+    color:"#0E2E42",fontSize:15,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center",
+    boxShadow:"0 3px 0 rgba(0,0,0,0.3)",
   };
-  const dpadCell = narrow ? 30 : 26;
 
   return (
-    /* The chassis is the whole window — no page background behind it, so the
-       browser frame reads as the edge of the device. 100dvh rather than 100vh
-       so mobile URL bars don't push the controls out of reach. */
+    /* Rotom's plasma-orange chassis is the window itself. dvh so a mobile URL
+       bar can't push the controls out of reach. */
     <div style={{height:"100dvh",width:"100vw",overflow:"hidden",display:"flex",flexDirection:"column",
-      background:"linear-gradient(160deg,#F04030 0%,#D02010 45%,#A01608 75%,#7C1004 100%)",
+      background:"linear-gradient(160deg,#FF9A45 0%,#F4762A 40%,#DE5A1C 72%,#B8420E 100%)",
       fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
       padding:narrow?"8px 8px 10px":"14px 18px 16px",gap:narrow?8:12,
-      /* Moulded edge: highlight along the top, shadow into the corners. */
-      boxShadow:"inset 0 3px 0 rgba(255,255,255,0.22), inset 0 -6px 18px rgba(0,0,0,0.45), inset 0 0 0 4px #181818"}}>
+      boxShadow:"inset 0 3px 0 rgba(255,255,255,0.28), inset 0 -8px 20px rgba(0,0,0,0.4), inset 0 0 0 4px #0E2E42"}}>
 
-      {/* Lens, lamps, model plate */}
-      <div style={{display:"flex",alignItems:"center",gap:narrow?9:12,flexShrink:0}}>
-        <div style={{width:narrow?34:46,height:narrow?34:46,borderRadius:"50%",flexShrink:0,position:"relative",
-          background:"radial-gradient(circle at 34% 28%, #D8F8FF 0%, #78C8F0 30%, #2878C0 68%, #184880 100%)",
-          border:"4px solid #181818",boxShadow:"inset -3px -3px 6px rgba(0,30,60,0.5), 0 2px 0 rgba(0,0,0,0.35)"}}>
-          <div style={{position:"absolute",top:6,left:9,width:10,height:6,borderRadius:"50%",background:"rgba(255,255,255,0.85)",filter:"blur(1px)"}}/>
-        </div>
-        <div style={{display:"flex",gap:6}}>
-          {["#F83838","#F8D030","#58D838"].map((c,i)=>(
-            <div key={c} style={{width:11,height:11,borderRadius:"50%",background:c,border:"2px solid #181818",
-              opacity:i===0&&!blink?0.45:1,boxShadow:"inset -1px -1px 2px rgba(0,0,0,0.35)"}}/>
-          ))}
-        </div>
-        <div style={{flex:1}}/>
-        <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:8,color:"#FFD8CC",textShadow:"1px 1px 0 #7A1008",whiteSpace:"nowrap"}}>
-          {narrow?"PKR-01":"POKéROLE TOOLS · MODEL PKR-01"}
-        </span>
-      </div>
+      {/* ── Panel ─────────────────────────────────────────────────────────── */}
+      <div style={{background:"#0E2E42",borderRadius:16,padding:narrow?7:10,flex:1,minHeight:0,display:"flex",flexDirection:"column",
+        boxShadow:"inset 0 2px 6px rgba(0,0,0,0.6), 0 2px 0 rgba(255,255,255,0.14)"}}>
+        <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden",
+          borderRadius:11,border:"2px solid #071B28",background:"linear-gradient(180deg,#EAF6FF 0%,#D2E9F8 100%)"}}>
 
-      {/* ── Screen ────────────────────────────────────────────────────────── */}
-      <div style={{background:"#181818",borderRadius:10,padding:narrow?6:9,flex:1,minHeight:0,display:"flex",flexDirection:"column",
-        boxShadow:"inset 0 2px 5px rgba(0,0,0,0.7), 0 2px 0 rgba(255,255,255,0.10)"}}>
-        <div style={{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden",
-          borderRadius:5,border:"2px solid #0C1418",background:"#E8F4D8"}}>
-          <Scanlines/>
+          <RotomFace look={look} blink={blink}/>
 
-          {/* Screen title bar */}
-          <div style={{position:"relative",zIndex:3,display:"flex",alignItems:"center",gap:8,flexShrink:0,
-            background:section.accent,padding:"6px 10px",borderBottom:"2px solid #181818"}}>
-            <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?8:10,color:"#FFFFFF",textShadow:"1px 1px 0 rgba(0,0,0,0.55)"}}>{section.title}</span>
+          {/* Page title + page dots */}
+          <div style={{display:"flex",alignItems:"center",gap:9,flexShrink:0,margin:"0 8px",
+            background:section.accent,borderRadius:8,padding:"5px 10px",border:"2px solid #0E2E42"}}>
+            <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?8:10,color:"#FFFFFF",textShadow:"1px 1px 0 rgba(0,0,0,0.5)"}}>{section.title}</span>
             <div style={{flex:1}}/>
-            <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:9,color:"#FFFFFF",textShadow:"1px 1px 0 rgba(0,0,0,0.55)"}}>
-              {idx+1}/{section.items.length}
+            <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:9,color:"#FFFFFF",textShadow:"1px 1px 0 rgba(0,0,0,0.5)"}}>
+              {idx+1}/{APPS.length}
             </span>
-          </div>
-
-          {/* Entry list + detail */}
-          <div style={{position:"relative",zIndex:3,flex:1,minHeight:0,display:"flex",flexDirection:narrow?"column":"row"}}>
-            {/* Portrait: the list takes only the height it needs (capped, so a
-                long category still scrolls) and the entry fills the rest. */}
-            <div ref={listRef} style={{
-              width:narrow?"auto":"44%",minWidth:narrow?0:200,
-              flex:narrow?"0 1 auto":"none",maxHeight:narrow?"52%":undefined,minHeight:0,
-              borderRight:narrow?"none":"2px solid #A8B898",
-              borderBottom:narrow?"2px solid #A8B898":"none",
-              overflowY:"auto",padding:"5px 4px"}}>
-              {section.items.map((it,i)=>{
-                const on = i===idx;
-                return (
-                  <div key={it.href+it.label} data-on={on} onClick={()=>setIdx(i)} onDoubleClick={open}
-                    style={{display:"flex",alignItems:"center",gap:6,padding:narrow?"8px 7px":"6px 7px",cursor:"pointer",borderRadius:3,
-                      background:on?"#B8CCA0":"transparent",color:"#182818",touchAction:"manipulation"}}>
-                    <span style={{width:10,flexShrink:0,fontSize:9,color:on?"#182818":"transparent"}}>▶</span>
-                    <span style={{fontSize:15,flexShrink:0}}>{it.icon}</span>
-                    <span style={{fontSize:13,fontWeight:on?700:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
-                      textShadow:"1px 1px 0 rgba(255,255,255,0.6)"}}>{it.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Detail pane — the Pokédex "entry" for the highlighted tool */}
-            <div style={{flex:1,minWidth:0,minHeight:0,padding:narrow?"9px 11px":"12px 14px",
-              display:"flex",flexDirection:"column",gap:8,overflowY:"auto"}}>
-              <div style={{display:"flex",alignItems:"center",gap:9}}>
-                <span style={{fontSize:narrow?24:30}}>{entry.icon}</span>
-                <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?9:11,color:"#182818",lineHeight:1.5,
-                  textShadow:"1px 1px 0 rgba(255,255,255,0.7)"}}>{entry.label}</span>
-              </div>
-              <p style={{fontSize:narrow?12:13,lineHeight:1.6,color:"#243424",margin:0}}>{entry.desc}</p>
-              <button onClick={open}
-                style={{alignSelf:"flex-start",marginTop:narrow?4:"auto",background:"#182818",color:"#E8F4D8",border:"2px solid #0C1408",
-                  borderRadius:4,padding:"7px 14px",cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:9,touchAction:"manipulation"}}>
-                OPEN <span style={{opacity:blink?1:0.25}}>▶</span>
-              </button>
+            {/* Dots track which section holds the selection */}
+            <div style={{display:"flex",gap:5}}>
+              {SECTIONS.map((s,i)=>(
+                <span key={s.id} style={{width:8,height:8,borderRadius:"50%",border:"2px solid #0E2E42",
+                  background:i===sec?"#FFFFFF":"rgba(0,0,0,0.28)"}}/>
+              ))}
             </div>
           </div>
 
-          {/* In-screen hint strip */}
-          <div style={{position:"relative",zIndex:3,flexShrink:0,display:"flex",gap:12,justifyContent:"flex-end",
-            background:"#182818",padding:"4px 10px"}}>
-            {[["◆","MOVE"],["Ⓐ","OPEN"],["◀▶","PAGE"]].map(([k,l])=>(
-              <span key={l} style={{display:"inline-flex",gap:3,alignItems:"center",fontFamily:"'Press Start 2P',monospace"}}>
-                <span style={{fontSize:8,color:"#F8D030"}}>{k}</span>
-                <span style={{fontSize:7,color:"#E8F4D8"}}>{l}</span>
-              </span>
-            ))}
+          {/* ── App grid ────────────────────────────────────────────────── */}
+          <div ref={gridRef} style={{flex:1,minHeight:0,overflowY:"auto",padding:narrow?"9px 8px 12px":"12px 12px 16px",
+            display:"grid",gridTemplateColumns:`repeat(${cols},1fr)`,gap:narrow?8:12,alignContent:"start"}}>
+            {APPS.map((it,i)=>{
+              const on = i===idx;
+              const first = i===0 || APPS[i-1].si!==it.si;
+              return (
+                <div key={it.href} style={{display:"contents"}}>
+                  {/* Section label spans the row above its apps */}
+                  {first&&(
+                    <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,margin:i===0?"0 2px 2px":"10px 2px 2px"}}>
+                      <span style={{width:9,height:9,borderRadius:2,background:it.accent,border:"2px solid #0E2E42",flexShrink:0}}/>
+                      <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:8,color:"#0E2E42"}}>{SECTIONS[it.si].title}</span>
+                      <span style={{flex:1,height:2,background:"rgba(14,46,66,0.18)",borderRadius:1}}/>
+                    </div>
+                  )}
+                  <button data-on={on} onClick={()=>setIdx(i)} onDoubleClick={open}
+                    aria-label={it.label} aria-current={on}
+                    style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,
+                      padding:narrow?"9px 4px":"12px 6px",cursor:"pointer",touchAction:"manipulation",
+                      borderRadius:14,background:on?it.accent:"#FFFFFF",
+                      border:`3px solid ${on?"#0E2E42":"#A8C8DE"}`,
+                      boxShadow:on?"0 0 0 3px rgba(255,255,255,0.9), 0 3px 0 rgba(0,0,0,0.28)":"0 3px 0 rgba(14,46,66,0.18)",
+                      transform:on?"translateY(-1px)":"none",transition:"transform 90ms"}}>
+                    <span style={{fontSize:narrow?22:30,lineHeight:1}}>{it.icon}</span>
+                    <span style={{fontSize:narrow?9:11,fontWeight:700,textAlign:"center",lineHeight:1.25,
+                      color:on?"#FFFFFF":"#0E2E42",textShadow:on?"1px 1px 0 rgba(0,0,0,0.4)":"none"}}>{it.label}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Selected-app readout */}
+          <div style={{flexShrink:0,background:"#0E2E42",padding:narrow?"7px 10px":"9px 13px",
+            display:"flex",alignItems:"center",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?8:9,color:"#7DE8F8",marginBottom:4}}>{entry.label}</div>
+              <div style={{fontSize:narrow?11:12,lineHeight:1.5,color:"#DCEEF8"}}>{entry.desc}</div>
+            </div>
+            <button onClick={open} style={{flexShrink:0,background:"#7DE8F8",color:"#062334",border:"2px solid #F8FDFF",
+              borderRadius:8,padding:narrow?"7px 11px":"9px 15px",cursor:"pointer",touchAction:"manipulation",
+              fontFamily:"'Press Start 2P',monospace",fontSize:9,boxShadow:"0 3px 0 rgba(0,0,0,0.35)"}}>OPEN</button>
           </div>
         </div>
       </div>
 
       {/* ── Controls ──────────────────────────────────────────────────────── */}
-      <div style={{display:"flex",alignItems:"center",gap:narrow?10:16,flexShrink:0}}>
-        {/* D-pad */}
-        <div style={{display:"grid",gridTemplateColumns:`repeat(3,${dpadCell}px)`,gridTemplateRows:`repeat(3,${dpadCell}px)`,flexShrink:0}}>
-          <span/>
-          <button aria-label="Previous entry" onClick={()=>move(-1)} style={{...dpadKey,borderRadius:"5px 5px 0 0"}}>▲</button>
-          <span/>
-          <button aria-label="Previous category" onClick={()=>pickSection(sec-1)} style={{...dpadKey,borderRadius:"5px 0 0 5px"}}>◀</button>
-          <span style={{background:"#282828",border:"2px solid #181818"}}/>
-          <button aria-label="Next category" onClick={()=>pickSection(sec+1)} style={{...dpadKey,borderRadius:"0 5px 5px 0"}}>▶</button>
-          <span/>
-          <button aria-label="Next entry" onClick={()=>move(1)} style={{...dpadKey,borderRadius:"0 0 5px 5px"}}>▼</button>
-          <span/>
-        </div>
+      <div style={{display:"flex",alignItems:"center",gap:narrow?10:14,flexShrink:0}}>
+        <button aria-label="Previous page" onClick={()=>pickSection(sec-1)} style={pageBtn}>◀</button>
+        <button aria-label="Next page" onClick={()=>pickSection(sec+1)} style={pageBtn}>▶</button>
 
-        {/* Category keys — each lamp jumps straight to that page */}
-        <div style={{display:"flex",gap:narrow?8:9,flexShrink:0}}>
-          {SECTIONS.map((s,i)=>(
-            <button key={s.id} onClick={()=>pickSection(i)} title={s.title} aria-label={s.title}
-              style={{width:narrow?30:30,height:narrow?30:30,borderRadius:"50%",background:s.accent,cursor:"pointer",touchAction:"manipulation",
-                border:i===sec?"3px solid #F8F8E8":"3px solid #181818",
-                boxShadow:i===sec?"0 0 0 2px #181818, 0 2px 0 rgba(0,0,0,0.3)":"inset -2px -2px 3px rgba(0,0,0,0.35), 0 2px 0 rgba(0,0,0,0.3)"}}/>
-          ))}
-        </div>
+        {/* Vents — soak up the spare width so the chassis reads as moulded */}
+        <div style={{flex:1,minWidth:20,height:16,borderRadius:4,border:"2px solid #0E2E42",
+          background:"repeating-linear-gradient(90deg,#C9581C 0px,#C9581C 5px,#A5430F 5px,#A5430F 10px)"}}/>
 
-        {/* Speaker grille — soaks up the spare width so the chassis feels moulded */}
-        <div style={{flex:1,minWidth:24,height:16,borderRadius:3,border:"2px solid #181818",
-          background:"repeating-linear-gradient(90deg,#B02010 0px,#B02010 5px,#8C1408 5px,#8C1408 10px)"}}/>
+        <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:7,color:"#FFE6D2",
+          textShadow:"1px 1px 0 rgba(0,0,0,0.4)",whiteSpace:"nowrap",flexShrink:0}}>
+          {narrow?"ROTOM-DEX":"ROTOM-DEX · POKéROLE 3.0"}
+        </span>
 
-        {/* A button */}
         <button onClick={open} aria-label="Open selected tool"
-          style={{width:narrow?52:56,height:narrow?52:56,borderRadius:"50%",flexShrink:0,cursor:"pointer",touchAction:"manipulation",
-            background:"radial-gradient(circle at 34% 28%, #78E8B0 0%, #38B878 45%, #187848 100%)",
-            border:"3px solid #181818",boxShadow:"0 3px 0 rgba(0,0,0,0.35)",
-            fontFamily:"'Press Start 2P',monospace",fontSize:14,color:"#08200F"}}>A</button>
+          style={{width:narrow?52:58,height:narrow?52:58,borderRadius:"50%",flexShrink:0,cursor:"pointer",touchAction:"manipulation",
+            background:"radial-gradient(circle at 34% 28%, #BFF4FF 0%, #7DE8F8 45%, #2E9BD6 100%)",
+            border:"3px solid #0E2E42",boxShadow:"0 3px 0 rgba(0,0,0,0.35)",
+            fontFamily:"'Press Start 2P',monospace",fontSize:14,color:"#062334"}}>A</button>
       </div>
     </div>
   );

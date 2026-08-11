@@ -34,8 +34,15 @@ export default function SiteNav({active,children}:{active?:string;children?:Reac
     <nav className="fr-bar" style={{borderBottom:"2px solid #18305A",padding:"0 10px",height:44,display:"flex",alignItems:"center",gap:4,flexShrink:0,
       /* Scrolls rather than clipping — a nav that silently hides its tail is worse than one that scrolls */
       overflowX:"auto",overflowY:"hidden"}}>
-      <Link href="/" style={{fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#FFFFFF",textDecoration:"none",textShadow:"1px 1px 0 #183868",flexShrink:0,marginRight:8,whiteSpace:"nowrap"}}>
-        PokeRole<span style={{color:"#FFE070"}}> Tools</span>
+      {/* Explicit way back to the Rotom Pokédex. The wordmark alone was the only
+          route home, which isn't an obvious affordance. */}
+      <Link href="/" title="Back to the Pokédex" aria-label="Back to the Pokédex"
+        style={{display:"inline-flex",alignItems:"center",gap:5,textDecoration:"none",flexShrink:0,marginRight:8,whiteSpace:"nowrap",
+          background:"#F4762A",border:"2px solid #18305A",borderRadius:6,padding:"3px 9px",boxShadow:"0 2px 0 rgba(0,0,0,0.3)"}}
+        onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#FF8C42";}}
+        onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="#F4762A";}}>
+        <span style={{fontSize:12,lineHeight:1,color:"#FFFFFF",textShadow:"1px 1px 0 rgba(0,0,0,0.45)"}}>⌂</span>
+        <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:8,color:"#FFFFFF",textShadow:"1px 1px 0 rgba(0,0,0,0.45)"}}>POKéDEX</span>
       </Link>
       {SITE_LINKS.map(l=>{
         const on = current===l.match;
