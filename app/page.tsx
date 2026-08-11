@@ -85,6 +85,13 @@ function RotomFace({look,blink,narrow,eyeH,eyeW}:{look:number;blink:boolean;narr
     <div style={{position:"relative",zIndex:2,flexShrink:0,alignSelf:"center",display:"flex",alignItems:"center",justifyContent:"center",
       gap:narrow?"2.6vw":"1.4vw"}}>
       {eye(-1)}
+      {/* The bridge: now that the eyes sit outside the screen (see Home),
+          the elaborate arc-clipped cap that used to sit above them no
+          longer applies — there's nothing here to clip it to. Just a small
+          dark bar bridging the gap between the two eyes, pulled slightly
+          over each one's inner edge with negative margins. */}
+      <span aria-hidden style={{flexShrink:0,alignSelf:"center",width:narrow?"6vw":"3.4vw",height:"22%",
+        background:"#101010",margin:narrow?"0 -1.8vw":"0 -1vw"}}/>
       {eye(1)}
     </div>
   );
@@ -230,16 +237,24 @@ export default function Home() {
 
   // Vertical reach of the screen's domed top — scales with viewport for the
   // same reason the face does, so the arch stays proportionate at any width.
-  /* Taller than before: at the old reach the curve had already flattened out
-     well above where the eyes sit, so they rendered entirely in the flat
-     lower area with no visible overlap with the arc at all. */
   const archR = narrow ? "clamp(70px, 18vw, 120px)" : "clamp(100px, 11vw, 240px)";
-  // Eye size lives here (not inside RotomFace) because the brow cap below
-  // needs the exact same numbers to size itself against — two independently
-  // maintained copies is exactly how the cap and the eyes drifted apart
-  // before.
-  const eyeH = narrow ? "clamp(38px, 10vw, 64px)" : "clamp(64px, 10vw, 168px)";
-  const eyeW = narrow ? "clamp(27px, 7.2vw, 46px)" : "clamp(46px, 7.2vw, 121px)";
+  /* Eyes are now the dominant feature of the whole device, not a detail
+     sitting inside the screen — roughly 1.6x the previous size, matched
+     against a mockup showing them large enough to overlap both the shell
+     above the screen and well down into it. Still lives here (not inside
+     RotomFace) because the chassis-level placement below needs the exact
+     same numbers the eyes render at. */
+  const eyeH = narrow ? "clamp(64px, 15vw, 100px)" : "clamp(110px, 15vw, 260px)";
+  const eyeW = narrow ? "clamp(44px, 10.5vw, 70px)" : "clamp(78px, 10.5vw, 175px)";
+  /* Chassis padding-top, tied to eyeH rather than a small fixed value. The
+     eye overlay below sits at chassisPadTop - eyeH*0.35 — with a small fixed
+     padding that goes well negative, since eyeH*0.35 alone (40-90px) dwarfs
+     a 6-10px padding. The chassis itself has overflow:hidden, so a negative
+     top doesn't spill onto anything, it just gets clipped away — the eyes'
+     top portion was vanishing entirely rather than showing on the shell.
+     0.42 leaves a small margin of visible red above the eyes too, rather
+     than starting them flush at the very top of the device. */
+  const chassisPadTop = `calc(${eyeH} * 0.42)`;
 
   const pageBtn:React.CSSProperties = {
     width:narrow?40:44,height:narrow?40:44,borderRadius:"50%",flexShrink:0,cursor:"pointer",touchAction:"manipulation",
@@ -256,7 +271,7 @@ export default function Home() {
       fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
       /* Generous side padding so the prongs and vents have shell to sit on —
          a thin frame hid them behind the panel entirely. */
-      padding:narrow?"6px 34px 10px":"10px 74px 16px",gap:narrow?6:9,
+      padding:`${chassisPadTop} ${narrow?"34px":"74px"} ${narrow?"10px":"16px"}`,gap:narrow?6:9,
       boxShadow:"inset 0 3px 0 rgba(255,255,255,0.28), inset 0 -8px 20px rgba(0,0,0,0.4), inset 0 0 0 4px #101010"}}>
 
       <RotomBits narrow={narrow}/>
@@ -272,38 +287,17 @@ export default function Home() {
         <div style={{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden",
           borderRadius:`50% 50% 6px 6px / ${archR} ${archR} 6px 6px`,border:"2px solid #101010",background:"#FFFFFF"}}>
 
-          {/* The brow cap: anchored flush to the fill's own top:0, with NO
-              border-radius of its own on top. Its top edge is invisible —
-              pushed above the visible area — and what actually shows is
-              wherever the fill's own overflow:hidden + arch border-radius
-              clips it, which is exactly the screen's real curve. A
-              self-contained dome shape (the earlier version) could only ever
-              approximate that curve, never match it, because it was drawn
-              independently of the arch instead of being cut by it. Height
-              reaches from the true top down to roughly where the eyes sit,
-              matching eyeH + the face's own top offset below. */}
-          {/* zIndex:1, not 0 — the cyan motif below is also z0 and comes later
-              in DOM order, so at equal z-index it was painting over the cap
-              entirely (later wins). The eyes still render above this, since
-              their wrapper is z1 too but later in DOM than this cap.
-              Width is derived from eyeW/the eye row's gap (2.6x eyeW
-              approximates the two eyes plus their gap plus a little
-              overhang) rather than a flat 60% of the whole screen, which
-              was far wider than the eye row it's meant to sit over. */}
-          <div aria-hidden style={{position:"absolute",zIndex:1,top:0,left:"50%",transform:"translateX(-50%)",
-            width:`calc(${eyeW} * 2.6 + ${narrow?"2.6vw":"1.4vw"})`,
-            height:`calc(${archR} * 0.22 + ${eyeH} * 0.35)`,
-            background:"#101010",borderRadius:`0 0 50% 50% / 0 0 40% 40%`}}/>
-
-          {/* The face is part of the screen itself — sitting in the domed
-              top, with the grin drawn on the display below the eyes —
-              rather than perched on the shell above a flat-topped panel.
-              Tied to archR (the dome's own height) rather than an
-              independent vw value, so it sits inset within the arch at
-              every size instead of crowding its curved top edge. */}
+          {/* The eyes moved out of this container entirely — see the
+              chassis-level overlay below the panel's closing tag — because
+              they now need to sit partly ON the red shell above this
+              screen, which this element's own overflow:hidden would
+              otherwise clip away. Only the mouth stays here, in flow,
+              pushed down to clear the (now much bigger, chassis-level)
+              eyes. eyeH*0.75 is the approximate depth the eyes reach down
+              to from this fill's own top, given where the chassis-level
+              overlay below positions them. */}
           <div style={{position:"relative",zIndex:1,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
-            paddingTop:`calc(${archR} * 0.22)`}}>
-            <RotomFace look={look} blink={blink} narrow={narrow} eyeH={eyeH} eyeW={eyeW}/>
+            paddingTop:`calc(${eyeH} * 0.75 - ${narrow?9:12}px)`}}>
             <RotomMouth narrow={narrow}/>
           </div>
 
@@ -383,6 +377,21 @@ export default function Home() {
               fontFamily:"'Press Start 2P',monospace",fontSize:9,boxShadow:"0 3px 0 rgba(0,0,0,0.35)"}}>OPEN</button>
           </div>
         </div>
+      </div>
+
+      {/* The eyes: positioned against the chassis itself (not the screen
+          panel above), so they can sit astride the boundary between the red
+          shell and the white screen rather than being clipped to one side
+          of it — poking up onto the shell and reaching down into the
+          screen, matching a mockup where the eyes are the single largest
+          feature on the device. zIndex:3 clears both the panel (z1) and
+          everything inside it. Top is computed straight off chassisPadTop
+          (where the panel's own top edge actually is) minus a fraction of
+          the eye's height, so the eyes' upper ~35% sits above that edge on
+          the shell and the rest hangs down into the screen. */}
+      <div style={{position:"absolute",zIndex:3,left:"50%",transform:"translateX(-50%)",
+        top:`calc(${chassisPadTop} - ${eyeH} * 0.35)`}}>
+        <RotomFace look={look} blink={blink} narrow={narrow} eyeH={eyeH} eyeW={eyeW}/>
       </div>
 
       {/* ── Controls ──────────────────────────────────────────────────────── */}
