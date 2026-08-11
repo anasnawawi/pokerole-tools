@@ -43,41 +43,57 @@ const SECTIONS = [
    mouth is a small pale-blue bubble — much smaller than the eyes, not a wide
    grin. */
 function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean}) {
-  const eyeD = narrow ? 30 : 40;
-  /* Sized to hug the eyes rather than float around them with slack border. */
-  const bandW = eyeD*2 + (narrow?24:32);
-  const bandH = eyeD + (narrow?10:14);
+  /* Fixed pixel eyes read as a small icon bolted onto the shell rather than
+     as a face that's part of it, because the shell itself scales with the
+     browser window while a px size doesn't. Scale with viewport width
+     instead, clamped so the face can't outgrow the shell on an ultra-wide
+     monitor or vanish on a small phone. Children below are sized in %, which
+     resolves against this element's own box, so they scale for free. */
+  /* At 6.5vw the face measured ~21% of the screen's width at a 1400px window —
+     the reference photos run closer to 35-40%. 11vw with a taller ceiling
+     gets there without the face swallowing the shell on an ultra-wide monitor. */
+  const eyeD = narrow ? "clamp(40px, 11vw, 70px)" : "clamp(70px, 11vw, 190px)";
+  const eyeBorder = narrow ? "clamp(3px, 1vw, 5px)" : "clamp(4px, 0.6vw, 7px)";
 
   const eye = (side:-1|1) => (
-    <span key={side} style={{position:"relative",width:eyeD,height:blink?5:eyeD,
-      borderRadius:blink?3:"50%",background:"#FFFFFF",border:`${narrow?3:4}px solid #101010`,
+    <span key={side} style={{position:"relative",width:eyeD,height:blink?"14%":eyeD,
+      borderRadius:blink?"30%":"50%",background:"#FFFFFF",border:`${eyeBorder} solid #101010`,
       transition:"height 90ms",overflow:"hidden",flexShrink:0,
       display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
       {/* Iris stays mounted through a blink so the lid closes over it, rather
-          than the eye flashing blank white for the length of the animation. */}
-      <span style={{position:"absolute",width:eyeD*0.62,height:eyeD*0.62,borderRadius:"50%",
+          than the eye flashing blank white for the length of the animation.
+          Sized and shifted in %, both relative to the eye's own box, so the
+          look-tracking offset scales with it automatically. */}
+      <span style={{position:"absolute",width:"64%",height:"64%",borderRadius:"50%",
         background:"radial-gradient(circle at 34% 28%, #8FC2FF 0%, #3A72D8 48%, #14337F 100%)",
-        border:"2px solid #0C2360",transform:`translateX(${look*(eyeD*0.12)}px)`,transition:"transform 140ms ease"}}/>
-      <span style={{position:"absolute",width:eyeD*0.18,height:eyeD*0.18,borderRadius:"50%",background:"#FFFFFF",
-        transform:`translate(${look*(eyeD*0.12)-eyeD*0.14}px, -${eyeD*0.13}px)`,transition:"transform 140ms ease"}}/>
+        border:"2px solid #0C2360",transform:`translateX(${look*18}%)`,transition:"transform 140ms ease"}}/>
+      <span style={{position:"absolute",width:"18%",height:"18%",borderRadius:"50%",background:"#FFFFFF",
+        transform:`translate(${look*18-15}%, -14%)`,transition:"transform 140ms ease"}}/>
     </span>
   );
 
   return (
     <div style={{position:"relative",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
       alignSelf:"center",zIndex:2}}>
-      {/* One black band the eyes sit inside, its lower edge dipping between
-          them — not a thin bridge connecting two separate rims. */}
-      <div style={{position:"relative",width:bandW,height:bandH,background:"#101010",
-        borderRadius:"50% 50% 42% 42% / 60% 60% 40% 40%",
-        display:"flex",alignItems:"center",justifyContent:"center",gap:narrow?6:9,
+      {/* One black band the eyes sit inside — not a thin bridge connecting two
+          separate rims. Sized by its padding around the (now responsive)
+          eyes rather than a fixed width/height, so it keeps hugging them at
+          every size instead of drifting loose or tight. */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",
+        gap:narrow?"3vw":"1.6vw",padding:narrow?"3vw 4vw":"1.6vw 2.2vw",
+        background:"#101010",borderRadius:"50% 50% 42% 42% / 60% 60% 40% 40%",
         boxShadow:"0 3px 0 rgba(0,0,0,0.3)"}}>
         {eye(-1)}
         {eye(1)}
       </div>
-      {/* Mouth: a small pale-blue bubble tucked up against the band, as in the
-          artwork, rather than floating below it with a gap. */}
-      <div style={{marginTop:narrow?-3:-4,width:narrow?20:26,height:narrow?14:18,
+      {/* Mouth: a small pale-blue bubble, sized as ~45% of the eye's own vw
+          coefficient (not its own fixed pixels or an unrelated vw value) so
+          it stays visibly smaller than the eyes at every viewport width —
+          it had been sized close to eye-width and read as too dominant. */}
+      <div style={{marginTop:narrow?"-1.4vw":"-0.8vw",
+        width:"5vw",height:"3.4vw",
+        maxWidth:narrow?32:85,maxHeight:narrow?22:58,
+        minWidth:18,minHeight:12,
         background:"linear-gradient(180deg,#EAF7FF 0%,#BFE6F8 100%)",border:"2px solid #101010",
         borderRadius:"45% 45% 50% 50% / 55% 55% 45% 45%"}}/>
     </div>
