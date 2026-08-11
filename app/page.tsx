@@ -37,72 +37,61 @@ const SECTIONS = [
    large blue eyes, with a toothy grin sitting just below it. The pupils drift
    toward whichever column is selected and it blinks on its own, so the device
    reads as alive rather than as a static frame. */
+/* Rotom's face, redrawn against the actual Pokédex artwork: both eyes sit
+   inside one black band (not just a bridge between two separate rims), each
+   eye is a bold white lens with a thick black ring and a blue iris, and the
+   mouth is a small pale-blue bubble — much smaller than the eyes, not a wide
+   grin. */
 function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean}) {
-  const w = narrow ? 50 : 64;
-  const h = narrow ? 44 : 56;
-  /* Rotom's eye: a big white lens with a heavy black rim, a blue iris filling
-     most of it, and a point at the inner corner. The pair is joined only by a
-     short black bridge — no band wraps around them. */
+  const eyeD = narrow ? 30 : 40;
+  /* Sized to hug the eyes rather than float around them with slack border. */
+  const bandW = eyeD*2 + (narrow?24:32);
+  const bandH = eyeD + (narrow?10:14);
+
   const eye = (side:-1|1) => (
-    <span key={side} style={{position:"relative",width:w,height:blink?7:h,
-      /* Inner corner is tighter than the outer, which is what gives the eye its
-         angled, determined shape rather than reading as a plain oval. */
-      borderRadius: blink ? 4 : (side===-1 ? "58% 42% 44% 56%" : "42% 58% 56% 44%"),
-      background:"#FFFFFF",border:`${narrow?4:5}px solid #101010`,
-      transform:`rotate(${side*-16}deg)`,transformOrigin:"center",
-      transition:"height 90ms, border-radius 90ms",overflow:"hidden",flexShrink:0,
-      display:"inline-flex",alignItems:"center",justifyContent:"center",
-      boxShadow:"0 2px 0 rgba(0,0,0,0.3)"}}>
-      {/* The iris stays mounted through a blink so the lid closes over it —
-          unmounting it left a blank white eye for the length of the animation. */}
-      <span style={{position:"absolute",width:w*0.68,height:w*0.68,borderRadius:"50%",
-        background:"radial-gradient(circle at 34% 28%, #8FC2FF 0%, #3A72D8 46%, #14337F 100%)",
-        border:"2px solid #0C2360",transform:`translateX(${look*(w*0.13)}px)`,transition:"transform 140ms ease"}}/>
-      {/* Glass highlight */}
-      <span style={{position:"absolute",width:w*0.20,height:w*0.20,borderRadius:"50%",background:"#FFFFFF",
-        transform:`translate(${look*(w*0.13)-w*0.15}px, -${w*0.14}px)`,transition:"transform 140ms ease"}}/>
+    <span key={side} style={{position:"relative",width:eyeD,height:blink?5:eyeD,
+      borderRadius:blink?3:"50%",background:"#FFFFFF",border:`${narrow?3:4}px solid #101010`,
+      transition:"height 90ms",overflow:"hidden",flexShrink:0,
+      display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
+      {/* Iris stays mounted through a blink so the lid closes over it, rather
+          than the eye flashing blank white for the length of the animation. */}
+      <span style={{position:"absolute",width:eyeD*0.62,height:eyeD*0.62,borderRadius:"50%",
+        background:"radial-gradient(circle at 34% 28%, #8FC2FF 0%, #3A72D8 48%, #14337F 100%)",
+        border:"2px solid #0C2360",transform:`translateX(${look*(eyeD*0.12)}px)`,transition:"transform 140ms ease"}}/>
+      <span style={{position:"absolute",width:eyeD*0.18,height:eyeD*0.18,borderRadius:"50%",background:"#FFFFFF",
+        transform:`translate(${look*(eyeD*0.12)-eyeD*0.14}px, -${eyeD*0.13}px)`,transition:"transform 140ms ease"}}/>
     </span>
   );
 
   return (
     <div style={{position:"relative",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
       alignSelf:"center",zIndex:2}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+      {/* One black band the eyes sit inside, its lower edge dipping between
+          them — not a thin bridge connecting two separate rims. */}
+      <div style={{position:"relative",width:bandW,height:bandH,background:"#101010",
+        borderRadius:"50% 50% 42% 42% / 60% 60% 40% 40%",
+        display:"flex",alignItems:"center",justifyContent:"center",gap:narrow?6:9,
+        boxShadow:"0 3px 0 rgba(0,0,0,0.3)"}}>
         {eye(-1)}
-        {/* The bridge: black only between the eyes, tucked behind their edges */}
-        <span style={{width:narrow?16:22,height:narrow?22:28,background:"#101010",
-          borderTop:"3px solid #000000",borderBottom:"3px solid #000000",
-          margin:narrow?"0 -5px":"0 -7px",zIndex:-1}}/>
         {eye(1)}
       </div>
-      {/* Grin, tucked under the eyes */}
-      <div style={{marginTop:narrow?-4:-6,width:narrow?46:60,height:narrow?18:23,
-        background:"#8E1F26",border:"3px solid #101010",borderRadius:"4px 4px 24px 24px",
-        display:"flex",justifyContent:"center",alignItems:"flex-start",overflow:"hidden",
-        boxShadow:"0 2px 0 rgba(0,0,0,0.3)"}}>
-        <span style={{width:"64%",height:narrow?5:7,background:"#FFFFFF",borderRadius:"0 0 4px 4px",
-          borderLeft:"2px solid #101010",borderRight:"2px solid #101010",borderBottom:"2px solid #101010"}}/>
-      </div>
+      {/* Mouth: a small pale-blue bubble tucked up against the band, as in the
+          artwork, rather than floating below it with a gap. */}
+      <div style={{marginTop:narrow?-3:-4,width:narrow?20:26,height:narrow?14:18,
+        background:"linear-gradient(180deg,#EAF7FF 0%,#BFE6F8 100%)",border:"2px solid #101010",
+        borderRadius:"45% 45% 50% 50% / 55% 55% 45% 45%"}}/>
     </div>
   );
 }
 
-/* The angular plasma prongs and side vents from the artwork. Decorative only,
-   so they never intercept a tap meant for the panel. */
+/* The side vents/arms from the artwork. Decorative only, so they never
+   intercept a tap meant for the panel. The top-corner prongs from the first
+   pass are gone — the artwork's only top feature is a single antenna, which
+   the chassis doesn't have room for above the face, so it's omitted rather
+   than guessed at. */
 function RotomBits({narrow}:{narrow:boolean}) {
-  /* Kept fully inside the shell — negative offsets pushed these off the edge
-     and the root clips its overflow, so they were all but invisible. */
-  const spike = (side:"left"|"right"):React.CSSProperties => ({
-    position:"absolute",top:narrow?2:4,[side]:narrow?2:6,
-    width:narrow?46:74,height:narrow?44:70,
-    background:"linear-gradient(150deg,#F8867A 0%,#E8524A 45%,#C7332A 100%)",
-    filter:"drop-shadow(0 2px 0 rgba(0,0,0,0.35))",
-    clipPath: side==="left"
-      ? "polygon(0% 100%, 30% 0%, 100% 46%, 54% 100%)"
-      : "polygon(100% 100%, 70% 0%, 0% 46%, 46% 100%)",
-  });
   const vent = (side:"left"|"right"):React.CSSProperties => ({
-    position:"absolute",top:"42%",[side]:narrow?1:8,
+    position:"absolute",top:"46%",[side]:narrow?1:8,
     width:narrow?28:52,height:narrow?58:92,
     background:"linear-gradient(150deg,#F8867A 0%,#E8524A 45%,#C7332A 100%)",
     filter:"drop-shadow(0 2px 0 rgba(0,0,0,0.35))",
@@ -118,8 +107,6 @@ function RotomBits({narrow}:{narrow:boolean}) {
   };
   return (
     <div aria-hidden style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:0,overflow:"hidden"}}>
-      <div style={spike("left")}/>
-      <div style={spike("right")}/>
       <div style={vent("left")}><span style={oval}/></div>
       <div style={vent("right")}><span style={oval}/></div>
       {/* Rivet dots dusted over the shell */}
