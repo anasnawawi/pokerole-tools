@@ -15,7 +15,7 @@ import {
 import { saveToStorage, loadFromStorage } from "../lib/storage";
 import { MOVES_DATA } from "../data/moves-data";
 import { POKEMON_EGG_GROUPS } from "../data/egg-groups-data";
-import SiteNav from "../components/SiteNav";
+import PokedexFrame from "../components/PokedexFrame";
 
 const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Standard:"#f8d030",Advanced:"#f08030",Expert:"#a040a0",Ace:"#e04040",Master:"#705898",Champion:"#ffd700"};
 const RANKS: Rank[] = ["Starter","Rookie","Standard","Advanced","Expert","Ace","Master","Champion"];
@@ -903,12 +903,10 @@ export default function CharactersPage() {
   }, []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#35785F", color: "#202020", overflow: "hidden" }}>
-      <SiteNav active="characters">
-        <span style={{ fontSize: 11, color: "#F8F4D0", textShadow: "1px 1px 0 #183868" }}>All changes auto-saved</span>
-      </SiteNav>
-
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+    <PokedexFrame active="characters" actions={
+      <span style={{ fontSize: 10, color: "#FFFFFF", whiteSpace: "nowrap" }}>Auto-saved</span>
+    }>
+      <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", background: "#35785F", color: "#202020" }}>
         {/* Sidebar */}
         <div style={{ width: 220, background: "#F8F4D0", borderRight: "1px solid #2850A0", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "10px 8px", borderBottom: "1px solid #2850A0" }}>
@@ -944,7 +942,7 @@ export default function CharactersPage() {
               <div style={{ maxWidth: 520 }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", marginBottom: 6 }}>No trainers yet</div>
-                <div style={{ fontSize: 13, color: "#D8E8DC", lineHeight: 1.6, marginBottom: 20 }}>
+                <div style={{ fontSize: 13, color: "#EAF6EE", lineHeight: 1.6, marginBottom: 20 }}>
                   Create a trainer to keep their whole character in one place. Everything saves automatically
                   and their party can be dropped straight into the Battle Tracker.
                 </div>
@@ -1449,6 +1447,6 @@ export default function CharactersPage() {
           </div>
         )}
       </div>
-    </div>
+    </PokedexFrame>
   );
 }

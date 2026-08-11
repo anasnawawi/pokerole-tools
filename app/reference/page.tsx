@@ -5,7 +5,7 @@ import { POKEMON, MOVES, ABILITIES, ITEMS, TYPE_COLORS, TYPE_CHART, STATUS_EFFEC
 import type { ItemData } from "../data/pokerole-data";
 import { loadFromStorage, saveToStorage } from "../lib/storage";
 import { readableInk } from "../lib/contrast";
-import SiteNav from "../components/SiteNav";
+import PokedexFrame from "../components/PokedexFrame";
 import HintBar, { ScrollList } from "../components/HintBar";
 
 const RANK_COLORS: Record<Rank,string> = {Starter:"#2F6B1E",Rookie:"#2A54B8",Standard:"#7A6100",Advanced:"#99450A",Expert:"#7A2E7A",Ace:"#B02525",Master:"#4C3B6B",Champion:"#7D6800"};
@@ -432,9 +432,8 @@ function ReferenceTabs() {
   };
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#35785F",overflow:"hidden"}}>
-      <SiteNav active={tab}/>
-      {/* Page sub-nav: the reference tabs, one level below the site bar */}
+    <PokedexFrame active={tab}>
+      {/* Page sub-nav: the reference tabs, one level below the device keys */}
       <div style={{background:"#D8E0F0",borderBottom:"2px solid #2850A0",padding:"0 12px",height:34,display:"flex",alignItems:"center",gap:4,flexShrink:0,overflowX:"auto"}}>
         {(["pokedex","moves","abilities","items","types","status","weather"] as Tab[]).map(t=>(
           <button key={t} onClick={()=>changeTab(t)} style={{padding:"3px 10px",borderRadius:4,fontSize:12,fontWeight:700,cursor:"pointer",border:"none",fontFamily:"'Exo 2',sans-serif",whiteSpace:"nowrap",flexShrink:0,
@@ -769,7 +768,7 @@ function ReferenceTabs() {
         {key:"◎",label:"SELECT"},
         {key:"◉",label:tab==="items"?"ADD TO PARTY":"DETAILS"},
       ]}/>
-    </div>
+    </PokedexFrame>
   );
 }
 

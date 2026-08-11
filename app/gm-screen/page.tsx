@@ -10,7 +10,7 @@ import {
   RANK_ORDER, getDisobedienceLevel, getPainPenalty,
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage } from "../lib/storage";
-import SiteNav from "../components/SiteNav";
+import PokedexFrame from "../components/PokedexFrame";
 
 /* ─── Colour constants ──────────────────────────────────────────────────────── */
 const RANK_COLORS: Record<Rank,string> = {
@@ -2185,12 +2185,10 @@ export default function GMScreen() {
   if(!mounted)return <div style={{height:"100vh",background:"#35785F"}}/>;
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#35785F",overflow:"hidden"}}>
-      {pickerSlot!==null&&<PanelPicker addTab={pickerSlot.addTab} onPick={(type)=>setPanel(pickerSlot.slot,type,pickerSlot.addTab)} onClose={()=>setPickerSlot(null)}/>}
-
-      {/* Nav */}
-      <SiteNav active="gm-screen">
-        <div style={{display:"flex",gap:8,alignItems:"center",position:"relative"}}>
+    <PokedexFrame active="gm-screen" actions={
+      /* The screen's own controls ride in the chassis's action slot, so they
+         sit with the device keys rather than in a second bar of their own. */
+      <div style={{display:"flex",gap:8,alignItems:"center",position:"relative"}}>
           {/* Grid dimensions — these sit on the blue system bar, so labels are white */}
           <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#F8F4D0",textShadow:"1px 1px 0 #183868"}}>
             <span>Grid</span>
@@ -2220,7 +2218,8 @@ export default function GMScreen() {
           <input ref={fileInputRef} type="file" accept="application/json" style={{display:"none"}}
             onChange={e=>{const f=e.target.files?.[0];if(f)loadFromFile(f);e.target.value="";}}/>
         </div>
-      </SiteNav>
+    }>
+      {pickerSlot!==null&&<PanelPicker addTab={pickerSlot.addTab} onPick={(type)=>setPanel(pickerSlot.slot,type,pickerSlot.addTab)} onClose={()=>setPickerSlot(null)}/>}
 
       {/* First-run guidance — explains the grid and offers starter layouts */}
       {grid.every(p=>p===null)&&(
@@ -2342,6 +2341,6 @@ export default function GMScreen() {
           );
         })}
       </div>
-    </div>
+    </PokedexFrame>
   );
 }

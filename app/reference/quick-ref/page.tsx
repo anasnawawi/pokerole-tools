@@ -1,12 +1,15 @@
 "use client";
 import { STATUS_CONDITIONS, WEATHER_DATA, CATCH_REQUIRED_SUCCESSES } from "../../data/game-rules";
-import SiteNav from "../../components/SiteNav";
+import PokedexFrame from "../../components/PokedexFrame";
 
 export default function QuickRefPage() {
   return (
-    <div style={{minHeight:"100vh",background:"#35785F",color:"#202020",overflow:"auto"}}>
-      <div style={{position:"sticky",top:0,zIndex:10}}><SiteNav active="quick-ref"/></div>
-      <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 24px 60px"}}>
+    /* Scrolling moved onto this inner pane: the frame's display clips its
+       own overflow, so a page that scrolled its whole document would be
+       cut off inside it instead of scrolling. */
+    <PokedexFrame active="quick-ref">
+      <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#35785F",color:"#202020"}}>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 24px 60px"}}>
         <h1 style={{fontFamily:"'Exo 2'",fontWeight:800,fontSize:26,color:"#202020",marginBottom:20}}>PokeRole 3.0 — Quick Reference</h1>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:16}}>
 
@@ -104,8 +107,9 @@ export default function QuickRefPage() {
           </Sec>
 
         </div>
+        </div>
       </div>
-    </div>
+    </PokedexFrame>
   );
 }
 

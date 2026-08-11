@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { C } from "./components/PokedexFrame";
 
 /* The three groups the device pages between. */
 const SECTIONS = [
@@ -37,24 +38,6 @@ const SECTIONS = [
    section so the grid can stay colour-coded and grouped. */
 const APPS = SECTIONS.flatMap((s,si)=>s.items.map(it=>({...it,si,accent:s.accent})));
 
-/* Palette lifted from the reference illustration: a crimson shell with a
-   darker tone for moulded edges, navy for the hard chrome, cyan for the
-   display and keys, and a single yellow accent bar. */
-const C = {
-  shell:      "#DC1B4B",
-  shellDark:  "#A81038",
-  shellDeep:  "#7E0A28",
-  outline:    "#2A0812",
-  navy:       "#18203C",
-  navyLight:  "#28325A",
-  cyan:       "#6FDCF0",
-  cyanDeep:   "#38BEDA",
-  cyanPale:   "#BFF1FA",
-  yellow:     "#F5D33F",
-  grey:       "#C9CFDA",
-  bezel:      "#EDF0F4",
-  cream:      "#F7E7B6",
-};
 
 export default function Home() {
   const router = useRouter();

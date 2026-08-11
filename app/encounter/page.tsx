@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { POKEMON, HABITATS, TYPE_COLORS, HabitatData, PokemonType, Rank } from "../data/pokerole-data";
 import { saveToStorage, loadFromStorage } from "../lib/storage";
 import { readableInk, inkOn } from "../lib/contrast";
-import SiteNav from "../components/SiteNav";
+import PokedexFrame from "../components/PokedexFrame";
 
 const RANK_ORDER: Rank[] = ["Starter","Rookie","Standard","Advanced","Expert","Ace","Master","Champion"];
 const RANK_COLORS: Record<Rank,string> = {Starter:"#2F6B1E",Rookie:"#2A54B8",Standard:"#7A6100",Advanced:"#99450A",Expert:"#7A2E7A",Ace:"#B02525",Master:"#4C3B6B",Champion:"#7D6800"};
@@ -49,9 +49,8 @@ export default function EncounterPage() {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:"#35785F",color:"#202020",display:"flex",flexDirection:"column"}}>
-      <SiteNav active="encounter"/>
-      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+    <PokedexFrame active="encounter">
+      <div style={{display:"flex",flex:1,minHeight:0,overflow:"hidden",background:"#35785F",color:"#202020"}}>
         {/* Habitat sidebar */}
         <div style={{width:200,background:"#F8F4D0",borderRight:"1px solid #2850A0",overflowY:"auto",flexShrink:0}}>
           <div style={{padding:"10px 8px"}}>
@@ -155,6 +154,6 @@ export default function EncounterPage() {
           {filtered.length===0&&<div style={{textAlign:"center",color:"#585858",padding:40}}>No Pokémon match the current filters for this habitat.</div>}
         </div>
       </div>
-    </div>
+    </PokedexFrame>
   );
 }
