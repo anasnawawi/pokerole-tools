@@ -40,58 +40,49 @@ const SECTIONS = [
    toothy grin with tooth dividers, not a plain blue bubble. The whole face
    now renders inside the screen itself (see the panel below), so the mouth
    is part of the display rather than sitting on the shell above it. */
-function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean}) {
-  /* Major axis (height) scales with viewport, same reasoning as before: a
-     fixed px size reads as a small icon bolted onto a shell that itself
-     scales with the window. Width is ~72% of that — taller than wide, per
-     the reference — derived from the same clamp rather than a second
-     independent one, so the ratio holds at every size instead of drifting. */
-  const eyeH = narrow ? "clamp(38px, 10vw, 64px)" : "clamp(64px, 10vw, 168px)";
-  const eyeW = narrow ? "clamp(27px, 7.2vw, 46px)" : "clamp(46px, 7.2vw, 121px)";
+/* The brow no longer lives here — see the Home component, where it's
+   anchored directly to the screen panel's own top edge so it gets clipped
+   to the exact same arc as the screen (see the comment at that call site
+   for why: a self-contained dome shape here could never match the screen's
+   actual curvature, only approximate it). RotomFace now draws only the
+   eyes, sized off the same eyeH/eyeW the cap sizing in Home reads too, so
+   the two can't drift out of sync with each other. */
+function RotomFace({look,blink,narrow,eyeH,eyeW}:{look:number;blink:boolean;narrow:boolean;eyeH:string;eyeW:string}) {
   const eyeBorder = narrow ? "clamp(3px, 1vw, 5px)" : "clamp(4px, 0.6vw, 7px)";
+  // The seam is a construction line, not a ring segment — thinner than the
+  // eye's own outline, not the same weight as it.
+  const seamW = narrow ? "clamp(1px, 0.35vw, 2px)" : "clamp(1.5px, 0.22vw, 2.5px)";
 
   const eye = (side:-1|1) => (
     /* Tilted so the TOP leans outward, away from the black cap — the
-       reference's eyes flare outward like raised eyebrows. The previous
-       sign had the top leaning inward instead, the wrong direction. */
+       reference's eyes flare outward like raised eyebrows. */
     <span key={side} style={{position:"relative",width:eyeW,height:eyeH,
       borderRadius:"50%",background:"#FFFFFF",border:`${eyeBorder} solid #101010`,
       transform:`rotate(${side*18}deg)`,transformOrigin:"center",
       overflow:"hidden",flexShrink:0,
       display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
+      {/* The seam sits behind the pupil (earlier in DOM + lower z-index) and
+          mostly hidden by it — only its outer end shows past the pupil's
+          edge, as in the reference. It had been drawn after the pupil (so
+          on top of it) and at the ring's own border weight (so too thick). */}
+      <span style={{position:"absolute",zIndex:0,width:"46%",height:seamW,background:"#101010",
+        top:"57%",left:"11%",transform:"rotate(-38deg)",opacity:0.85}}/>
       {/* Solid flat iris — no gradient, no border, no glossy highlight dot.
           Blink scales this vertically toward a line (a slit) rather than
           covering the eye with an opaque lid — "closing into the slit"
           means the pupil itself collapses, not a shape painted over it. */}
-      <span style={{position:"absolute",width:"70%",height:"78%",borderRadius:"50%",
+      <span style={{position:"absolute",zIndex:1,width:"70%",height:"78%",borderRadius:"50%",
         background:"#2451B8",
         transform:`translateX(${look*14}%) scaleY(${blink?0.06:1})`,
         transformOrigin:"center",transition:"transform 90ms ease"}}/>
-      {/* The seam the reference marks across the lower-inner part of the
-          ring: short, not a line spanning the whole eye. Rotation here is
-          local to the eye's own (already-tilted) box, so it mirrors for
-          free between the two eyes rather than needing a second sign flip. */}
-      <span style={{position:"absolute",width:"52%",height:eyeBorder,background:"#101010",
-        top:"58%",left:"10%",transform:"rotate(-38deg)",opacity:0.9}}/>
     </span>
   );
 
   return (
-    /* Height is pinned to the eye's own height so the dome above it can be
-       positioned in %, which resolves against a defined height — an auto
-       height here would make the dome's %-based position/size invalid. */
-    <div style={{position:"relative",flexShrink:0,alignSelf:"center",zIndex:2,height:eyeH}}>
-      {/* The brow: a shallow dome sitting above the eye row, not a band that
-         wraps fully around it. Positioned in % of this wrapper, which always
-         equals the eye row's own rendered width — so it keeps matching
-         regardless of the eye's actual computed pixel size. */}
-      <div aria-hidden style={{position:"absolute",left:"-10%",right:"-10%",top:"-42%",height:"72%",
-        background:"#101010",borderRadius:"50% 50% 0 0 / 100% 100% 0 0"}}/>
-      <div style={{position:"relative",zIndex:1,height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
-        gap:narrow?"2.6vw":"1.4vw"}}>
-        {eye(-1)}
-        {eye(1)}
-      </div>
+    <div style={{position:"relative",zIndex:2,flexShrink:0,alignSelf:"center",display:"flex",alignItems:"center",justifyContent:"center",
+      gap:narrow?"2.6vw":"1.4vw"}}>
+      {eye(-1)}
+      {eye(1)}
     </div>
   );
 }
@@ -223,6 +214,12 @@ export default function Home() {
   // Vertical reach of the screen's domed top — scales with viewport for the
   // same reason the face does, so the arch stays proportionate at any width.
   const archR = narrow ? "clamp(46px, 11vw, 76px)" : "clamp(64px, 7vw, 150px)";
+  // Eye size lives here (not inside RotomFace) because the brow cap below
+  // needs the exact same numbers to size itself against — two independently
+  // maintained copies is exactly how the cap and the eyes drifted apart
+  // before.
+  const eyeH = narrow ? "clamp(38px, 10vw, 64px)" : "clamp(64px, 10vw, 168px)";
+  const eyeW = narrow ? "clamp(27px, 7.2vw, 46px)" : "clamp(46px, 7.2vw, 121px)";
 
   const pageBtn:React.CSSProperties = {
     width:narrow?40:44,height:narrow?40:44,borderRadius:"50%",flexShrink:0,cursor:"pointer",touchAction:"manipulation",
@@ -255,15 +252,38 @@ export default function Home() {
         <div style={{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden",
           borderRadius:`50% 50% 6px 6px / ${archR} ${archR} 6px 6px`,border:"2px solid #101010",background:"#FFFFFF"}}>
 
-          {/* The face is now part of the screen itself — sitting in the
-              domed top, with the grin drawn on the display below the eyes —
-              rather than perched on the shell above a flat-topped panel. */}
-          {/* Tied to archR (the dome's own height) rather than an independent
-              vw value, so the face sits inset within the arch at every size
-              instead of crowding its curved top edge. */}
+          {/* The brow cap: anchored flush to the fill's own top:0, with NO
+              border-radius of its own on top. Its top edge is invisible —
+              pushed above the visible area — and what actually shows is
+              wherever the fill's own overflow:hidden + arch border-radius
+              clips it, which is exactly the screen's real curve. A
+              self-contained dome shape (the earlier version) could only ever
+              approximate that curve, never match it, because it was drawn
+              independently of the arch instead of being cut by it. Height
+              reaches from the true top down to roughly where the eyes sit,
+              matching eyeH + the face's own top offset below. */}
+          {/* zIndex:1, not 0 — the cyan motif below is also z0 and comes later
+              in DOM order, so at equal z-index it was painting over the cap
+              entirely (later wins). The eyes still render above this, since
+              their wrapper is z1 too but later in DOM than this cap.
+              Width is derived from eyeW/the eye row's gap (2.6x eyeW
+              approximates the two eyes plus their gap plus a little
+              overhang) rather than a flat 60% of the whole screen, which
+              was far wider than the eye row it's meant to sit over. */}
+          <div aria-hidden style={{position:"absolute",zIndex:1,top:0,left:"50%",transform:"translateX(-50%)",
+            width:`calc(${eyeW} * 2.6 + ${narrow?"2.6vw":"1.4vw"})`,
+            height:`calc(${archR} * 0.4 + ${eyeH} * 0.3)`,
+            background:"#101010",borderRadius:`0 0 50% 50% / 0 0 40% 40%`}}/>
+
+          {/* The face is part of the screen itself — sitting in the domed
+              top, with the grin drawn on the display below the eyes —
+              rather than perched on the shell above a flat-topped panel.
+              Tied to archR (the dome's own height) rather than an
+              independent vw value, so it sits inset within the arch at
+              every size instead of crowding its curved top edge. */}
           <div style={{position:"relative",zIndex:1,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
             paddingTop:`calc(${archR} * 0.4)`}}>
-            <RotomFace look={look} blink={blink} narrow={narrow}/>
+            <RotomFace look={look} blink={blink} narrow={narrow} eyeH={eyeH} eyeW={eyeW}/>
             <RotomMouth narrow={narrow}/>
           </div>
 
