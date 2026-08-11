@@ -51,24 +51,28 @@ function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean
   const eyeBorder = narrow ? "clamp(3px, 1vw, 5px)" : "clamp(4px, 0.6vw, 7px)";
 
   const eye = (side:-1|1) => (
+    /* Tilted so the TOP leans outward, away from the black cap — the
+       reference's eyes flare outward like raised eyebrows. The previous
+       sign had the top leaning inward instead, the wrong direction. */
     <span key={side} style={{position:"relative",width:eyeW,height:eyeH,
       borderRadius:"50%",background:"#FFFFFF",border:`${eyeBorder} solid #101010`,
-      transform:`rotate(${side*-18}deg)`,transformOrigin:"center",
+      transform:`rotate(${side*18}deg)`,transformOrigin:"center",
       overflow:"hidden",flexShrink:0,
       display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
-      {/* Solid flat iris — no gradient, no border, no glossy highlight dot. */}
+      {/* Solid flat iris — no gradient, no border, no glossy highlight dot.
+          Blink scales this vertically toward a line (a slit) rather than
+          covering the eye with an opaque lid — "closing into the slit"
+          means the pupil itself collapses, not a shape painted over it. */}
       <span style={{position:"absolute",width:"70%",height:"78%",borderRadius:"50%",
-        background:"#2451B8",transform:`translateX(${look*14}%)`,transition:"transform 140ms ease"}}/>
-      {/* The diagonal seam the reference draws across the upper ring, as a
-          faint construction line rather than a full ring segment. */}
-      <span style={{position:"absolute",width:"120%",height:eyeBorder,background:"#101010",
-        top:"20%",left:"-10%",transform:"rotate(-32deg)",opacity:0.9}}/>
-      {/* Eyelid: an opaque cover that scales in over the fixed-size eye box,
-          rather than the box itself changing size — that was what made an
-          earlier version shift the whole screen on every blink. */}
-      <span style={{position:"absolute",inset:0,background:"#101010",
-        transform:`scaleY(${blink?1:0})`,transformOrigin:"center",
-        transition:"transform 90ms ease"}}/>
+        background:"#2451B8",
+        transform:`translateX(${look*14}%) scaleY(${blink?0.06:1})`,
+        transformOrigin:"center",transition:"transform 90ms ease"}}/>
+      {/* The seam the reference marks across the lower-inner part of the
+          ring: short, not a line spanning the whole eye. Rotation here is
+          local to the eye's own (already-tilted) box, so it mirrors for
+          free between the two eyes rather than needing a second sign flip. */}
+      <span style={{position:"absolute",width:"52%",height:eyeBorder,background:"#101010",
+        top:"58%",left:"10%",transform:"rotate(-38deg)",opacity:0.9}}/>
     </span>
   );
 
@@ -254,8 +258,11 @@ export default function Home() {
           {/* The face is now part of the screen itself — sitting in the
               domed top, with the grin drawn on the display below the eyes —
               rather than perched on the shell above a flat-topped panel. */}
+          {/* Tied to archR (the dome's own height) rather than an independent
+              vw value, so the face sits inset within the arch at every size
+              instead of crowding its curved top edge. */}
           <div style={{position:"relative",zIndex:1,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",
-            paddingTop:narrow?"6vw":"3vw"}}>
+            paddingTop:`calc(${archR} * 0.4)`}}>
             <RotomFace look={look} blink={blink} narrow={narrow}/>
             <RotomMouth narrow={narrow}/>
           </div>
