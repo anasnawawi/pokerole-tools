@@ -62,21 +62,20 @@ function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean
   const eyeH = narrow ? "clamp(22px, 6vw, 38px)" : "clamp(38px, 6vw, 104px)";
   const eyeBorder = narrow ? "clamp(3px, 1vw, 5px)" : "clamp(4px, 0.6vw, 7px)";
 
+  /* Flat throughout, per reference: solid colours only, no gradients, no
+     glossy highlight dot, no drop shadows on the eye or the band. */
   const eye = (side:-1|1) => (
     <span key={side} style={{position:"relative",width:eyeW,height:eyeH,
       borderRadius:"50%",background:"#FFFFFF",border:`${eyeBorder} solid #101010`,
       transform:`rotate(${side*-20}deg)`,transformOrigin:"center",
       overflow:"hidden",flexShrink:0,
-      display:"inline-flex",alignItems:"center",justifyContent:"center",
-      boxShadow:"0 2px 0 rgba(0,0,0,0.3)"}}>
+      display:"inline-flex",alignItems:"center",justifyContent:"center"}}>
       {/* The iris is a full circle, but the flat oval eye clips it top and
           bottom — only a horizontal sliver shows through, which is what
-          actually reads as a slit rather than a round pupil. */}
+          actually reads as a slit rather than a round pupil. Solid fill,
+          no border, no gradient, no highlight dot. */}
       <span style={{position:"absolute",width:"64%",height:"64%",borderRadius:"50%",
-        background:"radial-gradient(circle at 34% 28%, #8FC2FF 0%, #3A72D8 48%, #14337F 100%)",
-        border:"2px solid #0C2360",transform:`translateX(${look*18}%)`,transition:"transform 140ms ease"}}/>
-      <span style={{position:"absolute",width:"18%",height:"18%",borderRadius:"50%",background:"#FFFFFF",
-        transform:`translate(${look*18-15}%, -14%)`,transition:"transform 140ms ease"}}/>
+        background:"#2E63C8",transform:`translateX(${look*18}%)`,transition:"transform 140ms ease"}}/>
       {/* Eyelid: an opaque cover that scales in over the fixed-size eye,
           rather than the eye's box itself changing size. */}
       <span style={{position:"absolute",inset:0,background:"#101010",
@@ -94,8 +93,7 @@ function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean
           every size instead of drifting loose or tight. */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",
         gap:narrow?"3vw":"1.6vw",padding:narrow?"3vw 4vw":"1.6vw 2.2vw",
-        background:"#101010",borderRadius:"50% 50% 42% 42% / 60% 60% 40% 40%",
-        boxShadow:"0 3px 0 rgba(0,0,0,0.3)"}}>
+        background:"#101010",borderRadius:"50% 50% 42% 42% / 60% 60% 40% 40%"}}>
         {eye(-1)}
         {eye(1)}
       </div>
@@ -107,7 +105,7 @@ function RotomFace({look,blink,narrow}:{look:number;blink:boolean;narrow:boolean
         width:"5vw",height:"3.4vw",
         maxWidth:narrow?32:85,maxHeight:narrow?22:58,
         minWidth:18,minHeight:12,
-        background:"linear-gradient(180deg,#EAF7FF 0%,#BFE6F8 100%)",border:"2px solid #101010",
+        background:"#A8DCF0",border:"2px solid #101010",
         borderRadius:"45% 45% 50% 50% / 55% 55% 45% 45%"}}/>
     </div>
   );
