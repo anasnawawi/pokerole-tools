@@ -207,6 +207,32 @@ function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fai
     </div>
   );
 }
+/* An inactive combatant, still on the field. Same sprite and platform as the
+   two mons the turn is about, at roughly a third the size and semi-transparent
+   so it reads as present-but-not-the-subject. They used to be 26px icons in a
+   cream card, which said "list of names" rather than "who else is out here".
+   Clicking one brings it into the focused slot. */
+function BenchMon({entry,back,onClick}:{entry:BattleEntry;back?:boolean;onClick:()=>void}){
+  const [hover,setHover]=useState(false);
+  const fainted=entry.currentHp<=0;
+  const w=back?84:72, h=back?60:48, plat=back?19:15;
+  const name=(entry.nickname||entry.pokemon.name).toUpperCase();
+  return(
+    <button onClick={onClick} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+      title={`${name} — ${entry.currentHp}/${entry.maxHp} HP · click to focus`}
+      aria-label={`${name}, ${entry.currentHp} of ${entry.maxHp} HP${fainted?", fainted":""} — focus`}
+      style={{position:"relative",width:w,height:h,flexShrink:0,padding:0,border:"none",
+        background:"none",cursor:"pointer",
+        opacity:fainted?(hover?0.55:0.3):(hover?1:0.55),transition:"opacity .15s"}}>
+      <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:w,height:plat,borderRadius:"50%",
+        background:"radial-gradient(ellipse at 50% 38%, #C8E4A8 0%, #A8D088 45%, #7CAC54 100%)",
+        boxShadow:"inset 0 -3px 5px rgba(72,108,44,0.55)",border:"1px solid rgba(80,100,40,0.35)"}}/>
+      <div style={{position:"absolute",bottom:Math.round(plat*(back?0.1:0.28)),left:0,right:0,display:"flex",justifyContent:"center"}}>
+        <PokeSprite number={entry.pokemon.number} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted}/>
+      </div>
+    </button>
+  );
+}
 // ── Battle scene FX: weather, terrain, status conditions, entry hazards ────────
 function WeatherFX({weather}:{weather:WeatherData}){
   const name=weather.name;
@@ -3344,7 +3370,12 @@ export default function BattleTrackerPage(){
   },[sceneTargetIds,nextOtherInOrder,sceneEnemyId,entries,otherEntries,activeEntry]);
   const onFieldEnemy=focusedOther;
   const focusedTargetIdSet=useMemo(()=>new Set(sceneTargetIds),[sceneTargetIds]);
+  /* Everyone in the fight who isn't one of the two mons the turn is about.
+     Split by side so they stand on the right half of the field: your own
+     behind the acting slot, the opposition behind the focused slot. */
   const benchEnemies=useMemo(()=>otherEntries.filter(e=>e.id!==focusedOther?.id),[otherEntries,focusedOther]);
+  const benchFar=useMemo(()=>benchEnemies.filter(e=>e.side!=="player"),[benchEnemies]);
+  const benchNear=useMemo(()=>benchEnemies.filter(e=>e.side==="player"),[benchEnemies]);
 
   // MovePopup handlers at the scene level (mirror BattleCard's local versions).
   const sApplyDmg=(tid:string,dmg:number)=>setEntries(prev=>prev.map(e=>e.id===tid?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e));
@@ -3679,17 +3710,42 @@ export default function BattleTrackerPage(){
                     <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                   </div>
                 )}
-                {/* Bench row — every other opponent in the tracker, faded, click to focus */}
-                {mounted&&benchEnemies.length>0&&(
-                  <div style={{position:"absolute",top:96,left:16,zIndex:3,display:"flex",gap:5,flexWrap:"wrap",maxWidth:200}}>
-                    {benchEnemies.map(e=>(
-                      <button key={e.id} onClick={()=>setSceneEnemyId(e.id)} title={`${e.nickname||e.pokemon.name} — click to focus`}
-                        style={{width:34,height:34,padding:0,border:"2px solid #181818",borderRadius:6,background:"rgba(248,248,232,0.82)",cursor:"pointer",opacity:0.4,transition:"opacity .15s",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                        onMouseEnter={ev=>{(ev.currentTarget as HTMLButtonElement).style.opacity="0.85";}}
-                        onMouseLeave={ev=>{(ev.currentTarget as HTMLButtonElement).style.opacity="0.4";}}>
-                        <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={26} height={26} style={{imageRendering:"pixelated",objectFit:"contain",filter:e.currentHp<=0?"grayscale(1)":undefined}}
-                          onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
-                      </button>
+{/* Everyone else still in the fight, on the field beside the two
+                    focused slots: small and see-through, so they read as
+                    background without being decoration.
+
+                    Lanes are measured to clear each side's nameplate-plus-
+                    hazards block — the opponent's is 98px tall from top:16,
+                    the player's 112px above bottom:9%, both fixed-px, so the
+                    offsets hold as the stage resizes. Width caps a row at two
+                    so they wrap into open ground rather than behind the big
+                    sprites.
+
+                    They sit above the focused mons in z-order because a
+                    FieldMon's wrapper box is far larger than its visible
+                    sprite and swallows clicks over bare ground; underneath it
+                    these were unclickable. Size and opacity carry "not the
+                    subject" here, not paint order. */}
+                {mounted&&benchFar.length>0&&(
+                  <div style={{position:"absolute",top:118,left:8,width:"46%",zIndex:4,
+                    display:"flex",alignItems:"flex-end",justifyContent:"flex-start",
+                    gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
+                    {benchFar.map(e=>(
+                      <span key={e.id} style={{pointerEvents:"auto"}}>
+                        <BenchMon entry={e} onClick={()=>setSceneEnemyId(e.id)}/>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* Your own side, behind the acting slot */}
+                {mounted&&benchNear.length>0&&(
+                  <div style={{position:"absolute",bottom:"calc(9% + 116px)",right:8,width:"46%",zIndex:4,
+                    display:"flex",alignItems:"flex-end",justifyContent:"flex-end",
+                    gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
+                    {benchNear.map(e=>(
+                      <span key={e.id} style={{pointerEvents:"auto"}}>
+                        <BenchMon entry={e} back onClick={()=>setSceneEnemyId(e.id)}/>
+                      </span>
                     ))}
                   </div>
                 )}

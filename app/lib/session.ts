@@ -25,8 +25,11 @@ export type BattleLite = {
 };
 
 export type Session = {
+  /** Whoever the device is currently playing as. */
   trainer: TrainerData | null;
-  trainerCount: number;
+  /** Everyone saved — a GM keeps NPCs alongside their own trainer, and the
+   *  device's round key cycles between them. */
+  trainers: TrainerData[];
   sheets: Record<string, PokemonSheetData>;
   battle: BattleLite[];
 };
@@ -35,7 +38,7 @@ export const BATTLE_KEY = "bt_entries";
 const SESSION_KEYS = [TRAINERS_KEY, SHEETS_KEY, BATTLE_KEY, ACTIVE_TRAINER_KEY];
 
 let sessionRaw: string | null = null;
-let sessionCache: Session = { trainer: null, trainerCount: 0, sheets: {}, battle: [] };
+let sessionCache: Session = { trainer: null, trainers: [], sheets: {}, battle: [] };
 
 function readSession(): Session {
   const raw = SESSION_KEYS.map(rawFromStorage).join(" ");
@@ -44,7 +47,7 @@ function readSession(): Session {
     const trainers = loadFromStorage<TrainerData[]>(TRAINERS_KEY, []) ?? [];
     sessionCache = {
       trainer: getActiveTrainer(trainers),
-      trainerCount: trainers.length,
+      trainers,
       sheets: loadFromStorage<Record<string, PokemonSheetData>>(SHEETS_KEY, {}) ?? {},
       battle: loadFromStorage<BattleLite[]>(BATTLE_KEY, []) ?? [],
     };

@@ -103,6 +103,21 @@ export default function Home() {
     notifySession();
   }, []);
 
+  /* The round key swaps which saved trainer the device is playing as — the
+     whole machine follows: the menu's name row, the party below, and the
+     strip every tool page carries. A GM running NPCs alongside their own
+     trainer switches here instead of going to the Characters page. */
+  const trainers = session?.trainers ?? [];
+  const canSwitch = trainers.length > 1;
+  const nextTrainer = canSwitch
+    ? trainers[(trainers.findIndex(t => t.id === trainer?.id) + 1) % trainers.length]
+    : null;
+  const switchTrainer = useCallback(() => {
+    if (!nextTrainer) return;
+    setActiveTrainer(nextTrainer.id);
+    notifySession();
+  }, [nextTrainer]);
+
   /* ── Shared chrome pieces ──────────────────────────────────────────────── */
   const dpadArm: React.CSSProperties = {
     background: C.navy, border: `2px solid ${C.outline}`, color: "#FFFFFF",
@@ -232,12 +247,21 @@ export default function Home() {
 
           {/* ── Controls: round key, dashes, D-pad ───────────────────────── */}
           <div style={{display:"flex",alignItems:"center",gap:narrow?10:16,flexShrink:0}}>
-            <button onClick={open} disabled={!registered} aria-label="Open selected menu item"
+            {/* Trainer switch. Opening a menu row is already one tap on the
+                row itself, so this key does the thing nothing else could. */}
+            <button onClick={switchTrainer} disabled={!canSwitch}
+              title={canSwitch ? `Switch trainer — next: ${nextTrainer!.name.trim() || "Unnamed"}`
+                : registered ? "Only one trainer saved. Create another on the Characters page to switch."
+                : "No trainer registered yet."}
+              aria-label={canSwitch ? `Switch trainer to ${nextTrainer!.name.trim() || "Unnamed"}` : "Switch trainer (none to switch to)"}
               style={{width:narrow?38:46,height:narrow?38:46,borderRadius:"50%",flexShrink:0,
-                cursor:registered?"pointer":"default",opacity:registered?1:0.5,
+                cursor:canSwitch?"pointer":"default",opacity:canSwitch?1:0.5,
                 touchAction:"manipulation",border:`3px solid ${C.outline}`,
+                display:"flex",alignItems:"center",justifyContent:"center",
                 background:`radial-gradient(circle at 34% 30%, #BFF1FA 0%, ${C.cyan} 50%, ${C.cyanDeep} 100%)`,
-                boxShadow:`0 3px 0 ${C.shellDeep}`}}/>
+                boxShadow:`0 3px 0 ${C.shellDeep}`}}>
+              <span aria-hidden style={{fontSize:narrow?14:17,lineHeight:1,color:C.navy}}>⇄</span>
+            </button>
             <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
               {[1,2].map(n=><span key={n} style={{width:narrow?20:26,height:4,borderRadius:2,background:C.navy,border:`1px solid ${C.outline}`}}/>)}
             </div>
@@ -293,9 +317,9 @@ export default function Home() {
               display:"flex",alignItems:"center",justifyContent:"center",
               fontSize:narrow?8:10,color:C.navy}}>✛</span>
             <span style={{fontSize:narrow?10:11,color:"#FFFFFF",flex:1,minWidth:0}}>
-              {registered
-                ? "Pick a menu row to open it, or steer with the D-pad and press the round key."
-                : "The device is waiting for a trainer."}
+              {!registered ? "The device is waiting for a trainer."
+                : canSwitch ? "Pick a menu row to open it. The round key switches trainer."
+                : "Pick a menu row to open it, or steer with the D-pad and press Enter."}
             </span>
             <span style={{width:narrow?12:14,height:narrow?12:14,borderRadius:"50%",flexShrink:0,
               background:C.yellow,border:`2px solid ${C.outline}`}}/>
