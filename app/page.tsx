@@ -1,7 +1,8 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { C } from "./components/PokedexFrame";
+import { loadFromStorage } from "./lib/storage";
 
 /* The three groups the device pages between. */
 const SECTIONS = [
@@ -38,17 +39,73 @@ const SECTIONS = [
    section so the grid can stay colour-coded and grouped. */
 const APPS = SECTIONS.flatMap((s,si)=>s.items.map(it=>({...it,si,accent:s.accent})));
 
+/* What the device knows about this trainer's saved session. Each row reads a
+   real localStorage key the tools already write, so the readout reflects
+   actual work rather than being decoration. */
+type Saved = {trainers:number;party:number;battle:number;panels:number};
+const SAVED_ROWS: {
+  icon:string; label:string; href:string;
+  count:(s:Saved)=>number; detail:(n:number)=>string;
+}[] = [
+  {icon:"👤",label:"TRAINERS",href:"/characters",count:s=>s.trainers,
+   detail:n=>n?`${n} saved · ${n===1?"open sheet":"open sheets"}`:"No trainers yet — create one"},
+  {icon:"🎮",label:"PARTY",href:"/characters",count:s=>s.party,
+   detail:n=>n?`${n} Pokémon on file`:"No Pokémon built yet"},
+  {icon:"⚔️",label:"BATTLE",href:"/battle-tracker",count:s=>s.battle,
+   detail:n=>n?`${n} in the fight — resume`:"No battle in progress"},
+  {icon:"🖥️",label:"GM SCREEN",href:"/gm-screen",count:s=>s.panels,
+   detail:n=>n?`${n} ${n===1?"panel":"panels"} laid out`:"No panels placed yet"},
+];
+
+/* localStorage is an external store, so it's read through
+   useSyncExternalStore rather than in an effect: the server snapshot is
+   null (no storage during SSR) and React swaps in the client snapshot after
+   hydration, with no markup mismatch. getSnapshot runs on every render and
+   must return a stable identity, so the counts are cached against the raw
+   strings — which also means coming back from a tool re-reads changed data
+   instead of showing whatever was true at first mount. */
+const SAVED_KEYS = ["trainers","pokemon_sheets","bt_entries","gm_grid"];
+let savedRaw: string | null = null;
+let savedCache: Saved = {trainers:0,party:0,battle:0,panels:0};
+function readSaved(): Saved {
+  const raw = SAVED_KEYS.map(k=>{
+    try { return localStorage.getItem(k) ?? ""; } catch { return ""; }
+  }).join("\u0000");
+  if (raw !== savedRaw) {
+    savedRaw = raw;
+    savedCache = {
+      trainers: (loadFromStorage<unknown[]>("trainers",[]) ?? []).length,
+      party:    Object.keys(loadFromStorage<Record<string,unknown>>("pokemon_sheets",{}) ?? {}).length,
+      battle:   (loadFromStorage<unknown[]>("bt_entries",[]) ?? []).length,
+      panels:   (loadFromStorage<(unknown|null)[]>("gm_grid",[]) ?? []).filter(Boolean).length,
+    };
+  }
+  return savedCache;
+}
+// Cross-tab writes fire "storage"; same-tab writes are picked up by the
+// re-render that follows them.
+function subscribeSaved(onChange:()=>void){
+  window.addEventListener("storage", onChange);
+  return ()=>window.removeEventListener("storage", onChange);
+}
+const serverSaved = ():Saved|null => null;
+
 
 export default function Home() {
   const router = useRouter();
   const [idx,setIdx] = useState(0);
+  const [hover,setHover] = useState<number|null>(null);
   const [narrow,setNarrow] = useState(false);
   const [lamp,setLamp] = useState(0);
+  const status = useSyncExternalStore(subscribeSaved, readSaved, serverSaved);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const entry = APPS[idx];
   const sec = entry.si;
   const cols = narrow ? 2 : 3;
+  // Hover wins over keyboard focus for the caption, so pointing at one app
+  // while another is focused describes the one under the cursor.
+  const caption = APPS[hover ?? idx];
 
   useEffect(()=>{
     const mq = window.matchMedia("(max-width: 820px)");
@@ -182,8 +239,16 @@ export default function Home() {
                           <span style={{flex:1,height:2,background:"rgba(24,32,60,0.25)"}}/>
                         </div>
                       )}
-                      <button data-on={on} onClick={()=>setIdx(i)} onDoubleClick={open}
-                        aria-label={it.label} aria-current={on}
+                      {/* One tap opens. Selecting-then-confirming made the
+                          first tap do nothing useful, hid the real action
+                          behind an undiscoverable double-tap, and left the
+                          OPEN button duplicating it. Hover/focus only feeds
+                          the caption strip below, so the description is
+                          readable without costing a click. */}
+                      <button data-on={on} onClick={()=>{setIdx(i);router.push(it.href);}}
+                        onMouseEnter={()=>setHover(i)} onMouseLeave={()=>setHover(null)}
+                        onFocus={()=>setIdx(i)}
+                        title={it.desc} aria-label={`${it.label} — ${it.desc}`}
                         style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5,
                           padding:narrow?"8px 4px":"11px 6px",cursor:"pointer",touchAction:"manipulation",
                           borderRadius:8,background:on?C.navy:"#FFFFFF",
@@ -199,12 +264,16 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Speaker rules + status dot beneath the screen */}
-            <div style={{display:"flex",alignItems:"center",gap:8,paddingTop:6,flexShrink:0}}>
-              <span style={{width:9,height:9,borderRadius:"50%",background:"#F2544F",border:`2px solid ${C.outline}`}}/>
-              <div style={{flex:1,display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
-                {[1,2,3].map(n=><span key={n} style={{width:n===3?"40%":"55%",height:2,background:C.navy,opacity:0.55}}/>)}
-              </div>
+            {/* Caption strip: describes whatever is hovered or focused. This
+                is what replaced the old right-hand description pane — the
+                text appears without a click, so nothing has to be selected
+                before it can be read. */}
+            <div style={{display:"flex",alignItems:"center",gap:8,paddingTop:6,flexShrink:0,minHeight:narrow?26:30}}>
+              <span style={{width:9,height:9,borderRadius:"50%",flexShrink:0,
+                background:"#F2544F",border:`2px solid ${C.outline}`}}/>
+              <span style={{flex:1,minWidth:0,fontSize:narrow?10:12,lineHeight:1.35,color:C.navy}}>
+                {caption.desc}
+              </span>
             </div>
           </div>
 
@@ -251,18 +320,18 @@ export default function Home() {
             background:`repeating-linear-gradient(115deg, ${C.navy} 0px, ${C.navy} 10px, ${C.navyLight} 10px, ${C.navyLight} 20px)`,
             display:"flex",alignItems:"center",padding:"0 10px"}}>
             <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:9,color:"#FFFFFF"}}>
-              {SECTIONS[sec].title}
+              TRAINER DATA
             </span>
             <div style={{flex:1}}/>
             <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:9,color:C.yellow}}>
-              {idx+1}/{APPS.length}
+              {status ? "SYNCED" : "…"}
             </span>
           </div>
 
-          {/* Cyan key row — one per section, jumps straight to it */}
+          {/* Cyan key row — jumps the display to a section */}
           <div style={{display:"flex",gap:narrow?6:8,flexShrink:0}}>
             {SECTIONS.map((s,i)=>(
-              <button key={s.id} onClick={()=>pickSection(i)} title={s.title} aria-label={s.title}
+              <button key={s.id} onClick={()=>pickSection(i)} title={`Jump to ${s.title}`} aria-label={`Jump to ${s.title}`}
                 style={{flex:1,height:narrow?28:34,borderRadius:5,cursor:"pointer",touchAction:"manipulation",
                   border:`3px solid ${C.outline}`,
                   background:i===sec?C.yellow:C.cyan,
@@ -270,34 +339,53 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Selected-tool readout */}
-          <div style={{flex:narrow?"0 0 auto":"1",minHeight:0,maxHeight:narrow?110:undefined,
+          {/* ── Session readout ────────────────────────────────────────────
+              This half used to restate the highlighted tool's description and
+              offer an OPEN button — both redundant once one tap opens and the
+              caption strip carries the text. It now reports what's actually
+              saved on the device and jumps straight into it, which is the
+              thing a trainer's own tool would know and the landing page had
+              no way to surface. Counts read after mount: localStorage isn't
+              available during SSR, so reading it in render would desync
+              hydration. */}
+          <div style={{flex:narrow?"0 0 auto":"1",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
-            background:C.bezel,padding:narrow?10:14,display:"flex",flexDirection:"column",gap:8,overflowY:"auto"}}>
-            <div style={{display:"flex",alignItems:"center",gap:9}}>
-              <span style={{fontSize:narrow?24:30,lineHeight:1}}>{entry.icon}</span>
-              <span style={{fontFamily:"'Press Start 2P',monospace",fontSize:narrow?9:11,color:C.navy,lineHeight:1.5}}>
-                {entry.label}
-              </span>
-            </div>
-            <p style={{fontSize:narrow?12:13,lineHeight:1.6,color:"#2B3350",margin:0}}>{entry.desc}</p>
+            background:C.bezel,padding:narrow?8:10,display:"flex",flexDirection:"column",gap:narrow?6:8,overflowY:"auto"}}>
+            {SAVED_ROWS.map(row=>{
+              const n = status ? row.count(status) : 0;
+              const has = n > 0;
+              return (
+                <button key={row.href} onClick={()=>router.push(row.href)}
+                  aria-label={`${row.label}: ${status ? row.detail(n) : "loading"}`}
+                  style={{display:"flex",alignItems:"center",gap:9,textAlign:"left",cursor:"pointer",
+                    touchAction:"manipulation",padding:narrow?"7px 9px":"9px 11px",borderRadius:5,
+                    background:has?"#FFFFFF":"rgba(24,32,60,0.06)",
+                    border:`2px solid ${has?C.outline:"rgba(24,32,60,0.3)"}`}}>
+                  <span style={{fontSize:narrow?16:20,lineHeight:1,flexShrink:0,opacity:has?1:0.5}}>{row.icon}</span>
+                  <span style={{flex:1,minWidth:0}}>
+                    <span style={{display:"block",fontFamily:"'Press Start 2P',monospace",
+                      fontSize:narrow?7:8,color:C.navy,marginBottom:3}}>{row.label}</span>
+                    <span style={{display:"block",fontSize:narrow?11:12,color:has?"#2B3350":"#6A7188"}}>
+                      {status ? row.detail(n) : "reading…"}
+                    </span>
+                  </span>
+                  <span style={{flexShrink:0,fontFamily:"'Press Start 2P',monospace",
+                    fontSize:narrow?8:10,color:has?C.navy:"#8A90A4"}}>▶</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Action row: grey keys as hints, navy OPEN as the live control */}
-          <div style={{display:"flex",gap:narrow?6:8,flexShrink:0,alignItems:"center"}}>
-            <div style={{display:"flex",gap:6,flexShrink:0}}>
-              {["◆","▲▼"].map(k=>(
-                <span key={k} style={{minWidth:narrow?30:38,height:narrow?24:30,borderRadius:4,
-                  border:`3px solid ${C.outline}`,background:C.grey,
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:narrow?8:10,color:C.navy}}>{k}</span>
-              ))}
-            </div>
-            <button onClick={open}
-              style={{flex:1,height:narrow?32:40,borderRadius:5,cursor:"pointer",touchAction:"manipulation",
-                border:`3px solid ${C.outline}`,background:C.navy,color:"#FFFFFF",
-                fontFamily:"'Press Start 2P',monospace",fontSize:narrow?9:11,
-                boxShadow:`0 3px 0 ${C.shellDeep}`}}>OPEN</button>
+          {/* Control legend — states the two ways in rather than being a
+              third control that duplicates them. */}
+          <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:narrow?6:9,flexWrap:"wrap"}}>
+            <span style={{minWidth:narrow?30:38,height:narrow?24:28,borderRadius:4,flexShrink:0,
+              border:`3px solid ${C.outline}`,background:C.grey,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:narrow?8:10,color:C.navy}}>✛</span>
+            <span style={{fontSize:narrow?10:11,color:"#FFFFFF",flex:1,minWidth:0}}>
+              Tap an app to open it, or steer with the D-pad and press the round key.
+            </span>
             <span style={{width:narrow?12:14,height:narrow?12:14,borderRadius:"50%",flexShrink:0,
               background:C.yellow,border:`2px solid ${C.outline}`}}/>
           </div>
