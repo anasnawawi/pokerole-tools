@@ -1250,7 +1250,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     <img src={`/sprites/pokemon/${t.pokemon.number}.png`} alt="" width={26} height={26}
                       style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0,filter:t.currentHp<=0?"grayscale(1)":undefined}}
                       onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
-                    <span>{isSelf?"(Self) ":""}{nameOf(t,allEntries)} ({t.currentHp}/{t.maxHp})</span>
+                    <span>{isSelf?"(Self) ":""}{nameOf(t,allEntries)}</span>
+                    <span style={{width:"100%",minWidth:54}}><HpBar cur={t.currentHp} max={t.maxHp}/></span>
+                    <span style={{fontSize:9,opacity:0.85}}>{t.currentHp}/{t.maxHp}</span>
                   </button>;
                 })}
               </div>
