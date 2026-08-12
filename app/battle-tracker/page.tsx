@@ -160,10 +160,30 @@ function PokeSprite({number,back,boxW=160,boxH=150,fainted}:{number:number;back?
     </div>
   );
 }
+/* Wild/enemy Pokémon commonly duplicate species in a fight — three Zubat,
+   two Bulbasaur — and with no nickname there was no way to say which one you
+   meant when targeting. A trainer's own Pokémon already has that identity
+   (a nickname, or the sheet behind it), so only the untethered ones get
+   numbered. The number is stable by position in the master entry list, not
+   by HP or turn order, so it can't reshuffle mid-fight. base/suffix are
+   split out so a caller that truncates the name (a compact status chip) can
+   shrink the base and keep the suffix, rather than losing the disambiguator
+   to an ellipsis. */
+function nameParts(entry:BattleEntry,roster:BattleEntry[]):{base:string;suffix:string}{
+  const base=entry.nickname||entry.pokemon.name;
+  if(entry.nickname||entry.linkedTrainerId)return{base,suffix:""};
+  const dupes=roster.filter(e=>!e.nickname&&!e.linkedTrainerId&&e.pokemon.name===entry.pokemon.name);
+  if(dupes.length<2)return{base,suffix:""};
+  return{base,suffix:` #${dupes.findIndex(e=>e.id===entry.id)+1}`};
+}
+function nameOf(entry:BattleEntry,roster:BattleEntry[]):string{
+  const{base,suffix}=nameParts(entry,roster);
+  return base+suffix;
+}
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
 // (as in-game); player plates show HP n/n + WP n/n.
-function SceneNameplate({entry,enemy,onClick}:{entry:BattleEntry;enemy?:boolean;onClick?:()=>void}){
-  const name=(entry.nickname||entry.pokemon.name).toUpperCase();
+function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void}){
+  const name=nameOf(entry,allEntries).toUpperCase();
   const sts=(entry.statuses||[]).filter(s=>s!=="Healthy");
   const rank=entry.trainerRank||entry.pokemon.suggestedRank;
   return(
@@ -212,11 +232,11 @@ function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fai
    so it reads as present-but-not-the-subject. They used to be 26px icons in a
    cream card, which said "list of names" rather than "who else is out here".
    Clicking one brings it into the focused slot. */
-function BenchMon({entry,back,onClick}:{entry:BattleEntry;back?:boolean;onClick:()=>void}){
+function BenchMon({entry,back,allEntries,onClick}:{entry:BattleEntry;back?:boolean;allEntries:BattleEntry[];onClick:()=>void}){
   const [hover,setHover]=useState(false);
   const fainted=entry.currentHp<=0;
   const w=back?84:72, h=back?60:48, plat=back?19:15;
-  const name=(entry.nickname||entry.pokemon.name).toUpperCase();
+  const name=nameOf(entry,allEntries).toUpperCase();
   return(
     <button onClick={onClick} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
       title={`${name} — ${entry.currentHp}/${entry.maxHp} HP · click to focus`}
@@ -780,12 +800,12 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
         if(onApplyEffect){
           const el=move.effect.toLowerCase();
           if(el.includes("increase user")||el.includes("increase the user")||statAppliestoSelf(move)){
-            if(el.includes("strength")&&el.includes("increase"))onApplyEffect(attacker.id,"strength",1,move.name,attacker.nickname||attacker.pokemon.name);
-            if(el.includes("special")&&el.includes("increase"))onApplyEffect(attacker.id,"special",1,move.name,attacker.nickname||attacker.pokemon.name);
-            if(el.includes("defense")&&el.includes("increase")&&!el.includes("sp."))onApplyEffect(attacker.id,"vitality",1,move.name,attacker.nickname||attacker.pokemon.name);
+            if(el.includes("strength")&&el.includes("increase"))onApplyEffect(attacker.id,"strength",1,move.name,nameOf(attacker,allEntries));
+            if(el.includes("special")&&el.includes("increase"))onApplyEffect(attacker.id,"special",1,move.name,nameOf(attacker,allEntries));
+            if(el.includes("defense")&&el.includes("increase")&&!el.includes("sp."))onApplyEffect(attacker.id,"vitality",1,move.name,nameOf(attacker,allEntries));
           }
         }
-        lines.push(`✓ ${attacker.nickname||attacker.pokemon.name} wins (${atkRoll.successes} vs ${dr.successes}) — ${finalDmg} dmg applied to ${t.nickname||t.pokemon.name}`);
+        lines.push(`✓ ${nameOf(attacker,allEntries)} wins (${atkRoll.successes} vs ${dr.successes}) — ${finalDmg} dmg applied to ${nameOf(t,allEntries)}`);
       } else if(dr.successes>atkRoll.successes){
         const dm=defMoves[tid];const defA=getEffectiveAttrs(t);
         const pool=calcDmgPool(dm,defA,weather,t.pokemon.types.includes(dm.type as PokemonType),0,t.loyalty,t.happiness);
@@ -793,7 +813,7 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
         const def=dm.category==="Physical"?attacker.attrs.vitality:attacker.attrs.insight;
         const finalDmg=Math.max(1,dmgR.successes-def);
         onApplyDmg(attacker.id,finalDmg);
-        lines.push(`✗ ${t.nickname||t.pokemon.name} wins Clash (${dr.successes} vs ${atkRoll.successes}) — ${finalDmg} dmg applied to ${attacker.nickname||attacker.pokemon.name}`);
+        lines.push(`✗ ${nameOf(t,allEntries)} wins Clash (${dr.successes} vs ${atkRoll.successes}) — ${finalDmg} dmg applied to ${nameOf(attacker,allEntries)}`);
       } else lines.push(`⚖ Tie (${atkRoll.successes} vs ${dr.successes}) — no damage`);
     });
     setResolved(lines.join("\n"));
@@ -804,7 +824,7 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
       <div style={{fontSize:11,fontWeight:700,color:"#00d4aa",marginBottom:6}}>⚡ Clash Resolution (Priority 6)</div>
       <div style={{fontSize:10,color:"#8b90a8",marginBottom:10,lineHeight:1.5}}>Both sides roll their chosen move's accuracy simultaneously. Highest successes wins — winner deals full damage. Tie = no damage.</div>
       <div style={{marginBottom:10}}>
-        <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>Attacker: {attacker.nickname||attacker.pokemon.name} — {move.name} ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</div>
+        <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>Attacker: {nameOf(attacker,allEntries)} — {move.name} ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <button onClick={doAtkRoll} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:"#6890f0",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Attacker ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</button>
           {atkRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{atkRoll.rolls.join(",")}] = <span style={{color:"#6890f0"}}>{atkRoll.successes} hits</span></span>}
@@ -815,14 +835,14 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
         const dm=defMoves[tid];const dr=defRolls[tid];
         return(
           <div key={tid} style={{background:"#13151f",borderRadius:5,padding:"8px 10px",marginBottom:8}}>
-            <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:6}}>Defender: {t.nickname||t.pokemon.name} — pick counter move</div>
+            <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:6}}>Defender: {nameOf(t,allEntries)} — pick counter move</div>
             <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
               {t.moves.map((m,i)=><button key={i} onClick={()=>pickDefMove(tid,m)} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:4,border:`1px solid ${dm?.name===m.name?"#ff4757":"#3a4060"}`,background:dm?.name===m.name?"rgba(255,71,87,0.15)":"#1e2235",cursor:"pointer",fontSize:10}}>
                 <TypeBadge type={m.type as PokemonType} small/>{m.name}
               </button>)}
               {t.moves.length===0&&<span style={{fontSize:10,color:"#5a6080",fontStyle:"italic"}}>No moves in tracker</span>}
             </div>
-            {dm&&dr&&<div style={{fontSize:11,color:"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{t.nickname||t.pokemon.name}: [{dr.rolls.join(",")}] = {dr.successes} hits with {dm.name}</div>}
+            {dm&&dr&&<div style={{fontSize:11,color:"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{nameOf(t,allEntries)}: [{dr.rolls.join(",")}] = {dr.successes} hits with {dm.name}</div>}
           </div>
         );
       })}
@@ -878,7 +898,7 @@ function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:a
             {combatSkills.includes(selSkill)&&<div>
               <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Target</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {others.map(t=><button key={t.id} onClick={()=>setTargets(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:targets.includes(t.id)?"#e8eaf0":"#8b90a8"}}>{t.nickname||t.pokemon.name} ({t.currentHp}/{t.maxHp})</button>)}
+                {others.map(t=><button key={t.id} onClick={()=>setTargets(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:targets.includes(t.id)?"#e8eaf0":"#8b90a8"}}>{nameOf(t,allEntries)} ({t.currentHp}/{t.maxHp})</button>)}
               </div>
             </div>}
             <div>
@@ -1085,7 +1105,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     const dr=dmgResults[tid];if(!t||!dr)return;
     if(isSelf){onApplyDmg(tid,dr.successes);setApplied(p=>new Set([...p,tid]));return;}
     const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);
-    if(tm.mod===-999){alert(`${t.nickname||t.pokemon.name} is immune!`);return;}
+    if(tm.mod===-999){alert(`${nameOf(t,allEntries)} is immune!`);return;}
     const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;
     let succ=Math.max(1,dr.successes);
     const brutalBonus2=dr.rolls.filter(r=>r===6).length>=2?2:0;
@@ -1218,14 +1238,14 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 {(isAOE||selfDestruct)&&<button onClick={selectAllTargets} style={{padding:"4px 8px",borderRadius:4,fontSize:10,cursor:"pointer",border:"1px solid #ff4757",background:"rgba(255,71,87,0.15)",color:"#ff4757",fontWeight:700}}>☑ Select All</button>}
                 {selfTarget&&!isTransformMove&&targets.length===0&&(
                   <button onClick={()=>setTargets([attacker.id])} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:"1px solid #a040a0",background:"rgba(160,64,160,0.15)",color:"#e8eaf0"}}>
-                    ✓ {attacker.nickname||attacker.pokemon.name} (Self)
+                    ✓ {nameOf(attacker,allEntries)} (Self)
                   </button>
                 )}
                 {targetOptions.map(t=>{
                   const isSelf=t.id===attacker.id;
                   const sel=targets.includes(t.id);
                   return<button key={t.id} onClick={()=>toggleTarget(t.id)} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${sel?(isSelf?"#a040a0":TYPE_COLORS[t.pokemon.types[0]]):"#3a4060"}`,background:sel?(isSelf?"rgba(160,64,160,0.2)":TYPE_COLORS[t.pokemon.types[0]]+"20"):"transparent",color:sel?"#e8eaf0":"#8b90a8"}}>
-                    {isSelf?"(Self) ":""}{t.nickname||t.pokemon.name} ({t.currentHp}/{t.maxHp})
+                    {isSelf?"(Self) ":""}{nameOf(t,allEntries)} ({t.currentHp}/{t.maxHp})
                   </button>;
                 })}
               </div>
@@ -1233,10 +1253,10 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
           )}
 
           {/* Protect warning */}
-          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||!t.isProtected)return null;return<div key={`prot-${tid}`} style={{background:"rgba(104,144,240,0.1)",border:"1px solid #6890f040",borderRadius:4,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#6890f0"}}>🛡 {t.nickname||t.pokemon.name} is PROTECTED — move has no effect this round!</div>;})}
+          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||!t.isProtected)return null;return<div key={`prot-${tid}`} style={{background:"rgba(104,144,240,0.1)",border:"1px solid #6890f040",borderRadius:4,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#6890f0"}}>🛡 {nameOf(t,allEntries)} is PROTECTED — move has no effect this round!</div>;})}
 
           {/* Type effectiveness */}
-          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||t.isProtected)return null;const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;return<div key={tid} style={{background:tm.color+"10",border:`1px solid ${tm.color}30`,borderRadius:4,padding:"6px 10px"}}><div style={{fontSize:11,fontWeight:700,color:tm.color}}>{t.nickname||t.pokemon.name}: {tm.label}</div><div style={{fontSize:10,color:"#8b90a8",marginTop:2}}>DEF: {def} ({move.category==="Physical"?"VIT":"INS"})</div></div>;})}
+          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||t.isProtected)return null;const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;return<div key={tid} style={{background:tm.color+"10",border:`1px solid ${tm.color}30`,borderRadius:4,padding:"6px 10px"}}><div style={{fontSize:11,fontWeight:700,color:tm.color}}>{nameOf(t,allEntries)}: {tm.label}</div><div style={{fontSize:10,color:"#8b90a8",marginTop:2}}>DEF: {def} ({move.category==="Physical"?"VIT":"INS"})</div></div>;})}
 
           {/* Defender Reactions — only shown when target has WP and hasn't reacted */}
           {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{
@@ -1251,7 +1271,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               <div key={`react-${tid}`} style={{background:"rgba(168,64,160,0.06)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                   <div style={{fontSize:10,color:"#a040a0",fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",flex:1}}>
-                    ⚡ {t.nickname||t.pokemon.name} Reaction {reactionUsed?"(Reaction used this round)":hasWP?"(costs 1 WP)":"(no WP)"}
+                    ⚡ {nameOf(t,allEntries)} Reaction {reactionUsed?"(Reaction used this round)":hasWP?"(costs 1 WP)":"(no WP)"}
                   </div>
                   {react&&!react.resolved&&!react.clashOutcome&&(
                     <button onClick={()=>setDefReactions(p=>{const n={...p};delete n[tid];return n;})}
@@ -1284,7 +1304,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                       <div style={{fontSize:10,color:"#f08030",fontWeight:700,letterSpacing:"0.5px",marginBottom:6}}>⚡ Clash Check</div>
                       {/* Move picker */}
                       {!react.clashOutcome&&<div style={{marginBottom:8}}>
-                        <div style={{fontSize:9,color:"#5a6080",marginBottom:4}}>Pick counter move ({t.nickname||t.pokemon.name}):</div>
+                        <div style={{fontSize:9,color:"#5a6080",marginBottom:4}}>Pick counter move ({nameOf(t,allEntries)}):</div>
                         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                           {clashMoves.map((m,i)=>(
                             <button key={i} onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],move:m,roll:undefined}}))} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:3,border:`1px solid ${react.move?.name===m.name?"#f08030":"#c8c8d0"}`,background:react.move?.name===m.name?"rgba(240,128,48,0.15)":"#ffffff",color:react.move?.name===m.name?"#f08030":"#3a3a45",cursor:"pointer",fontSize:10}}>
@@ -1298,7 +1318,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:6}}>
                           {/* Attacker accuracy */}
                           <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"6px 8px"}}>
-                            <div style={{fontSize:9,color:"#f08030",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{attacker.nickname||attacker.pokemon.name} — Accuracy</div>
+                            <div style={{fontSize:9,color:"#f08030",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(attacker,allEntries)} — Accuracy</div>
                             <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{accBreakdown}{attackerPain>0?` − Pain ${attackerPain}`:""} = {atkAccPool}d</div>
                             {accResult?(
                               <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030"}}>[{accResult.rolls.join(",")}]={accResult.successes} <span style={{fontSize:9,color:"#5a6080"}}>(Phase 1)</span></div>
@@ -1311,7 +1331,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                           </div>
                           {/* Defender clash roll */}
                           <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"6px 8px"}}>
-                            <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t.nickname||t.pokemon.name} — Clash</div>
+                            <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(t,allEntries)} — Clash</div>
                             <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{(()=>{const acc=react.move.accuracy.toLowerCase();const da2=getEffectiveAttrs(t);const parts:string[]=[];if(acc.includes("strength"))parts.push(`STR ${da2.strength}`);if(acc.includes("dexterity"))parts.push(`DEX ${da2.dexterity}`);if(acc.includes("special"))parts.push(`SPC ${da2.special}`);if(acc.includes("insight"))parts.push(`INS ${da2.insight}`);if(acc.includes("vitality"))parts.push(`VIT ${da2.vitality}`);const sk=acc.includes("brawl")?"Brawl":acc.includes("athletic")?"Athletic":acc.includes("channel")?"Channel":acc.includes("perform")?"Perform":acc.includes("clash")?"Clash":acc.includes("alert")?"Alert":acc.includes("evasion")?"Evasion":"Skill";const sv=t.pokemonSkills?.[sk.toLowerCase() as keyof PokemonSkills]||2;parts.push(`${sk} ${sv}`);if(defPainC>0)parts.push(`Pain −${defPainC}`);return parts.join(" + ");})() } = {defClashPool}d</div>
                             <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:rollDice(defClashPool??1)}}))} style={{width:"100%",background:"#00d4aa20",border:"1px solid #00d4aa50",borderRadius:4,color:"#00d4aa",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({defClashPool}d)</button>
                             {react.roll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>[{react.roll.rolls.join(",")}]={react.roll.successes}</div>}
@@ -1322,9 +1342,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                       {bothRolled&&!react.clashOutcome&&(
                         <>
                           <div style={{textAlign:"center",padding:"6px 10px",borderRadius:5,background:outcome==="attackerWins"?"rgba(255,71,87,0.12)":outcome==="tie"?"rgba(90,96,128,0.12)":"rgba(0,212,170,0.12)",border:`1px solid ${outcome==="attackerWins"?"#ff475740":outcome==="tie"?"#5a608040":"#00d4aa40"}`,fontSize:12,fontWeight:700,color:outcome==="attackerWins"?"#ff4757":outcome==="tie"?"#5a6080":"#00d4aa",marginBottom:6}}>
-                            {outcome==="attackerWins"?`✗ ${t.nickname||t.pokemon.name} loses Clash (${defSucc} vs ${atkSucc}) — ${attacker.nickname||attacker.pokemon.name} hits!`
+                            {outcome==="attackerWins"?`✗ ${nameOf(t,allEntries)} loses Clash (${defSucc} vs ${atkSucc}) — ${nameOf(attacker,allEntries)} hits!`
                               :outcome==="tie"?`⚖ Tie (${atkSucc} vs ${defSucc}) — no damage`
-                              :`✓ ${t.nickname||t.pokemon.name} wins Clash (${defSucc} vs ${atkSucc}) — ${attacker.nickname||attacker.pokemon.name}'s move fails!`}
+                              :`✓ ${nameOf(t,allEntries)} wins Clash (${defSucc} vs ${atkSucc}) — ${nameOf(attacker,allEntries)}'s move fails!`}
                           </div>
                           <button onClick={()=>{
                             if(outcome==="defenderWins"){
@@ -1349,9 +1369,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                               setDefReactions(p=>({...p,[tid]:{...p[tid],clashOutcome:outcome!}}));
                             }
                           }} style={{width:"100%",background:outcome==="defenderWins"?"#00d4aa":outcome==="tie"?"#5a6080":"#ff4757",color:"#fff",border:"none",borderRadius:4,padding:"5px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            {outcome==="defenderWins"?`✓ ${t.nickname||t.pokemon.name} wins — Apply Clash Damage & Close`
+                            {outcome==="defenderWins"?`✓ ${nameOf(t,allEntries)} wins — Apply Clash Damage & Close`
                               :outcome==="tie"?"⚖ Tie — Close"
-                              :`✗ ${t.nickname||t.pokemon.name} loses — Roll damage below`}
+                              :`✗ ${nameOf(t,allEntries)} loses — Roll damage below`}
                           </button>
                         </>
                       )}
@@ -1368,9 +1388,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                         return(
                           <>
                             <div style={{textAlign:"center",padding:"6px 10px",borderRadius:5,background:react.clashOutcome==="attackerWins"?"rgba(255,71,87,0.12)":react.clashOutcome==="tie"?"rgba(90,96,128,0.12)":"rgba(0,212,170,0.12)",border:`1px solid ${react.clashOutcome==="attackerWins"?"#ff475740":react.clashOutcome==="tie"?"#5a608040":"#00d4aa40"}`,fontSize:12,fontWeight:700,color:react.clashOutcome==="attackerWins"?"#ff4757":react.clashOutcome==="tie"?"#5a6080":"#00d4aa",marginBottom:6}}>
-                              {react.clashOutcome==="attackerWins"?`✗ ${t.nickname||t.pokemon.name} loses Clash (${react.roll?.successes??0} vs ${(accResult??react.atkRoll)?.successes??0}) — ${attacker.nickname||attacker.pokemon.name} hits!`
+                              {react.clashOutcome==="attackerWins"?`✗ ${nameOf(t,allEntries)} loses Clash (${react.roll?.successes??0} vs ${(accResult??react.atkRoll)?.successes??0}) — ${nameOf(attacker,allEntries)} hits!`
                                 :react.clashOutcome==="tie"?"⚖ Clash Tie — no damage"
-                                :`✓ ${t.nickname||t.pokemon.name} wins Clash (${react.roll?.successes??0} vs ${(accResult??react.atkRoll)?.successes??0}) — ${attacker.nickname||attacker.pokemon.name}'s move fails!`}
+                                :`✓ ${nameOf(t,allEntries)} wins Clash (${react.roll?.successes??0} vs ${(accResult??react.atkRoll)?.successes??0}) — ${nameOf(attacker,allEntries)}'s move fails!`}
                             </div>
                             {react.clashOutcome==="attackerWins"&&<div style={{fontSize:10,color:"#ff4757",fontStyle:"italic",textAlign:"center"}}>Roll damage below — WP will be deducted on apply.</div>}
                             {react.clashOutcome==="defenderWins"&&!react.resolved&&(
@@ -1378,12 +1398,12 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                                 <div style={{fontSize:9,fontWeight:700,color:"#00d4aa",letterSpacing:"1px",textTransform:"uppercase",marginBottom:8}}>⚡ Clash Damage (flat)</div>
                                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
                                   <div style={{background:"rgba(255,71,87,0.06)",border:"1px solid #ff475730",borderRadius:4,padding:"6px 8px"}}>
-                                    <div style={{fontSize:9,color:"#ff4757",fontWeight:700,marginBottom:3}}>{attacker.nickname||attacker.pokemon.name} takes</div>
+                                    <div style={{fontSize:9,color:"#ff4757",fontWeight:700,marginBottom:3}}>{nameOf(attacker,allEntries)} takes</div>
                                     <div style={{fontSize:9,color:"#5a6080",marginBottom:3}}>{defMoveType} vs {attacker.pokemon.types.join("/")} → {atkTM.label}</div>
                                     <div style={{fontSize:14,fontWeight:700,color:"#ff4757"}}>{atkClashDmg} HP</div>
                                   </div>
                                   <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:4,padding:"6px 8px"}}>
-                                    <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,marginBottom:3}}>{t.nickname||t.pokemon.name} takes</div>
+                                    <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,marginBottom:3}}>{nameOf(t,allEntries)} takes</div>
                                     <div style={{fontSize:9,color:"#5a6080",marginBottom:3}}>{atkMoveType} vs {t.pokemon.types.join("/")} → {defTM.label}</div>
                                     <div style={{fontSize:14,fontWeight:700,color:"#00d4aa"}}>{defClashDmg} HP</div>
                                   </div>
@@ -1423,7 +1443,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:6}}>
                         {/* Attacker accuracy — reuse Phase 1 roll if available */}
                         <div style={{background:"rgba(104,144,240,0.06)",border:"1px solid #6890f030",borderRadius:5,padding:"6px 8px"}}>
-                          <div style={{fontSize:9,color:"#6890f0",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{attacker.nickname||attacker.pokemon.name} — Accuracy</div>
+                          <div style={{fontSize:9,color:"#6890f0",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(attacker,allEntries)} — Accuracy</div>
                           <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{atkAttrLabel} ({atkAttrVal}) + {atkSkLabel} ({atkSkVal}){attackerPain>0?` − Pain ${attackerPain}`:""} = {atkPool}d</div>
                           {accResult?(
                             <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>[{accResult.rolls.join(",")}]={accResult.successes} <span style={{fontSize:9,color:"#5a6080"}}>(from Phase 1)</span></div>
@@ -1436,7 +1456,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                         </div>
                         {/* Target evasion roll */}
                         <div style={{background:"rgba(104,144,240,0.06)",border:"1px solid #6890f030",borderRadius:5,padding:"6px 8px"}}>
-                          <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{t.nickname||t.pokemon.name} — Evasion</div>
+                          <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(t,allEntries)} — Evasion</div>
                           <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>DEX ({da.dexterity}) + Evasion ({evasionRank}){defPain>0?` − Pain ${defPain}`:""} = {evasPool}d</div>
                           <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:rollDice(evasPool)}}))} style={{width:"100%",background:"#00d4aa20",border:"1px solid #00d4aa50",borderRadius:4,color:"#00d4aa",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>
                             🎲 Roll ({evasPool}d)
@@ -1471,7 +1491,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <button onClick={()=>setAccResult(rollDice(accPool))} disabled={accPool<=0} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:accPool<=0?"#5a6080":"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:accPool<=0?"default":"pointer"}}>🎲 Roll Accuracy ({accPool}d)</button>
                 {accResult&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:accResult.successes>=actReq?"#00d4aa":"#ff4757"}}>[{accResult.rolls.join(",")}]={accResult.successes} {accResult.successes>=actReq?"✓ HIT":"✗ MISS"}</span>}
               </div>
-              {targets.filter(tid=>{const t=allEntries.find(e=>e.id===tid);return t&&t.reactionUsed;}).map(tid=>{const t=allEntries.find(e=>e.id===tid)!;return<div key={tid} style={{marginTop:5,background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:10,color:"#ff4757"}}>⚠ {t.nickname||t.pokemon.name} has already used their reaction — Clash &amp; Evasion unavailable.</div>;})}
+              {targets.filter(tid=>{const t=allEntries.find(e=>e.id===tid);return t&&t.reactionUsed;}).map(tid=>{const t=allEntries.find(e=>e.id===tid)!;return<div key={tid} style={{marginTop:5,background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:10,color:"#ff4757"}}>⚠ {nameOf(t,allEntries)} has already used their reaction — Clash &amp; Evasion unavailable.</div>;})}
               {/* Miss button — shown when rolled a miss and no pending unresolved reactions */}
               {(()=>{
                 if(!accResult||accResult.successes>=actReq)return null;
@@ -1513,7 +1533,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
             const finalDmg=baseDmg!=null?baseDmg+brutalBonus:null;
             const wasApplied=applied.has(tid);
             return<div key={tid} style={{background:"#13151f",borderRadius:6,padding:"10px 12px",border:brutalHit?"1px solid #ffd32a60":"none"}}>
-              <div style={{fontSize:9,fontWeight:700,color:"#f08030",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>② Damage → {isSelf?"SELF":t.nickname||t.pokemon.name} ({dmgPool}d)</div>
+              <div style={{fontSize:9,fontWeight:700,color:"#f08030",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>② Damage → {isSelf?"SELF":nameOf(t,allEntries)} ({dmgPool}d)</div>
               <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
                 <button onClick={()=>doDmg(tid)} disabled={!!dr} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:dr?"#5a6080":"#f08030",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:dr?"default":"pointer"}}>🎲 Roll Damage ({dmgPool}d)</button>
                 {dr&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{dr.rolls.map(r=>{const s=String(r);return r===6?"★"+s:s;}).join(",")}]={dr.successes}</span>}
@@ -1535,12 +1555,12 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     </div>
                     {chanceRoll&&chanceRoll.rolls[0]>=4&&onApplySpecial&&(
                       <button onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||[],statusToInflict!),statusTurnsLeft:statusToInflict==="Asleep"?3:0});}} style={{marginTop:4,width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                        💢 Apply {statusToInflict} to {t.nickname||t.pokemon.name}
+                        💢 Apply {statusToInflict} to {nameOf(t,allEntries)}
                       </button>
                     )}
                   </div>;
                 })()}
-                {!wasApplied&&<button onClick={()=>applyDmg(tid)} style={{width:"100%",background:isSelf?"#a040a0":"#ff4757",color:"#fff",border:"none",borderRadius:5,padding:"7px",fontWeight:700,fontSize:12,cursor:"pointer"}}>⚔ Apply {finalDmg} to {isSelf?"SELF":t.nickname||t.pokemon.name}</button>}
+                {!wasApplied&&<button onClick={()=>applyDmg(tid)} style={{width:"100%",background:isSelf?"#a040a0":"#ff4757",color:"#fff",border:"none",borderRadius:5,padding:"7px",fontWeight:700,fontSize:12,cursor:"pointer"}}>⚔ Apply {finalDmg} to {isSelf?"SELF":nameOf(t,allEntries)}</button>}
                 {wasApplied&&<div style={{textAlign:"center",color:"#00d4aa",fontWeight:700}}>✓ Applied</div>}
               </div>}
             </div>;
@@ -1575,7 +1595,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   {targets.filter(t=>t!==attacker.id).map(tid=>{
                     const t=allEntries.find(e=>e.id===tid);if(!t)return null;
                     return<button key={tid} onClick={()=>{if(onApplySpecial)onApplySpecial(tid,{statuses:addStatus(t.statuses||[],statusToInflict!),statusTurnsLeft:statusToInflict==="Asleep"?3:0});onIncrementAction(attacker.id,isPriority);}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:4,cursor:"pointer",background:"rgba(160,64,160,0.1)",border:"1px solid #a040a040",color:"#a040a0",fontSize:11,fontWeight:700,width:"100%",marginBottom:3}}>
-                      💢 Apply {statusToInflict} → {t.nickname||t.pokemon.name}
+                      💢 Apply {statusToInflict} → {nameOf(t,allEntries)}
                     </button>;
                   })}
                 </div>
@@ -1587,7 +1607,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   <div style={{fontSize:10,color:"#00d4aa",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Healing</div>
                   {(healsUser?[attacker]:[]).concat(healsTarget?others.filter(e=>targets.includes(e.id)):[]).map(t=>
                     <button key={t.id} onClick={()=>{const heal=Math.floor(t.maxHp/2);onApplyDmg(t.id,-heal);onIncrementAction(attacker.id,false);onClose();}} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:4,cursor:"pointer",background:"rgba(0,212,170,0.1)",border:"1px solid #00d4aa30",color:"#00d4aa",fontSize:11,fontWeight:700,width:"100%",marginBottom:3}}>
-                      💚 Restore ~½ HP to {t.id===attacker.id?"SELF":t.nickname||t.pokemon.name} (+{Math.floor(t.maxHp/2)})
+                      💚 Restore ~½ HP to {t.id===attacker.id?"SELF":nameOf(t,allEntries)} (+{Math.floor(t.maxHp/2)})
                     </button>
                   )}
                 </div>
@@ -1596,7 +1616,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {/* User faints (Self-Destruct, Explosion) */}
               {userFaints&&(
                 <button onClick={()=>{onApplyDmg(attacker.id,attacker.currentHp);onIncrementAction(attacker.id,false);onClose();}} style={{padding:"8px",background:"#ff4757",color:"#fff",border:"none",borderRadius:5,fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                  💀 User Faints — Apply {attacker.currentHp} damage to {attacker.nickname||attacker.pokemon.name}
+                  💀 User Faints — Apply {attacker.currentHp} damage to {nameOf(attacker,allEntries)}
                 </button>
               )}
 
@@ -1615,7 +1635,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                       });
                       onIncrementAction(attacker.id,false);onClose();
                     }} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(160,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>
-                      🔄 → {t.nickname||t.pokemon.name}
+                      🔄 → {nameOf(t,allEntries)}
                     </button>)}
                   </div>
                 </div>
@@ -1626,7 +1646,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{background:"rgba(104,144,240,0.08)",border:"1px solid #6890f040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#6890f0",marginBottom:6}}>🎭 Reflect Type — Choose new type</div>
                   <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                    {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);return t?<button key={tid} onClick={()=>{onApplySpecial!(attacker.id,{attrs:{...attacker.attrs}});alert(`Type changed to match ${t.nickname||t.pokemon.name}: ${t.pokemon.types.join("/")}. Update manually on card.`);onClose();}} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",background:"rgba(104,144,240,0.15)",border:"1px solid #6890f040",color:"#6890f0"}}>Copy {t.nickname||t.pokemon.name}&apos;s type ({t.pokemon.types.join("/")})</button>:null;})}
+                    {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);return t?<button key={tid} onClick={()=>{onApplySpecial!(attacker.id,{attrs:{...attacker.attrs}});alert(`Type changed to match ${nameOf(t,allEntries)}: ${t.pokemon.types.join("/")}. Update manually on card.`);onClose();}} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",background:"rgba(104,144,240,0.15)",border:"1px solid #6890f040",color:"#6890f0"}}>Copy {nameOf(t,allEntries)}&apos;s type ({t.pokemon.types.join("/")})</button>:null;})}
                   </div>
                 </div>
               )}
@@ -1650,7 +1670,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                       else{const aStr=attacker.attrs.strength;const aSpc=attacker.attrs.special;onApplySpecial!(attacker.id,{attrs:{...attacker.attrs,strength:t.attrs.strength,special:t.attrs.special}});onApplySpecial!(tid,{attrs:{...t.attrs,strength:aStr,special:aSpc}});}
                       onIncrementAction(attacker.id,false);onClose();
                     }} style={{width:"100%",background:"#78c850",color:"#0f1117",border:"none",borderRadius:4,padding:"7px",fontSize:11,fontWeight:700,cursor:"pointer",marginTop:3}}>
-                      {isPowerSplit?"Average":"Swap"} STR/SPC with {t.nickname||t.pokemon.name}
+                      {isPowerSplit?"Average":"Swap"} STR/SPC with {nameOf(t,allEntries)}
                     </button>;
                   })}
                 </div>
@@ -1659,7 +1679,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {/* Baton Pass */}
               {isBatonPass&&(
                 <div style={{background:"rgba(248,216,48,0.06)",border:"1px solid #f8d03030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#f8d030"}}>
-                  🏃 Baton Pass — Stat changes on {attacker.nickname||attacker.pokemon.name} will transfer to the next Pokémon switched in. Switch the Pokémon card manually.
+                  🏃 Baton Pass — Stat changes on {nameOf(attacker,allEntries)} will transfer to the next Pokémon switched in. Switch the Pokémon card manually.
                 </div>
               )}
 
@@ -1674,7 +1694,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isStatsReset&&targets.length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(90,96,128,0.1)",border:"1px solid #5a608040",borderRadius:5,padding:"8px 10px"}}>
                   <div style={{fontSize:10,color:"#8b90a8",fontWeight:700,marginBottom:5}}>📊 Stats Reset</div>
-                  {targets.map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statMods:[]});onIncrementAction(attacker.id,false);}} style={{width:"100%",background:"#5a6080",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Reset all stat mods on {t.nickname||t.pokemon.name}</button>;})}
+                  {targets.map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statMods:[]});onIncrementAction(attacker.id,false);}} style={{width:"100%",background:"#5a6080",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Reset all stat mods on {nameOf(t,allEntries)}</button>;})}
                 </div>
               )}
 
@@ -1708,7 +1728,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isDisableLock&&targets.length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(168,64,160,0.08)",border:"1px solid #a040a030",borderRadius:5,padding:"8px 10px"}}>
                   <div style={{fontSize:10,color:"#a040a0",fontWeight:700,marginBottom:5}}>🔒 {move.name}: {move.effect.slice(0,80)}</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[${move.name} by ${attacker.nickname||attacker.pokemon.name} — ${move.effect.slice(0,50)}]`});onIncrementAction(attacker.id,false);}} style={{width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} to {t.nickname||t.pokemon.name} (noted on card)</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[${move.name} by ${nameOf(attacker,allEntries)} — ${move.effect.slice(0,50)}]`});onIncrementAction(attacker.id,false);}} style={{width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} to {nameOf(t,allEntries)} (noted on card)</button>;})}
                 </div>
               )}
 
@@ -1763,7 +1783,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{background:"rgba(112,88,152,0.08)",border:"1px solid #70589840",borderRadius:5,padding:"8px 10px"}}>
                   <div style={{fontSize:10,color:"#705898",fontWeight:700,marginBottom:5}}>🎵 Perish Song — 3-round countdown</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {allEntries.filter(e=>e.currentHp>0).map(e=><button key={e.id} onClick={()=>{onApplySpecial!(e.id,{notes:(e.notes?e.notes+" ":"")+`[Perish Song — faints in 3 rounds]`});}} style={{padding:"4px 8px",background:"rgba(112,88,152,0.15)",border:"1px solid #70589840",borderRadius:3,color:"#705898",fontSize:10,fontWeight:700,cursor:"pointer"}}>Apply to {e.nickname||e.pokemon.name}</button>)}
+                    {allEntries.filter(e=>e.currentHp>0).map(e=><button key={e.id} onClick={()=>{onApplySpecial!(e.id,{notes:(e.notes?e.notes+" ":"")+`[Perish Song — faints in 3 rounds]`});}} style={{padding:"4px 8px",background:"rgba(112,88,152,0.15)",border:"1px solid #70589840",borderRadius:3,color:"#705898",fontSize:10,fontWeight:700,cursor:"pointer"}}>Apply to {nameOf(e,allEntries)}</button>)}
                   </div>
                 </div>
               )}
@@ -1772,7 +1792,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isTrap&&targets.length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"8px 10px"}}>
                   <div style={{fontSize:10,color:"#f08030",fontWeight:700,marginBottom:5}}>🔗 {move.name} — Trap</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[Trapped by ${move.name} — −1 HP/round, cannot switch, 4-5 rounds]`});}} style={{width:"100%",padding:"5px",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",borderRadius:4,color:"#f08030",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Trap {t.nickname||t.pokemon.name} (noted on card)</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[Trapped by ${move.name} — −1 HP/round, cannot switch, 4-5 rounds]`});}} style={{width:"100%",padding:"5px",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",borderRadius:4,color:"#f08030",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Trap {nameOf(t,allEntries)} (noted on card)</button>;})}
                 </div>
               )}
 
@@ -1787,7 +1807,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     const finalDmg=dr?Math.max(1,(dr.successes)-def):null;
                     const healAmt=finalDmg?Math.floor(finalDmg/2):null;
                     if(!healAmt||!dr)return<div key={tid} style={{fontSize:10,color:"#5a6080"}}>Roll damage first, then drain heal will appear</div>;
-                    return<button key={tid} onClick={()=>{onApplyDmg(attacker.id,-healAmt);}} style={{width:"100%",padding:"5px",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",borderRadius:4,color:"#00d4aa",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>💚 Heal {healAmt} HP to {attacker.nickname||attacker.pokemon.name} (½ drain)</button>;
+                    return<button key={tid} onClick={()=>{onApplyDmg(attacker.id,-healAmt);}} style={{width:"100%",padding:"5px",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",borderRadius:4,color:"#00d4aa",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>💚 Heal {healAmt} HP to {nameOf(attacker,allEntries)} (½ drain)</button>;
                   })}
                 </div>
               )}
@@ -1804,7 +1824,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{background:"rgba(112,88,152,0.08)",border:"1px solid #70589840",borderRadius:5,padding:"8px 10px"}}>
                   <div style={{fontSize:10,color:"#705898",fontWeight:700,marginBottom:5}}>💀 {move.name}</div>
                   {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;
-                    return<button key={tid} onClick={()=>{onApplySpecial!(tid,{currentWill:move.name==="Grudge"?0:Math.max(1,t.currentWill-1)});onApplySpecial!(attacker.id,{currentHp:move.name==="Grudge"?0:attacker.currentHp});onClose();}} style={{width:"100%",padding:"5px",background:"rgba(112,88,152,0.2)",border:"1px solid #70589840",borderRadius:4,color:"#705898",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} → {t.nickname||t.pokemon.name}</button>;
+                    return<button key={tid} onClick={()=>{onApplySpecial!(tid,{currentWill:move.name==="Grudge"?0:Math.max(1,t.currentWill-1)});onApplySpecial!(attacker.id,{currentHp:move.name==="Grudge"?0:attacker.currentHp});onClose();}} style={{width:"100%",padding:"5px",background:"rgba(112,88,152,0.2)",border:"1px solid #70589840",borderRadius:4,color:"#705898",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} → {nameOf(t,allEntries)}</button>;
                   })}
                 </div>
               )}
@@ -1820,7 +1840,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isForesight&&targets.length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(248,216,48,0.06)",border:"1px solid #f8d03030",borderRadius:5,padding:"8px 10px"}}>
                   <div style={{fontSize:10,color:"#f8d030",fontWeight:700,marginBottom:5}}>👁 {move.name}: removes Ghost immunity and Evasion on target</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[${move.name} — Ghost immune and Evasion removed]`});onClose();}} style={{width:"100%",padding:"5px",background:"rgba(248,216,48,0.1)",border:"1px solid #f8d03040",borderRadius:4,color:"#f8d030",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} to {t.nickname||t.pokemon.name}</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{notes:(t.notes?t.notes+" ":"")+`[${move.name} — Ghost immune and Evasion removed]`});onClose();}} style={{width:"100%",padding:"5px",background:"rgba(248,216,48,0.1)",border:"1px solid #f8d03040",borderRadius:4,color:"#f8d030",fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:3}}>Apply {move.name} to {nameOf(t,allEntries)}</button>;})}
                 </div>
               )}
 
@@ -1851,7 +1871,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     const atkAbil=attacker.abilityOverride||(attacker.abilities[0]?.name||"—");
                     const defAbil=t.abilityOverride||(t.abilities[0]?.name||"—");
                     return<button key={tid} onClick={()=>{onApplySpecial!(attacker.id,{abilityOverride:defAbil});onApplySpecial!(tid,{abilityOverride:atkAbil});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px 8px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>
-                      Swap: {attacker.nickname||attacker.pokemon.name} [{atkAbil}] ↔ {t.nickname||t.pokemon.name} [{defAbil}]
+                      Swap: {nameOf(attacker,allEntries)} [{atkAbil}] ↔ {nameOf(t,allEntries)} [{defAbil}]
                     </button>;
                   })}
                 </div>
@@ -1862,7 +1882,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{background:"rgba(168,64,160,0.08)",border:"1px solid #a040a040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:6}}>📡 Entrainment — Force target to copy your ability</div>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
-                    {attacker.abilities.map(ab=>targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={ab.name+tid} onClick={()=>{onApplySpecial!(tid,{abilityOverride:ab.name});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>Force {t.nickname||t.pokemon.name} → {ab.name}</button>;}))}
+                    {attacker.abilities.map(ab=>targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={ab.name+tid} onClick={()=>{onApplySpecial!(tid,{abilityOverride:ab.name});onIncrementAction(attacker.id,false);onClose();}} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",color:"#e8eaf0"}}>Force {nameOf(t,allEntries)} → {ab.name}</button>;}))}
                   </div>
                 </div>
               )}
@@ -1883,7 +1903,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isSuppressAbility&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(90,96,128,0.1)",border:"1px solid #5a608040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#8b90a8",marginBottom:6}}>⊘ {move.name} — Suppress target's ability</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{abilitySuppressed:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(90,96,128,0.15)",border:"1px solid #5a608040",color:"#8b90a8",marginBottom:3}}>⊘ Suppress ability on {t.nickname||t.pokemon.name}</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{abilitySuppressed:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(90,96,128,0.15)",border:"1px solid #5a608040",color:"#8b90a8",marginBottom:3}}>⊘ Suppress ability on {nameOf(t,allEntries)}</button>;})}
                 </div>
               )}
 
@@ -1891,7 +1911,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isSoak&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(104,144,240,0.08)",border:"1px solid #6890f040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#6890f0",marginBottom:6}}>💧 Soak — Change target's type to Water</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:["Water"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(104,144,240,0.15)",border:"1px solid #6890f040",color:"#6890f0",marginBottom:3}}>💧 Make {t.nickname||t.pokemon.name} Water-type</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:["Water"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(104,144,240,0.15)",border:"1px solid #6890f040",color:"#6890f0",marginBottom:3}}>💧 Make {nameOf(t,allEntries)} Water-type</button>;})}
                 </div>
               )}
 
@@ -1899,7 +1919,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isTrickOrTreat&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475740",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#ff4757",marginBottom:6}}>👻 Trick-Or-Treat — Add Ghost type</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;const cur=t.typeOverride||t.pokemon.types;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:[...cur,"Ghost"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",color:"#ff4757",marginBottom:3}}>👻 Add Ghost to {t.nickname||t.pokemon.name} ({cur.join("/")})</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;const cur=t.typeOverride||t.pokemon.types;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:[...cur,"Ghost"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",color:"#ff4757",marginBottom:3}}>👻 Add Ghost to {nameOf(t,allEntries)} ({cur.join("/")})</button>;})}
                 </div>
               )}
 
@@ -1907,7 +1927,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isForestsCurse&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(120,200,80,0.08)",border:"1px solid #78c85040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#78c850",marginBottom:6}}>🌿 Forest's Curse — Add Grass type</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;const cur=t.typeOverride||t.pokemon.types;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:[...cur,"Grass"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(120,200,80,0.15)",border:"1px solid #78c85040",color:"#78c850",marginBottom:3}}>🌿 Add Grass to {t.nickname||t.pokemon.name} ({cur.join("/")})</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;const cur=t.typeOverride||t.pokemon.types;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{typeOverride:[...cur,"Grass"]});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(120,200,80,0.15)",border:"1px solid #78c85040",color:"#78c850",marginBottom:3}}>🌿 Add Grass to {nameOf(t,allEntries)} ({cur.join("/")})</button>;})}
                 </div>
               )}
 
@@ -1940,12 +1960,12 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     <div style={{fontSize:11,fontWeight:700,color:"#f8d030",marginBottom:6}}>🔀 {move.name} — Swap held items</div>
                     <div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:9,color:"#8b90a8",marginBottom:2}}>{attacker.nickname||attacker.pokemon.name}</div>
+                        <div style={{fontSize:9,color:"#8b90a8",marginBottom:2}}>{nameOf(attacker,allEntries)}</div>
                         <input value={heldItemInputA} onChange={e=>setHeldItemInputA(e.target.value)} placeholder="Item name" style={{width:"100%",background:"#13151f",border:"1px solid #2a2f45",borderRadius:3,color:"#e8eaf0",fontSize:10,padding:"3px 6px"}}/>
                       </div>
                       <span style={{color:"#f8d030",fontSize:14}}>⇄</span>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:9,color:"#8b90a8",marginBottom:2}}>{t.nickname||t.pokemon.name}</div>
+                        <div style={{fontSize:9,color:"#8b90a8",marginBottom:2}}>{nameOf(t,allEntries)}</div>
                         <div style={{fontSize:10,color:"#e8eaf0",padding:"4px 6px",background:"#13151f",border:"1px solid #2a2f45",borderRadius:3}}>{t.heldItem||"(no item)"}</div>
                       </div>
                     </div>
@@ -1959,7 +1979,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{background:"rgba(248,216,48,0.08)",border:"1px solid #f8d03040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#f8d030",marginBottom:6}}>🎁 Bestow — Give your held item</div>
                   <div style={{fontSize:10,color:"#8b90a8",marginBottom:4}}>Your item: <strong style={{color:"#f8d030"}}>{attacker.heldItem||"(none)"}</strong></div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{heldItem:attacker.heldItem});onApplySpecial!(attacker.id,{heldItem:undefined});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(248,216,48,0.15)",border:"1px solid #f8d03040",color:"#f8d030",marginBottom:3}}>🎁 Give to {t.nickname||t.pokemon.name}</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{heldItem:attacker.heldItem});onApplySpecial!(attacker.id,{heldItem:undefined});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(248,216,48,0.15)",border:"1px solid #f8d03040",color:"#f8d030",marginBottom:3}}>🎁 Give to {nameOf(t,allEntries)}</button>;})}
                 </div>
               )}
 
@@ -1967,7 +1987,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isEmbargo&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475740",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#ff4757",marginBottom:6}}>🚫 Embargo — Prevent item use</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{itemEmbargoed:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",color:"#ff4757",marginBottom:3}}>🚫 Embargo {t.nickname||t.pokemon.name}</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{itemEmbargoed:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",color:"#ff4757",marginBottom:3}}>🚫 Embargo {nameOf(t,allEntries)}</button>;})}
                 </div>
               )}
 
@@ -1986,7 +2006,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   <div style={{fontSize:11,fontWeight:700,color:"#f08030",marginBottom:4}}>🥁 Belly Drum — Max STR at half HP</div>
                   <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Costs <strong style={{color:"#ff4757"}}>{cost} HP</strong> · Raises STR by <strong style={{color:"#00d4aa"}}>+3</strong></div>
                   {!canUse&&<div style={{fontSize:10,color:"#ff4757",marginBottom:4}}>⚠ Not enough HP!</div>}
-                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);onApplyEffect(attacker.id,"strength",3,"Belly Drum",attacker.nickname||attacker.pokemon.name);onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(240,128,48,0.2)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#f0803040":"#5a608030"}`,color:canUse?"#f08030":"#5a6080"}}>
+                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);onApplyEffect(attacker.id,"strength",3,"Belly Drum",nameOf(attacker,allEntries));onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(240,128,48,0.2)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#f0803040":"#5a608030"}`,color:canUse?"#f08030":"#5a6080"}}>
                     🥁 Pay {cost} HP → STR +3
                   </button>
                 </div>
@@ -1998,7 +2018,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   <div style={{fontSize:11,fontWeight:700,color:"#a040a0",marginBottom:4}}>🎶 Clangorous Soul — All stats +1</div>
                   <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Costs <strong style={{color:"#ff4757"}}>{cost} HP</strong> · All attributes <strong style={{color:"#00d4aa"}}>+1</strong></div>
                   {!canUse&&<div style={{fontSize:10,color:"#ff4757",marginBottom:4}}>⚠ Not enough HP!</div>}
-                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);(["strength","dexterity","vitality","special","insight"] as const).forEach(a=>onApplyEffect(attacker.id,a,1,"Clangorous Soul",attacker.nickname||attacker.pokemon.name));onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(160,64,160,0.2)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#a040a040":"#5a608030"}`,color:canUse?"#a040a0":"#5a6080"}}>
+                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);(["strength","dexterity","vitality","special","insight"] as const).forEach(a=>onApplyEffect(attacker.id,a,1,"Clangorous Soul",nameOf(attacker,allEntries)));onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(160,64,160,0.2)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#a040a040":"#5a608030"}`,color:canUse?"#a040a0":"#5a6080"}}>
                     🎶 Pay {cost} HP → All +1
                   </button>
                 </div>
@@ -2010,7 +2030,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   <div style={{fontSize:11,fontWeight:700,color:"#ff4757",marginBottom:4}}>🔪 Fillet Away — Sharp offense at a cost</div>
                   <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Costs <strong style={{color:"#ff4757"}}>{cost} HP</strong> · STR <strong style={{color:"#00d4aa"}}>+2</strong> · SPC <strong style={{color:"#00d4aa"}}>+2</strong></div>
                   {!canUse&&<div style={{fontSize:10,color:"#ff4757",marginBottom:4}}>⚠ Not enough HP!</div>}
-                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);onApplyEffect(attacker.id,"strength",2,"Fillet Away",attacker.nickname||attacker.pokemon.name);onApplyEffect(attacker.id,"special",2,"Fillet Away",attacker.nickname||attacker.pokemon.name);onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(255,71,87,0.15)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#ff475740":"#5a608030"}`,color:canUse?"#ff4757":"#5a6080"}}>
+                  <button disabled={!canUse} onClick={()=>{onApplyDmg(attacker.id,cost);onApplyEffect(attacker.id,"strength",2,"Fillet Away",nameOf(attacker,allEntries));onApplyEffect(attacker.id,"special",2,"Fillet Away",nameOf(attacker,allEntries));onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:canUse?"pointer":"not-allowed",background:canUse?"rgba(255,71,87,0.15)":"rgba(90,96,128,0.1)",border:`1px solid ${canUse?"#ff475740":"#5a608030"}`,color:canUse?"#ff4757":"#5a6080"}}>
                     🔪 Pay {cost} HP → STR+2, SPC+2
                   </button>
                 </div>
@@ -2022,10 +2042,10 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   <div style={{fontSize:11,fontWeight:700,color:"#00d4aa",marginBottom:6}}>🎯 {move.name} — Redirect attacks</div>
                   <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>All single-target moves must target the marked Pokémon this round.</div>
                   {move.name==="Spotlight"&&targets.filter(t=>t!==attacker.id).length>0?(
-                    targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{isFollowMeTarget:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",color:"#00d4aa",marginBottom:3}}>🎯 Spotlight {t.nickname||t.pokemon.name}</button>;})
+                    targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{isFollowMeTarget:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",color:"#00d4aa",marginBottom:3}}>🎯 Spotlight {nameOf(t,allEntries)}</button>;})
                   ):(
                     <button onClick={()=>{onApplySpecial!(attacker.id,{isFollowMeTarget:true});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"6px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",color:"#00d4aa"}}>
-                      🎯 {attacker.nickname||attacker.pokemon.name} becomes the focus target
+                      🎯 {nameOf(attacker,allEntries)} becomes the focus target
                     </button>
                   )}
                 </div>
@@ -2034,7 +2054,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {/* After You */}
               {isAfterYou&&targets.filter(t=>t!==attacker.id).length>0&&(
                 <div style={{background:"rgba(248,216,48,0.06)",border:"1px solid #f8d03030",borderRadius:5,padding:"8px 10px",fontSize:11,color:"#f8d030"}}>
-                  ⚡ <strong>After You:</strong> {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);return t?`${t.nickname||t.pokemon.name}`:""}).join(", ")} acts immediately next. Move their card to the top of initiative manually.
+                  ⚡ <strong>After You:</strong> {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);return t?`${nameOf(t,allEntries)}`:""}).join(", ")} acts immediately next. Move their card to the top of initiative manually.
                 </div>
               )}
 
@@ -2043,7 +2063,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{background:"rgba(240,128,48,0.08)",border:"1px solid #f0803040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#f08030",marginBottom:6}}>💕 Attract — Inflict Infatuated</div>
                   <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Requires opposite gender. Infatuated target must pass WP check (2 succ) to act each turn.</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||["Healthy"],"Infatuated")});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",color:"#f08030",marginBottom:3}}>💕 Infatuate {t.nickname||t.pokemon.name}</button>;})}
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||["Healthy"],"Infatuated")});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",color:"#f08030",marginBottom:3}}>💕 Infatuate {nameOf(t,allEntries)}</button>;})}
                 </div>
               )}
 
@@ -2052,7 +2072,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{background:"rgba(0,212,170,0.06)",border:"1px solid #00d4aa30",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#00d4aa",marginBottom:6}}>📌 Acupressure — Random stat +1</div>
                   {acupressureResult?<div style={{fontSize:11,color:"#00d4aa",marginBottom:6}}>Result: {acupressureResult}</div>:null}
-                  <button onClick={()=>{const attrs2:Array<keyof AttrSet>=["strength","dexterity","vitality","special","insight"];const labels={strength:"STR",dexterity:"DEX",vitality:"VIT",special:"SPC",insight:"INS"};const picked=attrs2[Math.floor(Math.random()*attrs2.length)];const tid=targets.length>0?targets[0]:attacker.id;const t=allEntries.find(e=>e.id===tid)||attacker;setAcupressureResult(`${labels[picked]} +1 on ${t.nickname||t.pokemon.name}`);onApplyEffect(tid,picked,1,"Acupressure",attacker.nickname||attacker.pokemon.name);}} style={{padding:"6px 12px",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",borderRadius:4,color:"#00d4aa",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                  <button onClick={()=>{const attrs2:Array<keyof AttrSet>=["strength","dexterity","vitality","special","insight"];const labels={strength:"STR",dexterity:"DEX",vitality:"VIT",special:"SPC",insight:"INS"};const picked=attrs2[Math.floor(Math.random()*attrs2.length)];const tid=targets.length>0?targets[0]:attacker.id;const t=allEntries.find(e=>e.id===tid)||attacker;setAcupressureResult(`${labels[picked]} +1 on ${nameOf(t,allEntries)}`);onApplyEffect(tid,picked,1,"Acupressure",nameOf(attacker,allEntries));}} style={{padding:"6px 12px",background:"rgba(0,212,170,0.15)",border:"1px solid #00d4aa40",borderRadius:4,color:"#00d4aa",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                     🎲 Roll Acupressure
                   </button>
                 </div>
@@ -2082,7 +2102,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   <div style={{fontSize:10,color:"#ff4757",fontWeight:700,marginBottom:4}}>💥 Recoil</div>
                   <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>After damage is dealt, apply recoil to user (½ damage dealt back to self).</div>
                   <button onClick={()=>{const recoilDmg=Math.max(1,Math.floor(attacker.currentHp/4));onApplyDmg(attacker.id,recoilDmg);}} style={{padding:"4px 10px",background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                    Apply Recoil (~{Math.max(1,Math.floor(attacker.currentHp/4))} HP to {attacker.nickname||attacker.pokemon.name})
+                    Apply Recoil (~{Math.max(1,Math.floor(attacker.currentHp/4))} HP to {nameOf(attacker,allEntries)})
                   </button>
                 </div>
               )}
@@ -2092,7 +2112,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 // Apply all stat effects
                 statFx.forEach(se=>{
                   const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
-                  applyTargets.forEach(tid=>onApplyEffect(tid,se.attr,se.amount,move.name,attacker.nickname||attacker.pokemon.name));
+                  applyTargets.forEach(tid=>onApplyEffect(tid,se.attr,se.amount,move.name,nameOf(attacker,allEntries)));
                 });
                 onIncrementAction(attacker.id,isPriority);onClose();
               }} style={{width:"100%",padding:"8px 10px",background:"#00d4aa",border:"none",borderRadius:5,fontSize:12,fontWeight:700,color:"#0f1117",cursor:"pointer"}}>
@@ -2194,8 +2214,8 @@ function CapturePopup({allEntries,defaultTargetId,onClose}:{allEntries:BattleEnt
             <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>2. Select Target Pokémon</div>
             <select value={targetId} onChange={e=>setTargetId(e.target.value)} style={{width:"100%",background:"#0f1117",border:"1px solid #2a2f45",borderRadius:4,color:"#e8eaf0",fontSize:12,padding:"5px 8px"}}>
               <option value="">— choose target —</option>
-              {enemies.map(e=><option key={e.id} value={e.id}>{e.nickname||e.pokemon.name} ({e.currentHp}/{e.maxHp} HP, {e.pokemon.suggestedRank})</option>)}
-              {allEntries.filter(e=>e.side!=="enemy").map(e=><option key={e.id} value={e.id}>[{e.side}] {e.nickname||e.pokemon.name}</option>)}
+              {enemies.map(e=><option key={e.id} value={e.id}>{nameOf(e,allEntries)} ({e.currentHp}/{e.maxHp} HP, {e.pokemon.suggestedRank})</option>)}
+              {allEntries.filter(e=>e.side!=="enemy").map(e=><option key={e.id} value={e.id}>[{e.side}] {nameOf(e,allEntries)}</option>)}
             </select>
             {target&&<div style={{background:"#13151f",borderRadius:5,padding:"8px 10px",marginTop:6,fontSize:11}}>
               <span style={{color:"#5a6080"}}>Rank: </span><strong style={{color:"#ffd32a"}}>{target.pokemon.suggestedRank}</strong>
@@ -2314,7 +2334,7 @@ function PriorityPopup({entries,allEntries,weather,onClose,onApplyDmg,onApplyEff
             <div key={entry.id} style={{background:"#13151f",border:`1px solid ${TYPE_COLORS[move.type as PokemonType]||"#2a2f45"}40`,borderRadius:6,padding:"10px 12px",marginBottom:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                 <div style={{width:8,height:8,borderRadius:"50%",background:TYPE_COLORS[entry.pokemon.types[0]],flexShrink:0}}/>
-                <span style={{fontSize:13,fontWeight:700,color:"#e8eaf0",flex:1}}>{entry.nickname||entry.pokemon.name}</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#e8eaf0",flex:1}}>{nameOf(entry,allEntries)}</span>
                 <span style={{fontSize:9,color:"#5a6080"}}>HP</span>
                 <span style={{fontSize:11,color:entry.currentHp/entry.maxHp>0.5?"#00d4aa":entry.currentHp/entry.maxHp>0.25?"#ffd32a":"#ff4757"}}>{entry.currentHp}/{entry.maxHp}</span>
                 <span style={{fontSize:9,color:"#5a6080",marginLeft:6}}>WP</span>
@@ -2459,7 +2479,7 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
                 <div style={{background:"#0f1117",borderRadius:"0 0 4px 4px",padding:"6px 8px",border:"1px solid #3d8bff20",borderTop:"none",marginTop:-1}}>
                   {def&&<div style={{fontSize:9,color:"#8b90a8",marginBottom:5,lineHeight:1.4}}>{def.combat}</div>}
                   <div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:5}}>
-                    {others.map(t=><button key={t.id} onClick={()=>setTargets(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])} style={{padding:"2px 6px",borderRadius:3,fontSize:9,cursor:"pointer",border:`1px solid ${targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:targets.includes(t.id)?"#e8eaf0":"#8b90a8"}}>{t.nickname||t.pokemon.name}</button>)}
+                    {others.map(t=><button key={t.id} onClick={()=>setTargets(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])} style={{padding:"2px 6px",borderRadius:3,fontSize:9,cursor:"pointer",border:`1px solid ${targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:targets.includes(t.id)?"#e8eaf0":"#8b90a8"}}>{nameOf(t,allEntries)}</button>)}
                   </div>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                     <button onClick={()=>setRoll(rollDice(Math.max(1,pool)))} style={{background:"#3d8bff20",border:"1px solid #3d8bff50",borderRadius:3,color:"#3d8bff",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll {sk} ({pool}d)</button>
@@ -2503,7 +2523,7 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
                     else if(statusCure==="all")onUpdate(entry.id,{statuses:["Healthy"],currentHp:entry.maxHp});
                     else if(statusCure)onUpdate(entry.id,{statuses:removeStatus(entry.statuses||[],statusCure as string)});
                     else if(xBoost){const nm=[...entry.statMods];nm.push({source:item.name,attr:xBoost as string,amount:1,appliedBy:"Item"});onUpdate(entry.id,{statMods:nm});}
-                    alert(`Used ${item.name} on ${entry.nickname||entry.pokemon.name}!`);
+                    alert(`Used ${item.name} on ${nameOf(entry,allEntries)}!`);
                   }} style={{background:"rgba(255,211,42,0.15)",border:"1px solid #ffd32a40",borderRadius:3,color:"#ffd32a",padding:"2px 6px",fontSize:8,fontWeight:700,cursor:"pointer"}}>Use</button>}
                 </div>
               );
@@ -2536,7 +2556,7 @@ function MegaEvolutionPopup({entry,allEntries,onClose,onApply}:{
         </div>
         {entry.isMegaEvolved?(
           <div>
-            <div style={{color:"#f08030",fontWeight:700,marginBottom:12}}>🔶 {entry.nickname||entry.pokemon.name} is Mega-Evolved!</div>
+            <div style={{color:"#f08030",fontWeight:700,marginBottom:12}}>🔶 {nameOf(entry,allEntries)} is Mega-Evolved!</div>
             <div style={{fontSize:11,color:"#8b90a8",marginBottom:16}}>Mega Evolution lasts the whole battle. It will revert when the battle ends.</div>
             <button onClick={()=>{
               onApply(entry.id,{isMegaEvolved:false,attrs:entry.megaOriginalAttrs||entry.attrs,megaOriginalAttrs:undefined});
@@ -2809,7 +2829,7 @@ function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
                 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                   {others.map(t=>(
                     <button key={t.id} onClick={()=>setSelTarget(t.id)} style={{padding:"4px 8px",borderRadius:3,fontSize:10,cursor:"pointer",border:`1px solid ${selTarget===t.id?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:selTarget===t.id?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:selTarget===t.id?"#e8eaf0":"#8b90a8"}}>
-                      {t.nickname||t.pokemon.name} ({t.currentHp}/{t.maxHp})
+                      {nameOf(t,allEntries)} ({t.currentHp}/{t.maxHp})
                     </button>
                   ))}
                 </div>
@@ -2832,7 +2852,7 @@ function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
                         onApply(entry.id,{zMoveUsed:true,currentWill:alreadyUsed?Math.max(0,entry.currentWill-repeatCost):entry.currentWill});
                         onClose();
                       }} style={{width:"100%",background:"#ffd32a",color:"#0f1117",border:"none",borderRadius:5,padding:"8px",fontWeight:700,cursor:"pointer",marginTop:6}}>
-                        ⭐ Apply {finalDmg} damage to {t.nickname||t.pokemon.name}{alreadyUsed?` (−${repeatCost} WP)`:""}
+                        ⭐ Apply {finalDmg} damage to {nameOf(t,allEntries)}{alreadyUsed?` (−${repeatCost} WP)`:""}
                       </button>
                     );
                   })()}
@@ -3636,7 +3656,7 @@ export default function BattleTrackerPage(){
                   <div key={e.id} onClick={()=>upd(e.id,{isExpanded:!e.isExpanded})} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 5px",cursor:"pointer",background:activeEntry?.id===e.id?"#C8D8F0":"transparent",borderLeft:`3px solid ${activeEntry?.id===e.id?"#2858C0":"transparent"}`,opacity:e.currentHp<=0?0.45:1,borderBottom:"1px solid #C8C8A8"}}>
                     <span style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace",width:12,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
                     <div style={{width:5,height:5,background:e.currentHp<=0?"#787878":TYPE_COLORS[e.pokemon.types[0]],border:"1px solid #181818",flexShrink:0}}/>
-                    <span style={{fontSize:10,color:e.currentHp<=0?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none",fontWeight:600}}>{e.nickname||e.pokemon.name}</span>
+                    <span style={{fontSize:10,color:e.currentHp<=0?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none",fontWeight:600}}>{nameOf(e,entries)}</span>
                     <span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{e.initiative}</span>
                     <span style={{fontSize:8,color:e.currentHp<=0?"#888870":e.currentHp/e.maxHp>0.5?"#18C840":e.currentHp/e.maxHp>0.25?"#E8B018":"#D82808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
                   </div>
@@ -3670,9 +3690,15 @@ export default function BattleTrackerPage(){
                 {withStatus.map(e=>{
                   const sc2=e.side==="player"?"#2858C0":e.side==="enemy"?"#D82808":"#888870";
                   const sts=(e.statuses||[]).filter(s=>s!=="Healthy");
+                  // 8 chars total is too tight to just slice(0,8): on a numbered
+                  // duplicate the suffix is what disambiguates it, and a plain
+                  // slice would cut that off before the ellipsis ever would.
+                  // Shrink the base first and keep the number.
+                  const{base,suffix}=nameParts(e,entries);
+                  const chip=(base.slice(0,Math.max(1,8-suffix.length))+suffix).toUpperCase();
                   return(
                     <div key={e.id} style={{display:"flex",alignItems:"center",gap:2,background:"#F8F8E8",border:`2px solid ${sc2}`,padding:"2px 5px",flexShrink:0}}>
-                      <span style={{fontSize:7,fontWeight:700,color:sc2,fontFamily:"'Press Start 2P',monospace"}}>{(e.nickname||e.pokemon.name).slice(0,8).toUpperCase()}</span>
+                      <span style={{fontSize:7,fontWeight:700,color:sc2,fontFamily:"'Press Start 2P',monospace"}}>{chip}</span>
                       {sts.map(s=><StatusBadge key={s} status={s}/>)}
                       {e.isProtected&&<span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace"}}>PROT</span>}
                       {(e.statMods||[]).length>0&&<span style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>+{e.statMods.length}m</span>}
@@ -3706,7 +3732,7 @@ export default function BattleTrackerPage(){
                 {/* Enemy nameplate — top-left, with that side's field hazards below it */}
                 {mounted&&onFieldEnemy&&(
                   <div style={{position:"absolute",top:16,left:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
-                    <SceneNameplate entry={onFieldEnemy} enemy onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                    <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
                     <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                   </div>
                 )}
@@ -3732,7 +3758,7 @@ export default function BattleTrackerPage(){
                     gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
                     {benchFar.map(e=>(
                       <span key={e.id} style={{pointerEvents:"auto"}}>
-                        <BenchMon entry={e} onClick={()=>setSceneEnemyId(e.id)}/>
+                        <BenchMon entry={e} allEntries={entries} onClick={()=>setSceneEnemyId(e.id)}/>
                       </span>
                     ))}
                   </div>
@@ -3744,7 +3770,7 @@ export default function BattleTrackerPage(){
                     gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
                     {benchNear.map(e=>(
                       <span key={e.id} style={{pointerEvents:"auto"}}>
-                        <BenchMon entry={e} back onClick={()=>setSceneEnemyId(e.id)}/>
+                        <BenchMon entry={e} back allEntries={entries} onClick={()=>setSceneEnemyId(e.id)}/>
                       </span>
                     ))}
                   </div>
@@ -3771,7 +3797,7 @@ export default function BattleTrackerPage(){
                 {mounted&&onFieldPlayer&&(
                   <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                     <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
-                    <SceneNameplate entry={onFieldPlayer} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                    <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
                   </div>
                 )}
 
@@ -3798,7 +3824,7 @@ export default function BattleTrackerPage(){
                                   <div key={e.id} style={{display:"flex",alignItems:"center",gap:5,background:isActing?"#F0ECD4":isFocused?"#C8D8F0":"#F0ECD4",border:`2px solid ${isActing?"#787018":isFocused?"#2858C0":"#181818"}`,padding:"3px 5px",opacity:e.currentHp<=0?0.5:1}}>
                                     <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={28} height={28} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
                                     <div style={{flex:1,minWidth:0}}>
-                                      <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#181818",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(e.nickname||e.pokemon.name).toUpperCase()}</div>
+                                      <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#181818",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(nameOf(e,entries)).toUpperCase()}</div>
                                       <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:e.currentHp/e.maxHp>0.5?"#187028":e.currentHp/e.maxHp>0.25?"#807008":"#A00808"}}>{e.currentHp}/{e.maxHp}</div>
                                     </div>
                                     <div style={{display:"flex",flexDirection:"column",gap:2}}>
@@ -3828,13 +3854,13 @@ export default function BattleTrackerPage(){
                         <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#181818",flex:1}}>BAG</span>
                         <button onClick={()=>setMenuMode("root")} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",padding:"3px 6px",cursor:"pointer"}}>BACK</button>
                       </div>
-                      <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",marginBottom:8,lineHeight:1.6}}>Quick restore for {onFieldPlayer?(onFieldPlayer.nickname||onFieldPlayer.pokemon.name):"—"}.</div>
+                      <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",marginBottom:8,lineHeight:1.6}}>Quick restore for {onFieldPlayer?(nameOf(onFieldPlayer,entries)):"—"}.</div>
                       {onFieldPlayer?(
                         <div style={{display:"flex",flexDirection:"column",gap:5}}>
                           {[
-                            {l:"POTION  (+2 HP)",fn:()=>upd(onFieldPlayer.id,{currentHp:Math.min(onFieldPlayer.maxHp,onFieldPlayer.currentHp+2)}),m:`${onFieldPlayer.nickname||onFieldPlayer.pokemon.name} recovered HP!`},
-                            {l:"ETHER   (+2 WP)",fn:()=>upd(onFieldPlayer.id,{currentWill:Math.min(onFieldPlayer.maxWill,onFieldPlayer.currentWill+2)}),m:`${onFieldPlayer.nickname||onFieldPlayer.pokemon.name} recovered WP!`},
-                            {l:"FULL RESTORE",fn:()=>upd(onFieldPlayer.id,{currentHp:onFieldPlayer.maxHp,currentWill:onFieldPlayer.maxWill,statuses:["Healthy"],statusTurnsLeft:0}),m:`${onFieldPlayer.nickname||onFieldPlayer.pokemon.name} was fully restored!`},
+                            {l:"POTION  (+2 HP)",fn:()=>upd(onFieldPlayer.id,{currentHp:Math.min(onFieldPlayer.maxHp,onFieldPlayer.currentHp+2)}),m:`${nameOf(onFieldPlayer,entries)} recovered HP!`},
+                            {l:"ETHER   (+2 WP)",fn:()=>upd(onFieldPlayer.id,{currentWill:Math.min(onFieldPlayer.maxWill,onFieldPlayer.currentWill+2)}),m:`${nameOf(onFieldPlayer,entries)} recovered WP!`},
+                            {l:"FULL RESTORE",fn:()=>upd(onFieldPlayer.id,{currentHp:onFieldPlayer.maxHp,currentWill:onFieldPlayer.maxWill,statuses:["Healthy"],statusTurnsLeft:0}),m:`${nameOf(onFieldPlayer,entries)} was fully restored!`},
                           ].map(it=>(
                             <button key={it.l} onClick={()=>{it.fn();setSceneMsg(it.m);setMenuMode("root");}} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#F0ECD4",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"7px 8px",cursor:"pointer",textAlign:"left"}}>{it.l}</button>
                           ))}
@@ -3852,8 +3878,8 @@ export default function BattleTrackerPage(){
                   <div className="frw-blue" style={{height:"100%",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
-                        (sceneMsg||(onFieldPlayer?`What will ${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} do?`
-                          :onFieldEnemy?`${(onFieldEnemy.nickname||onFieldEnemy.pokemon.name).toUpperCase()} appeared!`
+                        (sceneMsg||(onFieldPlayer?`What will ${(nameOf(onFieldPlayer,entries)).toUpperCase()} do?`
+                          :onFieldEnemy?`${(nameOf(onFieldEnemy,entries)).toUpperCase()} appeared!`
                           :"Add a Pokémon to begin the battle."))}
                     </span>
                   </div>
@@ -3871,7 +3897,7 @@ export default function BattleTrackerPage(){
                               /* Gen 3 move select: entries sit bare inside the one
                                  window and are marked by a ▶ cursor, rather than
                                  each being its own bordered, drop-shadowed box. */
-                              <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
+                              <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
                                 style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:3,padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
                                 onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#D8E8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#2858C0";}}
                                 onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
@@ -3888,7 +3914,7 @@ export default function BattleTrackerPage(){
                       ):onFieldPlayer?(
                         <div style={{height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
                           <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#888870",textAlign:"center"}}>{onFieldPlayer.moves.length===0?"No moves.":"Out of WP."}</span>
-                          <button onClick={()=>{const s=getStruggleMove();setScenePopup(s);setSceneTargetIds([]);setSceneMsg(`${(onFieldPlayer.nickname||onFieldPlayer.pokemon.name).toUpperCase()} used STRUGGLE!`);setMenuMode("root");}}
+                          <button onClick={()=>{const s=getStruggleMove();setScenePopup(s);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used STRUGGLE!`);setMenuMode("root");}}
                             style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",boxShadow:"2px 2px 0 #181818"}}>
                             <span style={{fontSize:8,color:"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>STRUGGLE</span>
                             <span style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>No WP cost</span>
