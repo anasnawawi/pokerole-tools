@@ -827,10 +827,16 @@ export default function CharactersPage() {
     return filtered;
   }, [pSearch, pSort]);
 
-  const addPokemon = (num: number) => {
-    if (!sel || sel.pokemon.length >= 6) return;
+  /* Catching puts a Pokémon either in the party or straight into the PC, the
+     way the games do. Without the box route a full party is a dead end: the
+     browser greys out and there's nothing you can do but delete someone. */
+  const addPokemon = (num: number, to: "party" | "box" = "party") => {
+    if (!sel) return;
+    if (to === "party" && sel.pokemon.length >= 6) return;
     const key = `${sel.id}_${num}_${Date.now()}`;
-    setTrainers(prev => prev.map(t => t.id === sel.id ? { ...t, pokemon: [...t.pokemon, key] } : t));
+    setTrainers(prev => prev.map(t => t.id !== sel.id ? t : to === "party"
+      ? { ...t, pokemon: [...t.pokemon, key] }
+      : { ...t, pcBox: [...(t.pcBox ?? []), key] }));
     setPokemonSheets(prev => ({ ...prev, [key]: makeBlankPokemonSheet(num, sel.rank) }));
   };
 
@@ -1344,7 +1350,7 @@ export default function CharactersPage() {
               </div>
             )}
 
-            {tab === "pokemon" && (
+            {tab === "pokemon" && (() => { const partyFull = sel.pokemon.length >= 6; return (
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -1398,7 +1404,7 @@ export default function CharactersPage() {
                   })}
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>Add Pokémon</div>
+                  <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>Add Pokémon ({sel.pokemon.length}/6 in party)</div>
                   <input type="text" placeholder="Search by name or #…" value={pSearch} onChange={e => setPSearch(e.target.value)}
                     style={{ width: "100%", background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 5, padding: "6px 10px", color: "#202020", fontSize: 12, marginBottom: 6, outline: "none" }} />
                   <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
@@ -1409,22 +1415,43 @@ export default function CharactersPage() {
                       </button>
                     ))}
                   </div>
+                  {partyFull && (
+                    <div style={{ fontSize: 10, color: "#A07000", background: "#A0700014", border: "1px solid #A0700033", borderRadius: 4, padding: "5px 7px", marginBottom: 6, lineHeight: 1.5 }}>
+                      Party is full (6). New catches go to the PC Box.
+                    </div>
+                  )}
                   <div style={{ maxHeight: 340, overflowY: "auto" }}>
+                    {/* Explicit buttons rather than a clickable row: where a
+                        Pokémon goes is a real choice, and a row that silently
+                        did one of them gave no clue it was even clickable. */}
                     {filtPokemon.map((p, i) => (
-                      <div key={i} onClick={() => addPokemon(p.number)}
-                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 4, cursor: sel.pokemon.length >= 6 ? "not-allowed" : "pointer", opacity: sel.pokemon.length >= 6 ? 0.4 : 1 }}
-                        onMouseEnter={e => { if (sel.pokemon.length < 6) (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"; }}
+                      <div key={i}
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 4 }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
                         <span style={{ fontSize: 9, color: "#4A5468", width: 26, fontFamily: "'Exo 2'", fontWeight: 700 }}>#{String(p.number).padStart(3, "0")}</span>
-                        <span style={{ fontSize: 12, color: "#202020", flex: 1 }}>{p.name}</span>
+                        <span style={{ fontSize: 12, color: "#202020", flex: 1, minWidth: 0 }}>{p.name}</span>
                         {p.types.map(t => <TypeBadge key={t} type={t} />)}
-                        <span style={{ fontSize: 9, color: RANK_COLORS[p.suggestedRank] }}>{p.suggestedRank}</span>
+                        <span style={{ fontSize: 9, color: RANK_COLORS[p.suggestedRank], width: 52, textAlign: "right" }}>{p.suggestedRank}</span>
+                        <button onClick={() => addPokemon(p.number, "party")} disabled={partyFull}
+                          title={partyFull ? "Party is full — send it to the PC Box instead" : `Add ${p.name} to your party`}
+                          style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4, whiteSpace: "nowrap",
+                            cursor: partyFull ? "not-allowed" : "pointer", opacity: partyFull ? 0.4 : 1,
+                            border: "1px solid #2850A040", background: "#2850A020", color: "#2850A0" }}>
+                          + Party
+                        </button>
+                        <button onClick={() => addPokemon(p.number, "box")}
+                          title={`Send ${p.name} to the PC Box`}
+                          style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4, whiteSpace: "nowrap",
+                            cursor: "pointer", border: "1px solid #6890f040", background: "#6890f018", color: "#4A6ABF" }}>
+                          + Box
+                        </button>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-            )}
+            ); })()}
           </div>
         )}
       </div>

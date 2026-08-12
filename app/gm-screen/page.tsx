@@ -2185,7 +2185,7 @@ export default function GMScreen() {
   if(!mounted)return <div style={{height:"100vh",background:"#35785F"}}/>;
 
   return (
-    <PokedexFrame active="gm-screen" actions={
+    <PokedexFrame active="gm-screen" hideParty actions={
       /* The screen's own controls ride in the chassis's action slot, so they
          sit with the device keys rather than in a second bar of their own. */
       <div style={{display:"flex",gap:8,alignItems:"center",position:"relative"}}>

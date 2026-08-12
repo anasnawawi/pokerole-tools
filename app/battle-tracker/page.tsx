@@ -3534,7 +3534,7 @@ export default function BattleTrackerPage(){
   const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
 
   return(
-    <PokedexFrame active="battle-tracker">
+    <PokedexFrame active="battle-tracker" hideParty>
     <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#181818",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
       {showAddModal&&<AddPokemonModal onAdd={(p,side)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side)} onClose={()=>setShowAddModal(false)}/>}
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}

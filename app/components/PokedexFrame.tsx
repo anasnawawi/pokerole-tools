@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import PartyBar from "./PartyBar";
 
 /* Palette lifted from the Pokédex reference illustration: a crimson shell
    with a darker tone for moulded edges, navy for hard chrome, cyan for the
@@ -49,8 +50,12 @@ export const SITE_LINKS = [
  * `children` render inside the display as flex-column items, so a page can
  * hand over its existing sub-nav / content / footer rows unchanged.
  */
-export default function PokedexFrame({active,children,actions}:{
+export default function PokedexFrame({active,children,actions,hideParty}:{
   active?:string; children?:React.ReactNode; actions?:React.ReactNode;
+  /** Drop the party strip. For the GM Screen and Battle Tracker, which need
+   *  every pixel of height to lay out panels and read a fight — and which
+   *  show the party's live state themselves anyway. */
+  hideParty?:boolean;
 }) {
   const pathname = usePathname();
   const current = active ?? SITE_LINKS.find(l=>l.href===pathname)?.match;
@@ -139,6 +144,16 @@ export default function PokedexFrame({active,children,actions}:{
             {children}
           </div>
         </div>
+
+        {/* ── Party strip ───────────────────────────────────────────────────
+            The active party travels with you, the way it does in the games:
+            whatever tool you're in, you can see who you're carrying and how
+            hurt they are without going back to look. */}
+        {!hideParty&&(
+          <div style={{flexShrink:0,minWidth:0}}>
+            <PartyBar compact/>
+          </div>
+        )}
 
         {/* Yellow accent bar, as on the device's front */}
         <div style={{height:narrow?9:12,borderRadius:3,background:C.yellow,
