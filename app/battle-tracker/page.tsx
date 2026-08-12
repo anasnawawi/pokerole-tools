@@ -1244,8 +1244,13 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 {targetOptions.map(t=>{
                   const isSelf=t.id===attacker.id;
                   const sel=targets.includes(t.id);
-                  return<button key={t.id} onClick={()=>toggleTarget(t.id)} style={{padding:"5px 10px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${sel?(isSelf?"#a040a0":TYPE_COLORS[t.pokemon.types[0]]):"#3a4060"}`,background:sel?(isSelf?"rgba(160,64,160,0.2)":TYPE_COLORS[t.pokemon.types[0]]+"20"):"transparent",color:sel?"#e8eaf0":"#8b90a8"}}>
-                    {isSelf?"(Self) ":""}{nameOf(t,allEntries)} ({t.currentHp}/{t.maxHp})
+                  return<button key={t.id} onClick={()=>toggleTarget(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"6px 10px 5px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${sel?(isSelf?"#a040a0":TYPE_COLORS[t.pokemon.types[0]]):"#3a4060"}`,background:sel?(isSelf?"rgba(160,64,160,0.2)":TYPE_COLORS[t.pokemon.types[0]]+"20"):"transparent",color:sel?"#e8eaf0":"#8b90a8"}}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- local
+                        pixel art at a fixed tiny size; next/image would blur it. */}
+                    <img src={`/sprites/pokemon/${t.pokemon.number}.png`} alt="" width={26} height={26}
+                      style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0,filter:t.currentHp<=0?"grayscale(1)":undefined}}
+                      onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
+                    <span>{isSelf?"(Self) ":""}{nameOf(t,allEntries)} ({t.currentHp}/{t.maxHp})</span>
                   </button>;
                 })}
               </div>
