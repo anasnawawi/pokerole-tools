@@ -64,6 +64,24 @@ const HAPPINESS_EVO_POKEMON = new Set([
   "Munchlax","Azurill","Buneary","Riolu","Woobat","Swadloon","Chingling","Budew","Happiny",
 ]);
 
+/* Bag rows are free text with no ids, so a trainer can end up with two
+   "Potion" rows. Wherever the bag is offered as a list of *choices*, those
+   rows are one choice: picking either does the same thing, and rendering
+   both collided on the item name as a React key. Collapsed case-insensitively
+   with quantities summed, which is also what "how many do I have" means. */
+type InventoryRow = TrainerData["inventory"][number];
+function mergeInventory(inv: InventoryRow[]): InventoryRow[] {
+  const out: InventoryRow[] = [];
+  const seen = new Map<string, number>();
+  for (const row of inv) {
+    const k = row.name.trim().toLowerCase();
+    const at = seen.get(k);
+    if (at === undefined) { seen.set(k, out.length); out.push({ ...row }); }
+    else out[at] = { ...out[at], quantity: out[at].quantity + row.quantity };
+  }
+  return out;
+}
+
 function getFeedDelta(item: FeedItem, nature: string): number {
   if (item.baseDelta < 0) return item.baseDelta;
   if (item.flavor === "liked") return item.baseDelta; // already nature-tuned
@@ -318,7 +336,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
               if (e.target.value) { onTransferItemFromTrainer(e.target.value); upd({ heldItem: e.target.value }); }
             }} style={{ background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 3, color: "#585858", fontSize: 10, padding: "2px 5px" }}>
               <option value="">— none —</option>
-              {trainerInventory.filter(i => i.quantity > 0).map(i => (
+              {mergeInventory(trainerInventory).filter(i => i.quantity > 0).map(i => (
                 <option key={i.name} value={i.name}>{i.name} ×{i.quantity}</option>
               ))}
             </select>
@@ -563,7 +581,10 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                     const delta = getFeedDelta(item, nature);
                     const sign = delta > 0 ? `+${delta}` : `${delta}`;
                     const color = item.isMedicine ? "#C02820" : delta > item.baseDelta ? "#2850A0" : delta === 0 ? "#585858" : "#f85888";
-                    const trainerQty = trainerInventory.find(ti => ti.name.toLowerCase() === item.name.toLowerCase())?.quantity ?? 0;
+                    // Merged, so two "Potion" rows report the three the bag
+                    // actually holds rather than whichever row came first.
+                    const trainerQty = mergeInventory(trainerInventory)
+                      .find(ti => ti.name.toLowerCase() === item.name.toLowerCase())?.quantity ?? 0;
                     return (
                       <div key={item.name} onClick={() => {
                         upd(applyHappinessGain(sheet, delta));
@@ -1212,7 +1233,7 @@ export default function CharactersPage() {
                 {/* Equipment Slots */}
                 {(() => {
                   const BATTLE_ITEMS = ["Key Stone", "Z-Power Ring", "Dynamax Band", "Tera Orb"];
-                  const invNames = (sel.inventory || []).map(i => i.name);
+                  const invNames = mergeInventory(sel.inventory || []).map(i => i.name);
                   const equippableItems = invNames.filter(n => {
                     const d = ITEMS.find(x => x.name === n);
                     return d && d.pocket === "TrainerItems" && d.category !== "BattleItem";
