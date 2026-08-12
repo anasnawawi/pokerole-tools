@@ -3933,10 +3933,18 @@ export default function BattleTrackerPage(){
                           {l:"POKéMON",c:"#187828",fn:()=>setMenuMode("pokemon")},
                           {l:"RUN",c:"#3050B0",fn:()=>endBattle()},
                         ].map(b=>(
-                          <button key={b.l} onClick={b.fn} className="fr-ink" style={{display:"flex",alignItems:"center",gap:5,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,fontWeight:700}}
+                          <button key={b.l} onClick={b.fn} className="fr-ink" style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,fontWeight:700}}
                             onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="var(--fr-row-sel)";}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
-                            <span style={{color:b.c,textShadow:"none"}}>▶</span>{b.l}
+                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:b.c,textShadow:"none"}}>▶</span>{b.l}</span>
+                            {/* Extra actions this round roll at a rising penalty (needs
+                                2+, then 3+...), so a player about to hit FIGHT again
+                                should see that coming before they commit to it. */}
+                            {b.l==="FIGHT"&&onFieldPlayer&&onFieldPlayer.actionCount>0&&(
+                              <span style={{fontSize:6,color:"#D02828",paddingLeft:14,fontWeight:700}}>
+                                Action #{onFieldPlayer.actionCount+1} — needs {Math.min(onFieldPlayer.actionCount+1,5)}+
+                              </span>
+                            )}
                           </button>
                         ))}
                       </div>
