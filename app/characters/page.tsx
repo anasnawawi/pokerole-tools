@@ -13,6 +13,9 @@ import {
   POKEMON_RANK_ATTR_UPGRADES,
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage } from "../lib/storage";
+import {
+  TrainerData, PokemonSheetData, makeBlankTrainer as makeBlank, setActiveTrainer,
+} from "../lib/trainer";
 import { MOVES_DATA } from "../data/moves-data";
 import { POKEMON_EGG_GROUPS } from "../data/egg-groups-data";
 import PokedexFrame from "../components/PokedexFrame";
@@ -69,53 +72,6 @@ function getFeedDelta(item: FeedItem, nature: string): number {
   if (item.flavor === fl.liked) return item.baseDelta + 1;
   if (item.flavor === fl.disliked) return 0;
   return item.baseDelta;
-}
-
-interface TrainerData {
-  id: string; name: string; playerName: string; concept: string; nature: string;
-  age: TrainerAge; rank: Rank; money: number;
-  attributes: { strength: number; dexterity: number; vitality: number; insight: number };
-  socialAttributes: { tough: number; cool: number; beauty: number; cute: number; clever: number };
-  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; etiquette: number; intimidate: number; perform: number; capture: number };
-  customSkills: { name: string; points: number }[];
-  inventory: { name: string; quantity: number; description: string }[];
-  equippedItem: string;  // bike, fishing rod, etc. — persistent
-  battleItem: string;    // Key Stone / Z-Power Ring / Dynamax Band / Tera Orb
-  achievements: string[]; notes: string; gymBadges: boolean[]; pokemon: string[];
-  pcBox: string[]; // pokemon sheet keys stored in PC
-}
-
-interface PokemonSheetData {
-  number: number;
-  nickname: string;
-  rank: Rank;
-  loyalty: number;  // 0-5
-  happiness: number; // 0-5
-  attributes: { strength: number; dexterity: number; vitality: number; special: number; insight: number };
-  trainingAttributes: { strength: number; dexterity: number; vitality: number; special: number; insight: number };
-  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; intimidate: number; perform: number };
-  moves: string[]; // active move names (max insight+3)
-  partnerMoves: string[]; // bonus moves unlocked by Partner status
-  isPartner: boolean;
-  nature: string;
-  origin: "wild" | "egg" | "trade";
-  heldItem: string; // item name from trainer inventory, "" = none
-  cruelty: boolean;
-  inPokeball: boolean;
-  happinessPending: number; // overflow happiness toward loyalty (2 = +1 loyalty)
-  notes: string;
-}
-
-function makeBlank(): TrainerData {
-  return {
-    id: Date.now().toString(), name: "", playerName: "", concept: "", nature: "Hardy",
-    age: "Teen", rank: "Rookie", money: 2000,
-    attributes: { strength: 1, dexterity: 1, vitality: 1, insight: 1 },
-    socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
-    skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, etiquette: 0, intimidate: 0, perform: 0, capture: 0 },
-    customSkills: [], inventory: [], equippedItem: "", battleItem: "",
-    achievements: [], notes: "", gymBadges: Array(8).fill(false), pokemon: [], pcBox: [],
-  };
 }
 
 function makeBlankPokemonSheet(number: number, trainerRank: Rank): PokemonSheetData {
@@ -814,6 +770,10 @@ export default function CharactersPage() {
 
   useEffect(() => { saveToStorage("trainers", trainers); }, [trainers]);
   useEffect(() => { saveToStorage("pokemon_sheets", pokemonSheets); }, [pokemonSheets]);
+  /* The landing Pokédex plays as one trainer. Opening a trainer here is the
+     natural way to say which one, so the device follows the sheet you're
+     actually working on. */
+  useEffect(() => { if (selId) setActiveTrainer(selId); }, [selId]);
 
   const sel = trainers.find(t => t.id === selId);
   const upd = useCallback((id: string, u: Partial<TrainerData>) => {

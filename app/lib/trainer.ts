@@ -1,0 +1,73 @@
+/* Trainer + Pokémon sheet shapes, shared between the Characters page (which
+   edits them) and the landing Pokédex (which reads them to personalise the
+   device). They used to live inside the Characters page module; the landing
+   can't import from there without pulling in the whole ~2MB Pokémon dataset,
+   so the shapes and the blank-trainer factory live here instead. */
+import { Rank, TrainerAge } from "../data/game-rules";
+import { loadFromStorage, saveToStorage } from "./storage";
+
+export interface TrainerData {
+  id: string; name: string; playerName: string; concept: string; nature: string;
+  age: TrainerAge; rank: Rank; money: number;
+  attributes: { strength: number; dexterity: number; vitality: number; insight: number };
+  socialAttributes: { tough: number; cool: number; beauty: number; cute: number; clever: number };
+  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; etiquette: number; intimidate: number; perform: number; capture: number };
+  customSkills: { name: string; points: number }[];
+  inventory: { name: string; quantity: number; description: string }[];
+  equippedItem: string;  // bike, fishing rod, etc. — persistent
+  battleItem: string;    // Key Stone / Z-Power Ring / Dynamax Band / Tera Orb
+  achievements: string[]; notes: string; gymBadges: boolean[]; pokemon: string[];
+  pcBox: string[]; // pokemon sheet keys stored in PC
+}
+
+export interface PokemonSheetData {
+  number: number;
+  nickname: string;
+  rank: Rank;
+  loyalty: number;  // 0-5
+  happiness: number; // 0-5
+  attributes: { strength: number; dexterity: number; vitality: number; special: number; insight: number };
+  trainingAttributes: { strength: number; dexterity: number; vitality: number; special: number; insight: number };
+  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; intimidate: number; perform: number };
+  moves: string[]; // active move names (max insight+3)
+  partnerMoves: string[]; // bonus moves unlocked by Partner status
+  isPartner: boolean;
+  nature: string;
+  origin: "wild" | "egg" | "trade";
+  heldItem: string; // item name from trainer inventory, "" = none
+  cruelty: boolean;
+  inPokeball: boolean;
+  happinessPending: number; // overflow happiness toward loyalty (2 = +1 loyalty)
+  notes: string;
+}
+
+export function makeBlankTrainer(): TrainerData {
+  return {
+    id: Date.now().toString(), name: "", playerName: "", concept: "", nature: "Hardy",
+    age: "Teen", rank: "Rookie", money: 2000,
+    attributes: { strength: 1, dexterity: 1, vitality: 1, insight: 1 },
+    socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
+    skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, etiquette: 0, intimidate: 0, perform: 0, capture: 0 },
+    customSkills: [], inventory: [], equippedItem: "", battleItem: "",
+    achievements: [], notes: "", gymBadges: Array(8).fill(false), pokemon: [], pcBox: [],
+  };
+}
+
+/* Which saved trainer this device is currently "playing as". Several trainers
+   can exist (a GM keeps NPCs alongside their own), so the landing needs one
+   named owner rather than guessing. */
+export const TRAINERS_KEY = "trainers";
+export const SHEETS_KEY = "pokemon_sheets";
+export const ACTIVE_TRAINER_KEY = "active_trainer_id";
+
+export function getActiveTrainer(trainers: TrainerData[]): TrainerData | null {
+  if (trainers.length === 0) return null;
+  const id = loadFromStorage<string>(ACTIVE_TRAINER_KEY, "");
+  // Falling back to the first trainer keeps existing saves working: they
+  // predate this key and would otherwise look like nobody is playing.
+  return trainers.find(t => t.id === id) ?? trainers[0];
+}
+
+export function setActiveTrainer(id: string) {
+  saveToStorage(ACTIVE_TRAINER_KEY, id);
+}
