@@ -146,17 +146,97 @@ function StatusBadge({status,onRemove}:{status:string;onRemove?:()=>void}){
 // Offline battle sprite (front/back) — files live in /public/sprites/pokemon.
 // Mixed tiers (64×64 FRLG vs 96×96 gen5/default) are bottom-aligned in a fixed box so
 // every mon's feet sit on the platform regardless of source dimensions.
+/* Sprites come from mixed sources (64×64 FRLG-style vs 96×96 gen5/default),
+   and some carry transparent padding below the character's own feet. Plain
+   object-fit:contain + object-position:bottom anchors the *image canvas's*
+   bottom edge to the box, which assumes the character reaches that edge —
+   for a padded sprite it doesn't, so the mon visibly floats above the
+   platform. The fix is to find each sprite's actual non-transparent pixel
+   bounds once (via an offscreen canvas) and anchor to that instead, so the
+   real feet sit on the platform regardless of how the source file is padded.
+   Cached at module scope by src, since the sprite set is finite and shared
+   across every field position on the page. */
+type SpriteBounds = {top:number;left:number;width:number;height:number;naturalWidth:number;naturalHeight:number};
+const spriteBoundsCache=new Map<string,Promise<SpriteBounds|null>>();
+function loadSpriteBounds(src:string):Promise<SpriteBounds|null>{
+  const cached=spriteBoundsCache.get(src);
+  if(cached)return cached;
+  const p=new Promise<SpriteBounds|null>(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        const w=img.naturalWidth,h=img.naturalHeight;
+        if(w===0||h===0){resolve(null);return;}
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext("2d");
+        if(!ctx){resolve(null);return;}
+        ctx.drawImage(img,0,0);
+        const {data}=ctx.getImageData(0,0,w,h);
+        let minX=w,minY=h,maxX=-1,maxY=-1;
+        for(let y=0;y<h;y++){
+          for(let x=0;x<w;x++){
+            if(data[(y*w+x)*4+3]>10){
+              if(x<minX)minX=x; if(x>maxX)maxX=x;
+              if(y<minY)minY=y; if(y>maxY)maxY=y;
+            }
+          }
+        }
+        if(maxX<minX||maxY<minY){resolve(null);return;}
+        resolve({top:minY,left:minX,width:maxX-minX+1,height:maxY-minY+1,naturalWidth:w,naturalHeight:h});
+      }catch{resolve(null);}
+    };
+    img.onerror=()=>resolve(null);
+    img.src=src;
+  });
+  spriteBoundsCache.set(src,p);
+  return p;
+}
+
 function PokeSprite({number,back,boxW=160,boxH=150,fainted}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean}){
   const [broken,setBroken]=useState(false);
-  return(
-    <div style={{width:boxW,height:boxH,display:"flex",alignItems:"flex-end",justifyContent:"center",pointerEvents:"none"}}>
-      {!broken&&number>0&&(
-        <img src={`/sprites/pokemon/${back?"back/":""}${number}.png`} alt="" draggable={false}
-          onError={()=>setBroken(true)}
+  const src=number>0?`/sprites/pokemon/${back?"back/":""}${number}.png`:"";
+  const [bounds,setBounds]=useState<SpriteBounds|null>(null);
+  useEffect(()=>{
+    if(!src)return;
+    let live=true;
+    loadSpriteBounds(src).then(b=>{if(live)setBounds(b);});
+    return ()=>{live=false;};
+  },[src]);
+
+  if(broken||number<=0)return<div style={{width:boxW,height:boxH,pointerEvents:"none"}}/>;
+
+  const filter=fainted?"grayscale(1) brightness(1.15)":"drop-shadow(0 3px 2px rgba(0,0,0,0.35))";
+  const opacity=fainted?0.4:1;
+
+  if(!bounds){
+    // Bounds not resolved yet (first paint) or the crop genuinely failed —
+    // same plain contain+bottom rendering as before, so nothing regresses.
+    return(
+      <div style={{width:boxW,height:boxH,display:"flex",alignItems:"flex-end",justifyContent:"center",pointerEvents:"none"}}>
+        <img src={src} alt="" draggable={false} onError={()=>setBroken(true)}
           style={{width:"100%",height:"100%",imageRendering:"pixelated",objectFit:"contain",objectPosition:"center bottom",
-            filter:fainted?"grayscale(1) brightness(1.15)":"drop-shadow(0 3px 2px rgba(0,0,0,0.35))",
-            opacity:fainted?0.4:1,transition:"opacity 0.3s"}}/>
-      )}
+            filter,opacity,transition:"opacity 0.3s"}}/>
+      </div>
+    );
+  }
+
+  // Scale the full source (including its padding) to fit the box, then shift
+  // it so the tight content bounds — not the padded canvas — sit flush with
+  // the box's bottom edge and horizontal center.
+  const scale=Math.min(boxW/bounds.naturalWidth,boxH/bounds.naturalHeight);
+  const dispW=bounds.naturalWidth*scale, dispH=bounds.naturalHeight*scale;
+  const bottomPad=(bounds.naturalHeight-(bounds.top+bounds.height))*scale;
+  const imgLeft=boxW/2-(bounds.left+bounds.width/2)*scale;
+
+  return(
+    <div style={{width:boxW,height:boxH,position:"relative",pointerEvents:"none"}}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- local pixel
+          art, hand-positioned by measured bounds; next/image would resample
+          and blur it, and can't take an explicit left/bottom offset anyway. */}
+      <img src={src} alt="" draggable={false} onError={()=>setBroken(true)}
+        style={{position:"absolute",left:imgLeft,bottom:-bottomPad,width:dispW,height:dispH,
+          imageRendering:"pixelated",filter,opacity,transition:"opacity 0.3s"}}/>
     </div>
   );
 }
