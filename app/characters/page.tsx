@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   POKEMON, NATURES, TYPE_COLORS, PokemonType,
@@ -913,7 +914,19 @@ function TabBar({ tab, onPick, counts, narrow }: {
   );
 }
 
+/* useSearchParams needs a Suspense boundary in the App Router, so the export
+   is a thin wrapper and the real page — everything below — reads the query
+   string one level in. */
 export default function CharactersPage() {
+  return (
+    <Suspense fallback={null}>
+      <CharactersPageInner />
+    </Suspense>
+  );
+}
+
+function CharactersPageInner() {
+  const searchParams = useSearchParams();
   const [trainers, setTrainers] = useState<TrainerData[]>(() => loadFromStorage("trainers", []));
   const [pokemonSheets, setPokemonSheets] = useState<Record<string, PokemonSheetData>>(() => loadFromStorage("pokemon_sheets", {}));
   /* Open on whoever the Pokédex device is currently playing as. Landing on an
@@ -922,7 +935,13 @@ export default function CharactersPage() {
   const [selId, setSelId] = useState<string | null>(
     () => getActiveTrainer(loadFromStorage<TrainerData[]>("trainers", []))?.id ?? null
   );
-  const [tab, setTab] = useState<TabKey>("sheet");
+  /* The landing device's POKéMON row links straight to ?tab=pokemon rather
+     than always opening on the trainer sheet — a click meant "show me my
+     party" shouldn't need a second click once it lands here. */
+  const [tab, setTab] = useState<TabKey>(() => {
+    const q = searchParams.get("tab");
+    return q === "pokemon" || q === "pcbox" ? q : "sheet";
+  });
   const [pSearch, setPSearch] = useState("");
   const [pSort, setPSort] = useState<"dex" | "name" | "rank">("dex");
   const [useItemIdx, setUseItemIdx] = useState<number | null>(null);

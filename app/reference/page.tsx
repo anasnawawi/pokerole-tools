@@ -432,7 +432,7 @@ function ReferenceTabs() {
   };
 
   return (
-    <PokedexFrame active={tab}>
+    <PokedexFrame active="reference">
       {/* Page sub-nav: the reference tabs, one level below the device keys */}
       <div style={{background:"#D8E0F0",borderBottom:"2px solid #2850A0",padding:"0 12px",height:34,display:"flex",alignItems:"center",gap:4,flexShrink:0,overflowX:"auto"}}>
         {(["pokedex","moves","abilities","items","types","status","weather"] as Tab[]).map(t=>(

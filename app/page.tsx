@@ -25,7 +25,7 @@ function menuFor(trainer: TrainerData | null, party: number): MenuItem[] {
       desc:"Your trainer card — ID, money, badges, attributes and skills." },
     { id:"pokedex", icon:"📖", label:"POKéDEX", href:"/reference?tab=pokedex",
       desc:"All 1025 Pokémon — stats, types, abilities and learnable moves." },
-    { id:"pokemon", icon:"🔴", label:"POKéMON", href:"/characters",
+    { id:"pokemon", icon:"🔴", label:"POKéMON", href:"/characters?tab=pokemon",
       desc: party ? `Your party of ${party}. Train them, feed them, teach them moves.`
                   : "Your party — empty for now. Catch something." },
     { id:"bag", icon:"🎒", label:"BAG", href:"/reference?tab=items",

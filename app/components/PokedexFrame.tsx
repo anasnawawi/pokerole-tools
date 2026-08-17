@@ -24,12 +24,13 @@ export const C = {
   cream:      "#F7E7B6",
 };
 
-/* One canonical destination list, shared by every framed page. */
+/* One canonical destination list, shared by every framed page.
+   The reference page carries its own Pokédex/Moves/Abilities/Items/Types/
+   Status/Weather sub-nav one level down — a separate chassis key per one of
+   those tabs was the same destination pressed twice, so DEX now points at
+   the page itself and lets its own sub-nav pick the tab. */
 export const SITE_LINKS = [
-  {href:"/reference?tab=pokedex",   label:"DEX",     match:"pokedex"},
-  {href:"/reference?tab=moves",     label:"MOVES",   match:"moves"},
-  {href:"/reference?tab=abilities", label:"ABIL",    match:"abilities"},
-  {href:"/reference?tab=items",     label:"ITEMS",   match:"items"},
+  {href:"/reference",               label:"DEX",     match:"reference"},
   {href:"/encounter",               label:"ENCTR",   match:"encounter"},
   {href:"/battle-tracker",          label:"BATTLE",  match:"battle-tracker"},
   {href:"/gm-screen",               label:"GM",      match:"gm-screen"},

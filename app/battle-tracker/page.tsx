@@ -253,6 +253,64 @@ function BenchMon({entry,back,allEntries,onClick}:{entry:BattleEntry;back?:boole
     </button>
   );
 }
+/* The sidebar collapsed to what it's for mid-fight: not search, just "who
+   goes when". One sprite per combatant in initiative order, fastest at the
+   top — the same order the turn actually runs in, so scanning down the
+   column answers "who's next" without opening anything. */
+function CollapsedRoster({sorted,activeId,entries,onExpand,onPick}:{
+  sorted:BattleEntry[]; activeId?:string; entries:BattleEntry[];
+  onExpand:()=>void; onPick:(id:string)=>void;
+}){
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      <button onClick={onExpand} title="Expand sidebar" aria-label="Expand sidebar"
+        style={{flexShrink:0,padding:"7px 0",background:"#E8E8D0",border:"none",
+          borderBottom:"2px solid #181818",color:"#484830",cursor:"pointer",fontSize:11}}>»</button>
+      <div style={{flex:1,overflowY:"auto",padding:"8px 4px",display:"flex",
+        flexDirection:"column",gap:8,alignItems:"center"}}>
+        {sorted.length===0 && (
+          <span style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",color:"#888870",
+            textAlign:"center",lineHeight:1.8,padding:"8px 2px"}}>NO<br/>COMBAT<br/>ANTS</span>
+        )}
+        {sorted.map((e,idx)=>{
+          const isActing=activeId===e.id;
+          const fainted=e.currentHp<=0;
+          const pct=e.maxHp>0?Math.max(0,Math.min(1,e.currentHp/e.maxHp)):0;
+          const hpColor=fainted?"#888870":pct>0.5?"#18C840":pct>0.25?"#E8B018":"#D82808";
+          const name=nameOf(e,entries);
+          return (
+            <button key={e.id} onClick={()=>onPick(e.id)}
+              title={`${name} — INI ${e.initiative} — ${e.currentHp}/${e.maxHp} HP${isActing?" — acting now":""}`}
+              aria-label={`${name}, initiative ${e.initiative}, ${e.currentHp} of ${e.maxHp} HP${fainted?", fainted":""}${isActing?", acting now":""}`}
+              style={{position:"relative",width:42,padding:0,border:"none",background:"none",cursor:"pointer"}}>
+              <span aria-hidden style={{position:"absolute",top:-3,left:-3,zIndex:2,
+                fontSize:6,fontFamily:"'Press Start 2P',monospace",color:"#181818",
+                background:idx===0?"#F5D33F":"#F0EFD8",border:"1px solid #181818",
+                borderRadius:2,padding:"0 2px",lineHeight:1.4}}>{idx+1}</span>
+              <span style={{display:"flex",alignItems:"center",justifyContent:"center",
+                width:40,height:40,borderRadius:"50%",overflow:"hidden",
+                border:`2px solid ${isActing?"#2858C0":"#181818"}`,
+                boxShadow:isActing?"0 0 0 2px #F8D030":"none",
+                background:fainted?"#B8B8A0":"#F8F8E8"}}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- local
+                    pixel art at a fixed tiny size; next/image would blur it. */}
+                <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={34} height={34}
+                  draggable={false}
+                  style={{imageRendering:"pixelated",objectFit:"contain",
+                    filter:fainted?"grayscale(1)":undefined}}
+                  onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
+              </span>
+              <span aria-hidden style={{display:"block",width:36,height:4,margin:"3px auto 0",
+                borderRadius:2,overflow:"hidden",background:"#20304A"}}>
+                <span style={{display:"block",height:"100%",width:`${pct*100}%`,background:hpColor}}/>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 // ── Battle scene FX: weather, terrain, status conditions, entry hazards ────────
 function WeatherFX({weather}:{weather:WeatherData}){
   const name=weather.name;
@@ -3329,6 +3387,11 @@ export default function BattleTrackerPage(){
   const [battleType,setBattleType]=useState<"default"|"gym"|"boss"|"raid"|"danger">("default");
   const [dragId,setDragId]=useState<string|null>(null);
   const [sidebarTab,setSidebarTab]=useState<"search"|"characters">("search");
+  /* The sidebar is the widest fixed thing on the page even with nothing in
+     it — the roster it exists to manage is more useful mid-fight as a glance
+     at turn order than as a search box. Collapsed, it becomes exactly that:
+     one sprite per combatant, fastest initiative on top. */
+  const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -3646,43 +3709,53 @@ export default function BattleTrackerPage(){
 
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {/* Left sidebar — FireRed style */}
-        <div style={{width:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0}}>
-          {/* Sidebar tabs */}
-          <div style={{display:"flex",borderBottom:"2px solid #181818",flexShrink:0}}>
-            {[{k:"search" as const,l:"SEARCH"},{ k:"characters" as const,l:"PARTY"}].map(t=>(
-              <button key={t.k} onClick={()=>setSidebarTab(t.k)} style={{flex:1,padding:"7px",background:sidebarTab===t.k?"#F8F8E8":"#E8E8D0",border:"none",borderBottom:`3px solid ${sidebarTab===t.k?"#2858C0":"transparent"}`,color:sidebarTab===t.k?"#2858C0":"#888870",cursor:"pointer",fontSize:8,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{t.l}</button>
-            ))}
-          </div>
-          <div style={{padding:"8px 8px 4px",flexShrink:0}}>
-            {sidebarTab==="search"&&<button onClick={()=>setShowAddModal(true)} style={{width:"100%",background:"#2858C0",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",color:"#F8F8E8",padding:"7px",fontSize:9,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>+ ADD POKéMON</button>}
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"4px 8px"}}>
-            {sidebarTab==="search"&&(
-              <div>
-                {mounted&&sorted.map((e,idx)=>(
-                  <div key={e.id} onClick={()=>upd(e.id,{isExpanded:!e.isExpanded})} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 5px",cursor:"pointer",background:activeEntry?.id===e.id?"#C8D8F0":"transparent",borderLeft:`3px solid ${activeEntry?.id===e.id?"#2858C0":"transparent"}`,opacity:e.currentHp<=0?0.45:1,borderBottom:"1px solid #C8C8A8"}}>
-                    <span style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace",width:12,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
-                    <div style={{width:5,height:5,background:e.currentHp<=0?"#787878":TYPE_COLORS[e.pokemon.types[0]],border:"1px solid #181818",flexShrink:0}}/>
-                    <span style={{fontSize:10,color:e.currentHp<=0?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none",fontWeight:600}}>{nameOf(e,entries)}</span>
-                    <span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{e.initiative}</span>
-                    <span style={{fontSize:8,color:e.currentHp<=0?"#888870":e.currentHp/e.maxHp>0.5?"#18C840":e.currentHp/e.maxHp>0.25?"#E8B018":"#D82808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
-                  </div>
+        <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms"}}>
+          {sidebarCollapsed ? (
+            <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
+              entries={entries} onExpand={()=>setSidebarCollapsed(false)}
+              onPick={id=>setDrawerId(id)}/>
+          ) : (
+            <>
+              {/* Sidebar tabs */}
+              <div style={{display:"flex",borderBottom:"2px solid #181818",flexShrink:0}}>
+                {[{k:"search" as const,l:"SEARCH"},{ k:"characters" as const,l:"PARTY"}].map(t=>(
+                  <button key={t.k} onClick={()=>setSidebarTab(t.k)} style={{flex:1,padding:"7px",background:sidebarTab===t.k?"#F8F8E8":"#E8E8D0",border:"none",borderBottom:`3px solid ${sidebarTab===t.k?"#2858C0":"transparent"}`,color:sidebarTab===t.k?"#2858C0":"#888870",cursor:"pointer",fontSize:8,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{t.l}</button>
                 ))}
-                {(!mounted||entries.length===0)&&<div style={{textAlign:"center",color:"#888870",padding:16,fontSize:8,fontFamily:"'Press Start 2P',monospace",lineHeight:2}}>+ ADD POKéMON<br/>to begin</div>}
+                <button onClick={()=>setSidebarCollapsed(true)} title="Collapse to turn order" aria-label="Collapse sidebar"
+                  style={{flexShrink:0,width:26,background:"#E8E8D0",border:"none",borderLeft:"2px solid #181818",color:"#484830",cursor:"pointer",fontSize:11}}>«</button>
               </div>
-            )}
-            {sidebarTab==="characters"&&(
-              <>
-                <div style={{fontSize:9,color:"#5a6080",padding:"4px 4px 8px",lineHeight:1.4}}>
-                  Expand a trainer below to see their party. Click <strong style={{color:"#00d4aa"}}>+</strong> to add to battle.
-                </div>
-                <CharactersSidebar onAddPokemon={(p,tid,nick,loy,hap,movs,sk)=>addPokemon(p,tid,nick,loy,hap,movs,sk)}/>
-              </>
-            )}
-          </div>
-          <div style={{padding:"6px 8px",borderTop:"2px solid #181818",flexShrink:0}}>
-            <button onClick={()=>{setEntries([]);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}} style={{width:"100%",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",color:"#D82808",padding:"5px",fontSize:8,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>CLEAR ALL</button>
-          </div>
+              <div style={{padding:"8px 8px 4px",flexShrink:0}}>
+                {sidebarTab==="search"&&<button onClick={()=>setShowAddModal(true)} style={{width:"100%",background:"#2858C0",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",color:"#F8F8E8",padding:"7px",fontSize:9,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>+ ADD POKéMON</button>}
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"4px 8px"}}>
+                {sidebarTab==="search"&&(
+                  <div>
+                    {mounted&&sorted.map((e,idx)=>(
+                      <div key={e.id} onClick={()=>upd(e.id,{isExpanded:!e.isExpanded})} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 5px",cursor:"pointer",background:activeEntry?.id===e.id?"#C8D8F0":"transparent",borderLeft:`3px solid ${activeEntry?.id===e.id?"#2858C0":"transparent"}`,opacity:e.currentHp<=0?0.45:1,borderBottom:"1px solid #C8C8A8"}}>
+                        <span style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace",width:12,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
+                        <div style={{width:5,height:5,background:e.currentHp<=0?"#787878":TYPE_COLORS[e.pokemon.types[0]],border:"1px solid #181818",flexShrink:0}}/>
+                        <span style={{fontSize:10,color:e.currentHp<=0?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none",fontWeight:600}}>{nameOf(e,entries)}</span>
+                        <span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{e.initiative}</span>
+                        <span style={{fontSize:8,color:e.currentHp<=0?"#888870":e.currentHp/e.maxHp>0.5?"#18C840":e.currentHp/e.maxHp>0.25?"#E8B018":"#D82808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
+                      </div>
+                    ))}
+                    {(!mounted||entries.length===0)&&<div style={{textAlign:"center",color:"#888870",padding:16,fontSize:8,fontFamily:"'Press Start 2P',monospace",lineHeight:2}}>+ ADD POKéMON<br/>to begin</div>}
+                  </div>
+                )}
+                {sidebarTab==="characters"&&(
+                  <>
+                    <div style={{fontSize:9,color:"#5a6080",padding:"4px 4px 8px",lineHeight:1.4}}>
+                      Expand a trainer below to see their party. Click <strong style={{color:"#00d4aa"}}>+</strong> to add to battle.
+                    </div>
+                    <CharactersSidebar onAddPokemon={(p,tid,nick,loy,hap,movs,sk)=>addPokemon(p,tid,nick,loy,hap,movs,sk)}/>
+                  </>
+                )}
+              </div>
+              <div style={{padding:"6px 8px",borderTop:"2px solid #181818",flexShrink:0}}>
+                <button onClick={()=>{setEntries([]);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}} style={{width:"100%",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",color:"#D82808",padding:"5px",fontSize:8,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>CLEAR ALL</button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── FIRERED BATTLE SCENE ─────────────────────────────────────────── */}
