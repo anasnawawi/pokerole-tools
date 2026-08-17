@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   POKEMON, NATURES, TYPE_COLORS, PokemonType,
@@ -14,7 +14,8 @@ import {
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage } from "../lib/storage";
 import {
-  TrainerData, PokemonSheetData, makeBlankTrainer as makeBlank, setActiveTrainer,
+  TrainerData, PokemonSheetData, makeBlankTrainer as makeBlank,
+  setActiveTrainer, getActiveTrainer,
 } from "../lib/trainer";
 import { MOVES_DATA } from "../data/moves-data";
 import { POKEMON_EGG_GROUPS } from "../data/egg-groups-data";
@@ -780,14 +781,172 @@ function revertPartnerSheet(sheet: PokemonSheetData): PokemonSheetData {
   };
 }
 
+/* ── Setup guidance ──────────────────────────────────────────────────────────
+   PokeRole gives a trainer three separate point budgets and a name, and none
+   of that is discoverable from a wall of twelve panels — you only learn a
+   budget was left unspent when the GM asks. The checklist states what the
+   rules still want, and each row jumps to the panel that satisfies it, so
+   building a character is a list you work down rather than a page you hunt. */
+type SectionKey = "identity" | "attributes" | "skills" | "inventory" | "equipment" | "extras";
+type Todo = { id: string; label: string; hint: string; tab: TabKey; section: SectionKey };
+type TabKey = "sheet" | "pokemon" | "pcbox";
+
+function SetupChecklist({ todos, onJump }: { todos: Todo[]; onJump: (t: Todo) => void }) {
+  if (todos.length === 0) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 9, background: "#E4F4E8",
+        border: "1px solid #2E8B57", borderRadius: 8, padding: "9px 13px", marginBottom: 14 }}>
+        <span style={{ fontSize: 15 }}>✓</span>
+        <span style={{ fontSize: 12, color: "#1C6640", fontWeight: 600 }}>
+          Sheet complete — every point spent, and a Pokémon on the team.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ background: "#FFF6DC", border: "1px solid #C08018", borderRadius: 8,
+      padding: "10px 13px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+        <span style={{ fontSize: 13 }}>📝</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#8A5A00" }}>
+          Still to set up — {todos.length} thing{todos.length === 1 ? "" : "s"} left
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+        {todos.map(t => (
+          <button key={t.id} onClick={() => onJump(t)} title={t.hint}
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+              background: "#FFFFFF", border: "1px solid #C08018", borderRadius: 20,
+              padding: "5px 11px", fontSize: 12, color: "#5A3C00", textAlign: "left" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#E8A020", flexShrink: 0 }} />
+            {t.label}
+            <span style={{ color: "#A07000", fontSize: 13, lineHeight: 1 }}>›</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* A label's worth of rules text, on demand. Native title= rather than a
+   custom popover: it works on keyboard focus and long-press, and this page
+   already has enough moving parts without another layer that can be left
+   open. */
+function Hint({ text }: { text: string }) {
+  return (
+    <span title={text} tabIndex={0} role="note" aria-label={text}
+      style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: 14, height: 14, borderRadius: "50%", flexShrink: 0, cursor: "help",
+        border: "1px solid #2850A0", color: "#2850A0", fontSize: 9, fontWeight: 700,
+        lineHeight: 1, marginLeft: 5 }}>i</span>
+  );
+}
+
+/* Collapsible section. The sheet is long enough that everything-open forces
+   the scrolling the page was criticised for; the panels that matter while
+   building a character stay open, the reference-y ones fold away. */
+function Panel({ title, hint, badge, open, onToggle, children, sectionRef }: {
+  title: string; hint?: string; badge?: React.ReactNode;
+  open: boolean; onToggle: () => void; children: React.ReactNode;
+  sectionRef?: React.Ref<HTMLDivElement>;
+}) {
+  return (
+    <div ref={sectionRef} style={{ background: "#FBF8E4", border: "1px solid #2850A0",
+      borderRadius: 8, overflow: "hidden", scrollMarginTop: 8 }}>
+      <button onClick={onToggle} aria-expanded={open}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", cursor: "pointer",
+          background: open ? "#EFE7C4" : "transparent", border: "none",
+          borderBottom: open ? "1px solid #2850A0" : "none", padding: "10px 14px", textAlign: "left" }}>
+        <span aria-hidden style={{ fontSize: 10, color: "#2850A0", width: 10, flexShrink: 0 }}>
+          {open ? "▼" : "▶"}
+        </span>
+        <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", margin: 0 }}>
+          {title}
+        </h3>
+        {hint && <Hint text={hint} />}
+        <span style={{ flex: 1 }} />
+        {badge}
+      </button>
+      {open && <div style={{ padding: 16 }}>{children}</div>}
+    </div>
+  );
+}
+
+/* Tabs drawn as tabs: the active one shares the panel's fill and sits on top
+   of its keyline, so it reads as the front of a stack rather than three
+   buttons that happen to be tinted differently. */
+function TabBar({ tab, onPick, counts, narrow }: {
+  tab: TabKey; onPick: (t: TabKey) => void;
+  counts: { party: number; box: number }; narrow: boolean;
+}) {
+  const tabs: { k: TabKey; label: string; icon: string; badge?: string }[] = [
+    { k: "sheet",  label: narrow ? "Sheet"  : "Trainer Sheet", icon: "📋" },
+    { k: "pokemon", label: narrow ? "Party" : "Pokémon Party", icon: "🎮", badge: `${counts.party}/6` },
+    { k: "pcbox",  label: narrow ? "Box"    : "PC Box",        icon: "📦", badge: String(counts.box) },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 4, borderBottom: "2px solid #2850A0", marginBottom: 14 }}>
+      {tabs.map(t => {
+        const on = tab === t.k;
+        return (
+          <button key={t.k} onClick={() => onPick(t.k)} aria-selected={on} role="tab"
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
+              padding: narrow ? "7px 10px" : "8px 16px",
+              border: "2px solid #2850A0", borderBottom: "none",
+              borderRadius: "7px 7px 0 0", marginBottom: -2,
+              background: on ? "#FBF8E4" : "#D9E4F2",
+              color: on ? "#2850A0" : "#4A5878",
+              fontSize: narrow ? 12 : 13, fontWeight: on ? 700 : 600,
+              boxShadow: on ? "0 -2px 0 #2850A0 inset" : "none" }}>
+            <span aria-hidden>{t.icon}</span>
+            {t.label}
+            {t.badge && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 9,
+                background: on ? "#2850A0" : "#B8C6DC", color: on ? "#FFFFFF" : "#33415C" }}>
+                {t.badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CharactersPage() {
   const [trainers, setTrainers] = useState<TrainerData[]>(() => loadFromStorage("trainers", []));
   const [pokemonSheets, setPokemonSheets] = useState<Record<string, PokemonSheetData>>(() => loadFromStorage("pokemon_sheets", {}));
-  const [selId, setSelId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"sheet" | "pokemon" | "pcbox">("sheet");
+  /* Open on whoever the Pokédex device is currently playing as. Landing on an
+     empty panel when a trainer is already saved is a step nobody wants, and
+     the active trainer is the one they were just looking at. */
+  const [selId, setSelId] = useState<string | null>(
+    () => getActiveTrainer(loadFromStorage<TrainerData[]>("trainers", []))?.id ?? null
+  );
+  const [tab, setTab] = useState<TabKey>("sheet");
   const [pSearch, setPSearch] = useState("");
   const [pSort, setPSort] = useState<"dex" | "name" | "rank">("dex");
   const [useItemIdx, setUseItemIdx] = useState<number | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  /* Open by default only what you actually fill in while building a
+     character; the reference-heavy panels start folded so the sheet fits on
+     a screen instead of demanding a scroll to survey. */
+  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
+    identity: true, attributes: true, skills: true,
+    inventory: false, equipment: false, extras: false,
+  });
+  const sectionRefs = useRef<Partial<Record<SectionKey, HTMLDivElement | null>>>({});
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const toggleSection = useCallback((k: SectionKey) => {
+    setOpenSections(s => ({ ...s, [k]: !s[k] }));
+  }, []);
 
   useEffect(() => { saveToStorage("trainers", trainers); }, [trainers]);
   useEffect(() => { saveToStorage("pokemon_sheets", pokemonSheets); }, [pokemonSheets]);
@@ -816,6 +975,51 @@ export default function CharactersPage() {
   const usedSkillPoints = sel
     ? Object.values(sel.skills).reduce((a, b) => a + b, 0) + (sel.customSkills || []).reduce((a, cs) => a + cs.points, 0)
     : 0;
+
+  /* What the rules still want from this sheet. Ordered the way you'd build a
+     character: who they are, then what they're made of, then what they carry. */
+  const todos: Todo[] = useMemo(() => {
+    if (!sel) return [];
+    const out: Todo[] = [];
+    const plural = (n: number) => (n === 1 ? "" : "s");
+    if (!sel.name.trim()) out.push({
+      id: "name", label: "Name your trainer", tab: "sheet", section: "identity",
+      hint: "Every sheet needs a trainer name — it's what the Pokédex device and the battle tracker call you.",
+    });
+    if (attrBudgetLeft > 0) out.push({
+      id: "attr", label: `${attrBudgetLeft} attribute point${plural(attrBudgetLeft)} left`,
+      tab: "sheet", section: "attributes",
+      hint: `Your age and rank grant ${totalAttrPoints} points across Strength, Dexterity, Vitality and Insight.`,
+    });
+    if (socialBudgetLeft > 0) out.push({
+      id: "social", label: `${socialBudgetLeft} social point${plural(socialBudgetLeft)} left`,
+      tab: "sheet", section: "attributes",
+      hint: `Tough, Cool, Beauty, Cute and Clever share ${totalSocialPoints} points — they drive social rolls and contests.`,
+    });
+    const skillLeft = rankInfo.skillPoints - usedSkillPoints;
+    if (skillLeft > 0) out.push({
+      id: "skill", label: `${skillLeft} skill point${plural(skillLeft)} left`,
+      tab: "sheet", section: "skills",
+      hint: `Rank ${sel.rank} gives ${rankInfo.skillPoints} skill points, at most ${rankInfo.skillLimit} in any one skill.`,
+    });
+    if (sel.pokemon.length === 0) out.push({
+      id: "mon", label: "Catch your first Pokémon", tab: "pokemon", section: "identity",
+      hint: "Add a Pokémon to your party — it shows up on the Pokédex home screen and can drop straight into a battle.",
+    });
+    return out;
+  }, [sel, attrBudgetLeft, totalAttrPoints, socialBudgetLeft, totalSocialPoints,
+      rankInfo.skillPoints, rankInfo.skillLimit, usedSkillPoints]);
+
+  /* Jumping opens the panel that satisfies the item and scrolls it into view.
+     The timeout lets the tab switch commit first — the target panel may not be
+     mounted yet when the click handler runs. */
+  const jumpTo = useCallback((t: Todo) => {
+    setTab(t.tab);
+    setOpenSections(s => ({ ...s, [t.section]: true }));
+    setTimeout(() => {
+      sectionRefs.current[t.section]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, []);
 
   const filtPokemon = useMemo(() => {
     const filtered = pSearch
@@ -893,37 +1097,69 @@ export default function CharactersPage() {
     <PokedexFrame active="characters" actions={
       <span style={{ fontSize: 10, color: "#FFFFFF", whiteSpace: "nowrap" }}>Auto-saved</span>
     }>
-      <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", background: "#35785F", color: "#202020" }}>
-        {/* Sidebar */}
-        <div style={{ width: 220, background: "#F8F4D0", borderRight: "1px solid #2850A0", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-          <div style={{ padding: "10px 8px", borderBottom: "1px solid #2850A0" }}>
-            <button onClick={createTrainer}
-              style={{ width: "100%", background: "#2850A0", color: "#fff", border: "none", borderRadius: 5, padding: 7, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ New Trainer</button>
+      {/* Portrait stacks: a 220px column of mostly-empty list is the worst use
+          of a phone's width, so there the roster becomes a one-line picker
+          above the sheet and gives its width back to the content. */}
+      <div style={{ display: "flex", flexDirection: narrow ? "column" : "row", flex: 1, minHeight: 0,
+        overflow: "hidden", background: "#35785F", color: "#202020" }}>
+
+        {narrow ? (
+          <div style={{ flexShrink: 0, background: "#F8F4D0", borderBottom: "1px solid #2850A0",
+            padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+            <select value={selId ?? ""} onChange={e => setSelId(e.target.value || null)}
+              aria-label="Choose trainer"
+              style={{ flex: 1, minWidth: 0, background: "#FFFFFF", border: "1px solid #2850A0",
+                borderRadius: 5, padding: "7px 8px", fontSize: 13, color: "#202020" }}>
+              <option value="">
+                {trainers.length ? "— choose a trainer —" : "— no trainers yet —"}
+              </option>
+              {trainers.map(t => (
+                <option key={t.id} value={t.id}>{(t.name || "Unnamed")} · {t.rank}</option>
+              ))}
+            </select>
+            {sel && (
+              <button onClick={() => { setTrainers(p => p.filter(x => x.id !== sel.id)); setSelId(null); }}
+                title={`Delete ${sel.name || "this trainer"}`} aria-label="Delete trainer"
+                style={{ flexShrink: 0, background: "#FFFFFF", border: "1px solid #C02820", borderRadius: 5,
+                  color: "#C02820", cursor: "pointer", fontSize: 13, padding: "6px 10px" }}>✕</button>
+            )}
+            <button onClick={createTrainer} title="New trainer"
+              style={{ flexShrink: 0, background: "#2850A0", color: "#fff", border: "none", borderRadius: 5,
+                padding: "7px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+                whiteSpace: "nowrap" }}>+ New</button>
           </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: 4 }}>
-            {trainers.length === 0 && <div style={{ textAlign: "center", color: "#585858", padding: 20, fontSize: 12 }}>No trainers yet</div>}
-            {trainers.map(t => (
-              <div key={t.id} onClick={() => setSelId(t.id)}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 5, cursor: "pointer", background: selId === t.id ? "#D8D8D8" : "transparent", borderLeft: `2px solid ${selId === t.id ? "#2850A0" : "transparent"}` }}
-                onMouseEnter={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"; }}
-                onMouseLeave={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#202020", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name || "Unnamed"}</div>
-                  <div style={{ fontSize: 10, color: RANK_COLORS[t.rank] }}>{t.rank} · {t.age}</div>
+        ) : (
+          <div style={{ width: 220, background: "#F8F4D0", borderRight: "1px solid #2850A0", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+            <div style={{ padding: "10px 8px", borderBottom: "1px solid #2850A0" }}>
+              <button onClick={createTrainer}
+                style={{ width: "100%", background: "#2850A0", color: "#fff", border: "none", borderRadius: 5, padding: 7, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ New Trainer</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 4 }}>
+              {trainers.length === 0 && <div style={{ textAlign: "center", color: "#585858", padding: 20, fontSize: 12 }}>No trainers yet</div>}
+              {trainers.map(t => (
+                <div key={t.id} onClick={() => setSelId(t.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 5, cursor: "pointer", background: selId === t.id ? "#D8D8D8" : "transparent", borderLeft: `2px solid ${selId === t.id ? "#2850A0" : "transparent"}` }}
+                  onMouseEnter={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"; }}
+                  onMouseLeave={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#202020", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name || "Unnamed"}</div>
+                    <div style={{ fontSize: 10, color: RANK_COLORS[t.rank] }}>{t.rank} · {t.age}</div>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); setTrainers(p => p.filter(x => x.id !== t.id)); if (selId === t.id) setSelId(null); }}
+                    style={{ background: "none", border: "none", color: "#585858", cursor: "pointer", fontSize: 12 }}>✕</button>
                 </div>
-                <button onClick={e => { e.stopPropagation(); setTrainers(p => p.filter(x => x.id !== t.id)); if (selId === t.id) setSelId(null); }}
-                  style={{ background: "none", border: "none", color: "#585858", cursor: "pointer", fontSize: 12 }}>✕</button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {!sel ? (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32, overflowY: "auto" }}>
             {trainers.length > 0 ? (
-              <div style={{ textAlign: "center", color: "#585858", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ textAlign: "center", color: "#EAF6EE", display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ fontSize: 40 }}>👤</div>
-                <div>Select a trainer from the list to open their sheet</div>
+                <div>{narrow ? "Choose a trainer above to open their sheet"
+                             : "Select a trainer from the list to open their sheet"}</div>
               </div>
             ) : (
               <div style={{ maxWidth: 520 }}>
@@ -956,20 +1192,25 @@ export default function CharactersPage() {
             )}
           </div>
         ) : (
-          <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
-            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-              {[["sheet", "📋 Trainer Sheet"], ["pokemon", "🎮 Pokémon Party"], ["pcbox", "📦 PC Box"]] .map(([v, l]) => (
-                <button key={v} onClick={() => setTab(v as "sheet" | "pokemon" | "pcbox")}
-                  style={{ padding: "6px 16px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: tab === v ? "rgba(61,139,255,0.15)" : "transparent", color: tab === v ? "#2850A0" : "#383838" }}>{l}</button>
-              ))}
-            </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: narrow ? 12 : 24 }}>
+            <TabBar tab={tab} onPick={setTab} narrow={narrow}
+              counts={{ party: sel.pokemon.length, box: (sel.pcBox ?? []).length }} />
+
+            <SetupChecklist todos={todos} onJump={jumpTo} />
 
             {tab === "sheet" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div style={{ display: "grid", gap: narrow ? 12 : 16,
+                gridTemplateColumns: narrow ? "1fr" : "1fr 1fr" }}>
                 {/* Identity */}
-                <div style={{ gridColumn: "1/-1", background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
-                  <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 15, color: "#2850A0", marginBottom: 14 }}>Trainer Identity</h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
+                <div style={{ gridColumn: "1/-1" }}>
+                <Panel title="Trainer Identity" open={openSections.identity}
+                  onToggle={() => toggleSection("identity")}
+                  sectionRef={el => { sectionRefs.current.identity = el; }}
+                  hint="Who this character is. Rank and age set how many attribute, social and skill points you get to spend."
+                  badge={<span style={{ fontSize: 11, color: sel.name.trim() ? "#585858" : "#C02820", fontWeight: 600 }}>
+                    {sel.name.trim() || "Unnamed"}
+                  </span>}>
+                  <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr 1fr" : "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
                     {[["Trainer Name", "name"], ["Player Name", "playerName"], ["Concept", "concept"]].map(([l, k]) => (
                       <div key={k}>
                         <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>{l}</div>
@@ -999,29 +1240,35 @@ export default function CharactersPage() {
                       </select>
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+                  {/* Wraps rather than overflowing: eight badge buttons plus
+                      three stat blocks is wider than a phone, and an unwrapped
+                      row pushed the whole sheet sideways. */}
+                  <div style={{ display: "flex", gap: narrow ? 14 : 20, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Max HP = 4+VIT</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#2850A0" }}>{4 + sel.attributes.vitality}</div></div>
                     <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Will = INS+3</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#6890f0" }}>{sel.attributes.insight + 3}</div></div>
                     <div><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Money ₽</div>
                       <input type="number" value={sel.money} onChange={e => upd(sel.id, { money: +e.target.value })}
                         style={{ width: 80, textAlign: "center", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#A07000", fontSize: 16, fontFamily: "'Exo 2'", fontWeight: 700, padding: "2px 6px" }} /></div>
-                    <div><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Gym Badges</div>
-                      <div style={{ display: "flex", gap: 4 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Gym Badges</div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         {sel.gymBadges.map((b, i) => (
                           <button key={i} onClick={() => { const bg = [...sel.gymBadges]; bg[i] = !b; upd(sel.id, { gymBadges: bg }); }}
-                            style={{ width: 24, height: 24, borderRadius: 3, border: `1px solid ${b ? "#A07000" : "#7888A8"}`, background: b ? "rgba(255,211,42,0.2)" : "transparent", color: b ? "#A07000" : "#585858", fontSize: 12, cursor: "pointer" }}>🏅</button>
+                            title={`Badge ${i + 1}${b ? " — earned" : ""}`}
+                            style={{ width: 24, height: 24, borderRadius: 3, flexShrink: 0, border: `1px solid ${b ? "#A07000" : "#7888A8"}`, background: b ? "rgba(255,211,42,0.2)" : "transparent", color: b ? "#A07000" : "#585858", fontSize: 12, cursor: "pointer", opacity: b ? 1 : 0.45 }}>🏅</button>
                         ))}
                       </div>
                     </div>
                   </div>
+                </Panel>
                 </div>
 
                 {/* Attributes */}
-                <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", margin: 0 }}>Attributes</h3>
-                    <PointBudget used={usedAttrPoints} total={totalAttrPoints} label="pts distributed" />
-                  </div>
+                <Panel title="Attributes" open={openSections.attributes}
+                  onToggle={() => toggleSection("attributes")}
+                  sectionRef={el => { sectionRefs.current.attributes = el; }}
+                  hint="Strength, Dexterity, Vitality and Insight drive combat and most rolls. Every attribute starts at 1; your age and rank grant the rest."
+                  badge={<PointBudget used={usedAttrPoints} total={totalAttrPoints} label="pts" />}>
                   <div style={{ fontSize: 10, color: "#585858", marginBottom: 8 }}>
                     {sel.age} + {sel.rank}: +{ageInfo.attrPoints} + {rankInfo.attrPoints} = {totalAttrPoints} distributable points (base 1 per attribute)
                   </div>
@@ -1047,14 +1294,14 @@ export default function CharactersPage() {
                         }} />
                     ))}
                   </div>
-                </div>
+                </Panel>
 
                 {/* Skills */}
-                <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", margin: 0 }}>Skills</h3>
-                    <PointBudget used={usedSkillPoints} total={rankInfo.skillPoints} label={`pts (limit ${rankInfo.skillLimit}/skill)`} />
-                  </div>
+                <Panel title="Skills" open={openSections.skills}
+                  onToggle={() => toggleSection("skills")}
+                  sectionRef={el => { sectionRefs.current.skills = el; }}
+                  hint={`Rank ${sel.rank} gives ${rankInfo.skillPoints} skill points, and no single skill may go above ${rankInfo.skillLimit}.`}
+                  badge={<PointBudget used={usedSkillPoints} total={rankInfo.skillPoints} label={`pts · max ${rankInfo.skillLimit}`} />}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                     {(Object.keys(sel.skills) as (keyof typeof sel.skills)[]).map(skill => (
                       <PipRow key={skill} label={skill.charAt(0).toUpperCase() + skill.slice(1)+(skill==="capture"?" (🎯)":"")} value={sel.skills[skill]} max={rankInfo.skillLimit}
@@ -1080,11 +1327,16 @@ export default function CharactersPage() {
                     <button onClick={() => upd(sel.id,{customSkills:[...(sel.customSkills||[]),{name:"",points:0}]})}
                       style={{ fontSize: 11, color: "#2850A0", background: "none", border: "1px dashed #2850A040", borderRadius: 4, padding: "4px 10px", cursor: "pointer", width: "100%" }}>+ Add Custom Skill</button>
                   </div>
-                </div>
+                </Panel>
 
                 {/* Inventory */}
-                <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
-                  <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 10 }}>🎒 Inventory</h3>
+                <Panel title="🎒 Inventory" open={openSections.inventory}
+                  onToggle={() => toggleSection("inventory")}
+                  sectionRef={el => { sectionRefs.current.inventory = el; }}
+                  hint="Everything the trainer carries. Items can be used on a party Pokémon or handed over as a held item."
+                  badge={<span style={{ fontSize: 11, color: "#585858" }}>
+                    {(sel.inventory ?? []).length} item{(sel.inventory ?? []).length === 1 ? "" : "s"}
+                  </span>}>
                   {/* Use Item Modal */}
                   {useItemIdx !== null && sel.inventory[useItemIdx] && (() => {
                     const invItem = sel.inventory[useItemIdx];
@@ -1234,7 +1486,7 @@ export default function CharactersPage() {
                   ))}
                   <button onClick={() => upd(sel.id,{inventory:[...(sel.inventory||[]),{name:"",quantity:1,description:""}]})}
                     style={{ fontSize: 11, color: "#A07000", background: "none", border: "1px dashed #A0700040", borderRadius: 4, padding: "4px 10px", cursor: "pointer", width: "100%" }}>+ Add Item</button>
-                </div>
+                </Panel>
 
                 {/* Equipment Slots */}
                 {(() => {
@@ -1246,9 +1498,14 @@ export default function CharactersPage() {
                   });
                   const battleItems = invNames.filter(n => BATTLE_ITEMS.includes(n));
                   return (
-                    <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
-                      <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 12 }}>⚙️ Equipment</h3>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <Panel title="⚙️ Equipment" open={openSections.equipment}
+                      onToggle={() => toggleSection("equipment")}
+                      sectionRef={el => { sectionRefs.current.equipment = el; }}
+                      hint="Gear the trainer keeps on them. Both lists are drawn from your inventory, so add the item there first."
+                      badge={<span style={{ fontSize: 11, color: "#585858" }}>
+                        {[sel.equippedItem, sel.battleItem].filter(Boolean).length}/2 slots
+                      </span>}>
+                      <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", gap: 12 }}>
                         {/* Equipped Item */}
                         <div>
                           <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>Equipped Item</div>
@@ -1278,14 +1535,22 @@ export default function CharactersPage() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </Panel>
                   );
                 })()}
 
                 {/* Achievements & Notes */}
-                <div style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
-                    <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 10 }}>Achievements</h3>
+                <div style={{ gridColumn: "1/-1" }}>
+                <Panel title="🏆 Achievements & Notes" open={openSections.extras}
+                  onToggle={() => toggleSection("extras")}
+                  sectionRef={el => { sectionRefs.current.extras = el; }}
+                  hint="Free-form record of what this trainer has done and anything else worth keeping with the sheet."
+                  badge={<span style={{ fontSize: 11, color: "#585858" }}>
+                    {sel.achievements.length} logged
+                  </span>}>
+                <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", gap: 16 }}>
+                  <div>
+                    <h4 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 13, color: "#202020", marginBottom: 10 }}>Achievements</h4>
                     {sel.achievements.map((a, i) => (
                       <div key={i} style={{ display: "flex", gap: 6, marginBottom: 5 }}>
                         <input value={a} onChange={e => { const arr = [...sel.achievements]; arr[i] = e.target.value; upd(sel.id, { achievements: arr }); }}
@@ -1296,11 +1561,13 @@ export default function CharactersPage() {
                     <button onClick={() => upd(sel.id, { achievements: [...sel.achievements, ""] })}
                       style={{ fontSize: 11, color: "#2850A0", background: "none", border: "1px dashed #2850A040", borderRadius: 4, padding: "4px 10px", cursor: "pointer", width: "100%" }}>+ Add</button>
                   </div>
-                  <div style={{ background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 8, padding: 16 }}>
-                    <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#202020", marginBottom: 10 }}>Notes</h3>
+                  <div>
+                    <h4 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 13, color: "#202020", marginBottom: 10 }}>Notes</h4>
                     <textarea value={sel.notes} onChange={e => upd(sel.id, { notes: e.target.value })}
                       style={{ width: "100%", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, color: "#383838", fontSize: 12, padding: 8, resize: "none", height: 110, fontFamily: "inherit", lineHeight: 1.5, outline: "none" }} />
                   </div>
+                </div>
+                </Panel>
                 </div>
               </div>
             )}
