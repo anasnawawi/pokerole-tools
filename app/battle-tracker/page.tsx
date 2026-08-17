@@ -3923,8 +3923,13 @@ export default function BattleTrackerPage(){
                     these were unclickable. Size and opacity carry "not the
                     subject" here, not paint order. */}
                 {mounted&&benchFar.length>0&&(
+                  /* benchFar is already fastest-first (it's a filter of `sorted`).
+                     row-reverse renders that first — the enemy up next — at the
+                     lane's right edge, nearest the focused enemy sprite, with
+                     slower ones trailing off to the left; a plain row would have
+                     put the next-up mon farthest away instead. */
                   <div style={{position:"absolute",top:118,left:8,width:"46%",zIndex:4,
-                    display:"flex",alignItems:"flex-end",justifyContent:"flex-start",
+                    display:"flex",flexDirection:"row-reverse",alignItems:"flex-end",justifyContent:"flex-start",
                     gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
                     {benchFar.map(e=>(
                       <span key={e.id} style={{pointerEvents:"auto"}}>
