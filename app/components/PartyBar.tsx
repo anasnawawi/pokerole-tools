@@ -59,13 +59,20 @@ function vitals(sheetKey: string, sheet: PokemonSheetData, dex: Dex | null, batt
  * `compact` is the thin strip every tool page carries under its chrome: six
  * equal tiles side by side, sized to stay legible at ~100px tall.
  *
- * Full size — the landing device's lower screen, which has a whole half of
- * the window to itself — instead reproduces the FRLG "Choose a Pokémon"
- * party list: one plate per Pokémon (sprite, name, rank, HP bar), stacked
- * top to bottom, using the same `.frw` plate token the rest of the app's
- * FireRed chrome already draws battle dialogue boxes from.
+ * Full size — the landing device in landscape, where the party owns a whole
+ * half of the window — instead reproduces the FRLG "Choose a Pokémon" party
+ * list: one plate per Pokémon (sprite, name, rank, HP bar), stacked top to
+ * bottom, using the same `.frw` plate token the rest of the app's FireRed
+ * chrome already draws battle dialogue boxes from.
+ *
+ * `onPanel` is the surface, which is a separate question from the density:
+ * the compact strip rides the crimson shell inside PokedexFrame but a pale
+ * bezel panel on the landing device, and the empty slots have to ink
+ * themselves for whichever one they're actually sitting on.
  */
-export default function PartyBar({ compact = false }: { compact?: boolean }) {
+export default function PartyBar({ compact = false, onPanel = false }: {
+  compact?: boolean; onPanel?: boolean;
+}) {
   const router = useRouter();
   const session = useSession();
   const party = partyOf(session);
@@ -92,7 +99,7 @@ export default function PartyBar({ compact = false }: { compact?: boolean }) {
               dex={dex} battle={session?.battle ?? []} onClick={onOpen}/>
           );
         })}
-        <PartyNote compact={false} registered={registered} count={party.length} session={session}
+        <PartyNote compact={false} onPanel registered={registered} count={party.length} session={session}
           onClick={()=>router.push(registered ? "/characters" : "/")}/>
       </div>
     );
@@ -106,7 +113,7 @@ export default function PartyBar({ compact = false }: { compact?: boolean }) {
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,minWidth:0}}>
         {Array.from({length:6},(_,i)=>{
           const member = party[i];
-          if (!member) return <EmptySlot key={i} compact sprite={sprite} dim={!registered}/>;
+          if (!member) return <EmptySlot key={i} compact sprite={sprite} dim={!registered} onPanel={onPanel}/>;
           return (
             <Slot key={member.key} sheetKey={member.key} sheet={member.sheet}
               dex={dex} battle={session?.battle ?? []} compact sprite={sprite}
@@ -116,14 +123,14 @@ export default function PartyBar({ compact = false }: { compact?: boolean }) {
       </div>
 
       {/* One line of context, rather than a caption per slot */}
-      <PartyNote compact registered={registered} count={party.length} session={session}
+      <PartyNote compact onPanel={onPanel} registered={registered} count={party.length} session={session}
         onClick={()=>router.push(registered ? "/characters" : "/")}/>
     </div>
   );
 }
 
-function PartyNote({ compact, registered, count, session, onClick }: {
-  compact: boolean; registered: boolean; count: number;
+function PartyNote({ compact, onPanel, registered, count, session, onClick }: {
+  compact: boolean; onPanel: boolean; registered: boolean; count: number;
   session: Session | null; onClick: () => void;
 }) {
   const text = session === null ? "Reading save…"
@@ -135,25 +142,31 @@ function PartyNote({ compact, registered, count, session, onClick }: {
     <button onClick={onClick}
       style={{alignSelf:"flex-start",background:"none",border:"none",padding:0,
         cursor:"pointer",textAlign:"left",
-        fontSize:compact?10:11,color:compact?"#FFFFFF":"#5A6280",
+        fontSize:compact?10:11,color:onPanel?"#5A6280":"#FFFFFF",
         textDecoration:"underline",textUnderlineOffset:2}}>
       {text}
     </button>
   );
 }
 
-function EmptySlot({ compact, sprite, dim }: { compact: boolean; sprite: number; dim: boolean }) {
+function EmptySlot({ compact, sprite, dim, onPanel }: {
+  compact: boolean; sprite: number; dim: boolean; onPanel: boolean;
+}) {
+  /* Ink follows the surface, not the density — a dashed white outline is
+     invisible on the landing's pale bezel, and a navy one vanishes on the
+     crimson shell. */
+  const line   = onPanel ? "rgba(24,32,60,0.28)" : "rgba(255,255,255,0.35)";
+  const ring   = onPanel ? "rgba(24,32,60,0.30)" : "rgba(255,255,255,0.40)";
+  const ink    = onPanel ? "rgba(24,32,60,0.50)" : "rgba(255,255,255,0.65)";
   return (
     <div aria-hidden style={{display:"flex",flexDirection:"column",alignItems:"center",
       gap:compact?3:4,padding:compact?"5px 3px":"7px 5px",borderRadius:5,minWidth:0,
-      border:`2px dashed ${compact?"rgba(255,255,255,0.35)":"rgba(24,32,60,0.28)"}`,
-      opacity:dim?0.45:0.75}}>
+      border:`2px dashed ${line}`,opacity:dim?0.45:0.75}}>
       <span style={{width:sprite,height:sprite,borderRadius:"50%",
-        border:`2px dashed ${compact?"rgba(255,255,255,0.4)":"rgba(24,32,60,0.3)"}`,
+        border:`2px dashed ${ring}`,color:ink,
         display:"flex",alignItems:"center",justifyContent:"center",
         fontSize:compact?13:17,opacity:0.6}}>◦</span>
-      <span style={{fontFamily:PIXEL,fontSize:compact?6:7,
-        color:compact?"rgba(255,255,255,0.65)":"rgba(24,32,60,0.5)"}}>—</span>
+      <span style={{fontFamily:PIXEL,fontSize:compact?6:7,color:ink}}>—</span>
     </div>
   );
 }

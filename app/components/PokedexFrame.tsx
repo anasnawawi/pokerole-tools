@@ -33,6 +33,7 @@ export const SITE_LINKS = [
   {href:"/encounter",               label:"ENCTR",   match:"encounter"},
   {href:"/battle-tracker",          label:"BATTLE",  match:"battle-tracker"},
   {href:"/gm-screen",               label:"GM",      match:"gm-screen"},
+  {href:"/trainer-card",            label:"CARD",    match:"trainer-card"},
   {href:"/characters",              label:"CHARS",   match:"characters"},
   {href:"/reference/quick-ref",     label:"RULES",   match:"quick-ref"},
 ];

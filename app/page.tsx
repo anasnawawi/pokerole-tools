@@ -19,6 +19,10 @@ type MenuItem = { id: string; icon: string; label: string; href: string; desc: s
 function menuFor(trainer: TrainerData | null, party: number): MenuItem[] {
   const who = (trainer?.name || "").trim();
   return [
+    /* The player's own name leads the menu — it's the row that says whose save
+       this is, and the card behind it is the one they'll open most often. */
+    { id:"trainer", icon:"👤", label: who ? who.toUpperCase() : "TRAINER", href:"/trainer-card",
+      desc:"Your trainer card — ID, money, badges, attributes and skills." },
     { id:"pokedex", icon:"📖", label:"POKéDEX", href:"/reference?tab=pokedex",
       desc:"All 1025 Pokémon — stats, types, abilities and learnable moves." },
     { id:"pokemon", icon:"🔴", label:"POKéMON", href:"/characters",
@@ -26,8 +30,6 @@ function menuFor(trainer: TrainerData | null, party: number): MenuItem[] {
                   : "Your party — empty for now. Catch something." },
     { id:"bag", icon:"🎒", label:"BAG", href:"/reference?tab=items",
       desc:"236 items by pocket, with costs and give-to-party support." },
-    { id:"trainer", icon:"👤", label: who ? who.toUpperCase() : "TRAINER", href:"/characters",
-      desc:"Your trainer card — attributes, skills, badges and money." },
     { id:"battle", icon:"⚔️", label:"BATTLE", href:"/battle-tracker",
       desc:"Run a fight on the battle stage, with full initiative and combat." },
     { id:"encounter", icon:"🌿", label:"ENCOUNTERS", href:"/encounter",
@@ -44,6 +46,7 @@ export default function Home() {
   const [idx, setIdx] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
   const [narrow, setNarrow] = useState(false);
+  const [portrait, setPortrait] = useState(false);
   const [lamp, setLamp] = useState(0);
   const [newName, setNewName] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -58,12 +61,20 @@ export default function Home() {
   const menu = useMemo(() => menuFor(trainer, party.length), [trainer, party.length]);
   const caption = menu[hover ?? idx];
 
+  /* Two separate questions, which a single width breakpoint was conflating:
+     `narrow` is how much room there is for type and padding, `portrait` is
+     which way the clamshell opens. A phone held upright stacks the halves and
+     leaves the lower one short, so the party there has to be the compact
+     strip; the same phone turned sideways gets the side-by-side split and the
+     full party list, exactly like a desktop window. */
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 820px)");
-    const sync = () => setNarrow(mq.matches);
+    const size = window.matchMedia("(max-width: 820px)");
+    const orient = window.matchMedia("(orientation: portrait)");
+    const sync = () => { setNarrow(size.matches); setPortrait(orient.matches); };
     sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
+    size.addEventListener("change", sync);
+    orient.addEventListener("change", sync);
+    return () => { size.removeEventListener("change", sync); orient.removeEventListener("change", sync); };
   }, []);
 
   // The three indicator lamps cycle, so the device reads as powered on.
@@ -135,16 +146,16 @@ export default function Home() {
       background:C.cream,padding:narrow?8:16,
       fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
 
-      <div style={{flex:1,minHeight:0,display:"flex",flexDirection:narrow?"column":"row",
+      <div style={{flex:1,minHeight:0,display:"flex",flexDirection:portrait?"column":"row",
         background:C.shell,border:`4px solid ${C.outline}`,borderRadius:16,
         boxShadow:`0 6px 0 ${C.shellDeep}, 0 10px 24px rgba(0,0,0,0.3)`,overflow:"hidden"}}>
 
         {/* ── UPPER SCREEN — lens, lamps, start menu, D-pad ─────────────────── */}
-        <div style={{flex:narrow?"1 1 0":"1 1 58%",minWidth:0,minHeight:0,
+        <div style={{flex:portrait?"1 1 0":"1 1 58%",minWidth:0,minHeight:0,
           display:"flex",flexDirection:"column",gap:narrow?8:12,
           padding:narrow?10:18,
-          borderRight:narrow?"none":`4px solid ${C.shellDeep}`,
-          borderBottom:narrow?`4px solid ${C.shellDeep}`:"none"}}>
+          borderRight:portrait?"none":`4px solid ${C.shellDeep}`,
+          borderBottom:portrait?`4px solid ${C.shellDeep}`:"none"}}>
 
           {/* Lens + indicator lamps */}
           <div style={{display:"flex",alignItems:"center",gap:narrow?10:14,flexShrink:0}}>
@@ -284,7 +295,7 @@ export default function Home() {
         </div>
 
         {/* ── LOWER SCREEN — the party ─────────────────────────────────────── */}
-        <div style={{flex:narrow?"0 0 auto":"1 1 42%",minWidth:0,minHeight:0,
+        <div style={{flex:portrait?"0 0 auto":"1 1 42%",minWidth:0,minHeight:0,
           display:"flex",flexDirection:"column",gap:narrow?8:12,padding:narrow?10:18,
           background:`linear-gradient(180deg, ${C.shell} 0%, ${C.shellDark} 100%)`}}>
 
@@ -301,14 +312,15 @@ export default function Home() {
             </span>
           </div>
 
-          {/* The same six-slot bar the tool pages carry, at full size. One
-              component so the party can't look like two different things
-              depending on which screen you're on. */}
-          <div style={{flex:narrow?"0 0 auto":"1",minHeight:0,
+          {/* Landscape has a whole browser-half to fill, so the party gets the
+              FRLG list. Portrait's lower half is a short strip under the menu —
+              six stacked plates would either overflow it or squeeze the menu
+              off the screen, so it gets the compact six-across instead. */}
+          <div style={{flex:portrait?"0 0 auto":"1",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
             background:C.bezel,padding:narrow?8:10,display:"flex",flexDirection:"column",
-            overflowY:"auto"}}>
-            <PartyBar/>
+            justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
+            <PartyBar compact={portrait} onPanel/>
           </div>
 
           <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:narrow?6:9,flexWrap:"wrap"}}>
