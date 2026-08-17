@@ -307,7 +307,7 @@ export default function Home() {
           <div style={{flex:narrow?"0 0 auto":"1",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
             background:C.bezel,padding:narrow?8:10,display:"flex",flexDirection:"column",
-            justifyContent:"center",overflowY:"auto"}}>
+            overflowY:"auto"}}>
             <PartyBar/>
           </div>
 
