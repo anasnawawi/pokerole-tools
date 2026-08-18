@@ -12,6 +12,8 @@ import {
   getDisobedienceLevel, getPainPenalty,
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage } from "../lib/storage";
+import { notifySession } from "../lib/session";
+import type { TrainerData, PokemonSheetData } from "../lib/trainer";
 import PokedexFrame from "../components/PokedexFrame";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -2293,9 +2295,10 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
 }
 
 // ── Capture Popup (full) ──────────────────────────────────────────────────────
-function CapturePopup({allEntries,defaultTargetId,onClose}:{allEntries:BattleEntry[];defaultTargetId?:string;onClose:()=>void;}){
+function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntries:BattleEntry[];defaultTargetId?:string;onClose:()=>void;onCaptured?:(entryId:string)=>void;}){
   const trainers=useMemo(()=>loadFromStorage<any[]>("trainers",[]),[]);
   const pokemonSheets=useMemo(()=>loadFromStorage<Record<string,any>>("pokemon_sheets",{}),[]);
+  const [committed,setCommitted]=useState<string|null>(null);
 
   const [throwerId,setThrowerId]=useState<string>("");
   const [targetId,setTargetId]=useState<string>(defaultTargetId||"");
@@ -2340,6 +2343,57 @@ function CapturePopup({allEntries,defaultTargetId,onClose}:{allEntries:BattleEnt
   const totalBonus=hpBonus+statusBonus;
   const totalSuccesses=(throwRoll?.successes??0)+(sealRoll?.successes??0)+totalBonus;
   const caught=!!(throwRoll&&sealRoll&&totalSuccesses>=required);
+
+  /* Rolling the dice was the whole feature — nothing was ever written back, so
+     the ball stayed in the bag and a caught Pokémon never reached the trainer.
+     A thrown ball is spent either way; a successful one also mints a sheet
+     (from the entry's own battle state, so a weakened catch keeps its stats)
+     and drops it in the party, or the PC box when the party is already six. */
+  const commitResult=()=>{
+    if(!thrower||!target||committed)return;
+    const allTrainers=loadFromStorage<TrainerData[]>("trainers",[]);
+    const ti=allTrainers.findIndex(t=>t.id===thrower.id);
+    if(ti<0)return;
+    const t={...allTrainers[ti]};
+
+    // Spend the ball, if this thrower actually carries one of that name.
+    const inv=[...(t.inventory||[])];
+    const bi=inv.findIndex(i=>i.name.toLowerCase()===(selectedBall?.name||"").toLowerCase());
+    if(bi>=0){
+      const q=(inv[bi].quantity||1)-1;
+      if(q<=0)inv.splice(bi,1); else inv[bi]={...inv[bi],quantity:q};
+    }
+    t.inventory=inv;
+
+    let msg=`${selectedBall?.name||"Ball"} used.`;
+    if(caught){
+      // The battle entry's id is already unique per combatant, so it makes a
+      // stable sheet key without reaching for Date.now() mid-render.
+      const key=`${t.id}_${target.pokemon.number}_${target.id}`;
+      const sheets=loadFromStorage<Record<string,PokemonSheetData>>("pokemon_sheets",{});
+      sheets[key]={
+        number:target.pokemon.number,nickname:target.nickname||"",
+        rank:target.pokemon.suggestedRank,loyalty:1,happiness:1,
+        attributes:{...target.attrs},
+        trainingAttributes:{strength:0,dexterity:0,vitality:0,special:0,insight:0},
+        skills:target.pokemonSkills??{brawl:0,channel:0,clash:0,evasion:0,alert:0,athletic:0,nature:0,stealth:0,intimidate:0,perform:0},
+        moves:(target.moves||[]).slice(0,4).map(m=>m.name),
+        partnerMoves:[],isPartner:false,nature:"Hardy",origin:"wild" as const,
+        heldItem:"",cruelty:false,inPokeball:true,happinessPending:0,notes:"",
+      };
+      saveToStorage("pokemon_sheets",sheets);
+      const toParty=(t.pokemon||[]).length<6;
+      if(toParty)t.pokemon=[...(t.pokemon||[]),key];
+      else t.pcBox=[...(t.pcBox||[]),key];
+      msg+=` ${nameOf(target,allEntries)} joined ${t.name||"the trainer"}'s ${toParty?"party":"PC Box"}.`;
+    }
+
+    allTrainers[ti]=t;
+    saveToStorage("trainers",allTrainers);
+    notifySession();
+    if(caught)onCaptured?.(target.id);
+    setCommitted(msg);
+  };
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
@@ -2420,7 +2474,19 @@ function CapturePopup({allEntries,defaultTargetId,onClose}:{allEntries:BattleEnt
               <div style={{fontSize:18,fontWeight:800,fontFamily:"'Exo 2'",color:caught?"#00d4aa":"#ff4757",marginBottom:6}}>{caught?"✓ Caught!":"✗ Broke Free!"}</div>
               <div style={{fontSize:12,color:"#8b90a8"}}>{throwRoll.successes} throw + {sealRoll.successes} seal + {totalBonus} bonus = <strong style={{color:caught?"#00d4aa":"#ff4757"}}>{totalSuccesses}</strong> / {required} needed</div>
               {!caught&&<div style={{fontSize:11,color:"#5a6080",marginTop:4}}>Need {required-totalSuccesses} more success{required-totalSuccesses!==1?"es":""}. Weaken further or use a better ball.</div>}
+              {committed
+                ? <div style={{fontSize:11,color:"#00d4aa",marginTop:10,lineHeight:1.5}}>{committed}</div>
+                : thrower
+                  ? <button onClick={commitResult}
+                      style={{marginTop:10,width:"100%",background:caught?"#00d4aa":"#5a6080",color:caught?"#0d1b16":"#e8eaf0",
+                        border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                      {caught?`✓ Add to ${thrower.name||"trainer"} & use ball`:"Use up the ball"}
+                    </button>
+                  : <div style={{fontSize:11,color:"#ff9f43",marginTop:10}}>Pick a thrower above to record this catch.</div>}
             </div>
+          )}
+          {committed&&(
+            <button onClick={onClose} style={{width:"100%",marginTop:10,background:"#2858C0",color:"#fff",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>Close</button>
           )}
         </div>
       </div>
@@ -3065,7 +3131,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
   return(
     <>
       {movePopup&&<MovePopup move={movePopup} attacker={entry} allEntries={allEntries} weather={weather} onClose={()=>setMovePopup(null)} onApplyDmg={applyDmg} onApplyEffect={applyEffect} onIncrementAction={incrementAction} onSpendWP={spendWP} onApplySpecial={(id,u)=>onUpdate(id,u)} onEndTurn={onNextTurn} onSetHazard={onSetHazard}/>}
-      {showCapture&&<CapturePopup allEntries={allEntries} defaultTargetId={entry.id} onClose={()=>setShowCapture(false)}/>}
+      {showCapture&&<CapturePopup allEntries={allEntries} defaultTargetId={entry.id} onClose={()=>setShowCapture(false)} onCaptured={id=>onRemove(id)}/>}
       {showMega&&<MegaEvolutionPopup entry={entry} allEntries={allEntries} onClose={()=>setShowMega(false)} onApply={onUpdate}/>}
       {showDynamax&&<DynamaxPopup entry={entry} onClose={()=>setShowDynamax(false)} onApply={onUpdate}/>}
       {showTera&&<TerastallizationPopup entry={entry} onClose={()=>setShowTera(false)} onApply={onUpdate}/>}
@@ -3565,12 +3631,24 @@ export default function BattleTrackerPage(){
   const sApplySpecial=(id:string,u:Partial<BattleEntry>)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e));
 
   const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string,side?:"player"|"enemy"|"neutral")=>{
-    const hp=pokemon.number<=0?10:pokemon.baseHp+pokemon.attributes.vitality;
-    const will=pokemon.number<=0?5:pokemon.attributes.insight+3;
-    const ini=Math.floor(Math.random()*6)+1+(pokemon.attributes?.dexterity??1);
+    /* A linked party Pokémon brings its sheet with it. Rank-ups live on the
+       sheet as base attributes plus trained ones, so reading only the species
+       entry here meant a Pokémon you'd raised walked into the fight with its
+       out-of-the-box stats — moves updated, HP didn't. Sheet wins when there
+       is one; the species entry is the fallback for wild//custom adds. */
+    const sheet=sheetKey?loadFromStorage<Record<string,any>>("pokemon_sheets",{})[sheetKey]:null;
+    const sheetAttrs=sheet?(()=>{
+      const a=sheet.attributes??{},t=sheet.trainingAttributes??{};
+      const sum=(k:string)=>(a[k]??pokemon.attributes[k as keyof typeof pokemon.attributes]??1)+(t[k]??0);
+      return{strength:sum("strength"),dexterity:sum("dexterity"),vitality:sum("vitality"),
+        special:sum("special"),insight:sum("insight")};
+    })():null;
+    const attrs=sheetAttrs??{...pokemon.attributes};
+    const hp=pokemon.number<=0?10:pokemon.baseHp+attrs.vitality;
+    const will=pokemon.number<=0?5:attrs.insight+3;
+    const ini=Math.floor(Math.random()*6)+1+(attrs?.dexterity??1);
     const defaultMoves=pokemon.moves.slice(0,4).map(m=>MOVES.find(mv=>mv.name===m.name)||{name:m.name,type:m.type,category:"Physical" as const,power:"-",accuracy:"-",damagePool:"-",effect:"",description:""} as Move);
-    // Load skills from the character sheet if linked
-    const sheetSkills=sheetKey?(()=>{const s=loadFromStorage<Record<string,any>>("pokemon_sheets",{});return s[sheetKey]?.skills??null;})():null;
+    const sheetSkills=sheet?.skills??null;
     setEntries(prev=>[...prev,{
       id:`${pokemon.number}-${Date.now()}`,pokemon,nickname:nickname||"",
       initiative:ini,currentHp:hp,maxHp:hp,currentWill:will,maxWill:will,
@@ -3579,7 +3657,7 @@ export default function BattleTrackerPage(){
       side:side||(trainerId?"player":"enemy"),trainerRank:(trainerRank||"Rookie") as any,
       abilities:pokemon.abilities.map(a=>({name:a,active:true})),
       moves:moves||defaultMoves,
-      attrs:{...pokemon.attributes},statMods:[],weatherImmune:false,actionCount:0,
+      attrs,statMods:[],weatherImmune:false,actionCount:0,
       reactionUsed:false,isProtected:false,linkedTrainerId:trainerId,linkedPokemonSheetKey:sheetKey,
       pokemonSkills:sheetSkills??{brawl:1,channel:1,clash:1,evasion:1,alert:1,athletic:1,nature:1,stealth:1,intimidate:1,perform:1},
     }]);

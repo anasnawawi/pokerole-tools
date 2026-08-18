@@ -149,16 +149,21 @@ function PointBudget({ used, total, label }: { used: number; total: number; labe
   );
 }
 
-function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange }: {
+function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange, hint }: {
   label: string; value: number; max: number; onChange: (v: number) => void;
   locked?: boolean; base?: number; dot?: boolean;
   training?: number; onTrainingChange?: (v: number) => void;
+  /** What this attribute/skill actually does. Sits on the label, not the row,
+   *  so hovering the pips doesn't look like the pips are being described. */
+  hint?: string;
 }) {
   const total = value + (training ?? 0);
   const totalMax = max;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-      <span style={{ width: 76, fontSize: 11, color: "#383838", flexShrink: 0 }}>{label}</span>
+      <span title={hint} style={{ width: 76, fontSize: 11, color: "#383838", flexShrink: 0,
+        cursor: hint ? "help" : undefined,
+        textDecoration: hint ? "underline dotted rgba(56,56,56,0.4)" : undefined, textUnderlineOffset: 2 }}>{label}</span>
       <div style={{ display: "flex", gap: 3 }}>
         {Array.from({ length: totalMax }).map((_, i) => {
           const filled = i < total;
@@ -196,6 +201,37 @@ function PipRow({ label, value, max, onChange, locked, base, dot, training, onTr
     </div>
   );
 }
+
+/* What each trainer stat is for, in one line. PokeRole explains these in the
+   rulebook; nothing in the app did, so a new player had no way to tell what
+   Insight or Clever were meant to cover while spending points on them. */
+const TRAINER_ATTR_HINTS: Record<string, string> = {
+  strength:  "Melee force — lifting, grappling, and physical damage.",
+  dexterity: "Speed and precision — initiative, dodging, and accuracy.",
+  vitality:  "Toughness — your Max HP is 4 + Vitality.",
+  insight:   "Awareness and willpower — your Will is Insight + 3.",
+};
+const TRAINER_SOCIAL_HINTS: Record<string, string> = {
+  tough:  "Projecting grit and resilience in social situations.",
+  cool:   "Composure and style — staying unfazed and impressive.",
+  beauty: "Elegance and presentation.",
+  cute:   "Charm and endearment.",
+  clever: "Wit and quick thinking in conversation.",
+};
+const TRAINER_SKILL_HINTS: Record<string, string> = {
+  brawl:      "Fighting hand-to-hand yourself.",
+  channel:    "Directing your Pokémon's special and ranged moves.",
+  clash:      "Meeting an incoming attack head-on as a reaction.",
+  evasion:    "Dodging an incoming attack as a reaction.",
+  alert:      "Noticing things — perception and avoiding surprise.",
+  athletic:   "Running, climbing, jumping and physical feats.",
+  nature:     "Wilderness lore, tracking and handling wild Pokémon.",
+  stealth:    "Moving unseen and unheard.",
+  etiquette:  "Formal manners and navigating polite society.",
+  intimidate: "Leaning on someone through force of presence.",
+  perform:    "Contests, performances and entertaining a crowd.",
+  capture:    "Throwing Poké Balls — used when you attempt a catch.",
+};
 
 const TRAINING_ROLLS: Record<string, { trainerAttr: "strength"|"dexterity"|"vitality"|"insight"; trainerSkill: "brawl"|"channel"|"athletic"|"nature"; label: string }> = {
   strength: { trainerAttr: "strength", trainerSkill: "brawl",    label: "STR" },
@@ -733,8 +769,12 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
               {POKEMON_SKILLS.map(({ key, label, desc }) => {
                 const val = sheet.skills[key] ?? 0;
                 return (
-                  <div key={key} title={desc} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <span style={{ fontSize: 10, color: "#383838", width: 68, flexShrink: 0 }}>{label}</span>
+                  /* The tooltip belongs on the name, not the whole row — on the
+                     row it fired over the pip boxes you actually click, which
+                     reads as the boxes having descriptions. */
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span title={desc} style={{ fontSize: 10, color: "#383838", width: 68, flexShrink: 0, cursor: "help",
+                      textDecoration: "underline dotted rgba(56,56,56,0.4)", textUnderlineOffset: 2 }}>{label}</span>
                     <div style={{ display: "flex", gap: 2 }}>
                       {Array.from({ length: skillInfo.skillLimit }).map((_, i) => (
                         <button key={i} onClick={() => {
@@ -1292,7 +1332,7 @@ function CharactersPageInner() {
                     {sel.age} + {sel.rank}: +{ageInfo.attrPoints} + {rankInfo.attrPoints} = {totalAttrPoints} distributable points (base 1 per attribute)
                   </div>
                   {(["strength", "dexterity", "vitality", "insight"] as const).map(attr => (
-                    <PipRow key={attr} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={TRAINER_ATTR_MAX}
+                    <PipRow key={attr} hint={TRAINER_ATTR_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={TRAINER_ATTR_MAX}
                       onChange={v => {
                         const cost = v - sel.attributes[attr];
                         if (cost > 0 && attrBudgetLeft <= 0) return;
@@ -1305,7 +1345,7 @@ function CharactersPageInner() {
                       <PointBudget used={usedSocialPoints} total={totalSocialPoints} label="pts" />
                     </div>
                     {(["tough", "cool", "beauty", "cute", "clever"] as const).map(attr => (
-                      <PipRow key={attr} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.socialAttributes[attr]} max={TRAINER_ATTR_MAX}
+                      <PipRow key={attr} hint={TRAINER_SOCIAL_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.socialAttributes[attr]} max={TRAINER_ATTR_MAX}
                         onChange={v => {
                           const cost = v - sel.socialAttributes[attr];
                           if (cost > 0 && socialBudgetLeft <= 0) return;
@@ -1323,7 +1363,7 @@ function CharactersPageInner() {
                   badge={<PointBudget used={usedSkillPoints} total={rankInfo.skillPoints} label={`pts · max ${rankInfo.skillLimit}`} />}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                     {(Object.keys(sel.skills) as (keyof typeof sel.skills)[]).map(skill => (
-                      <PipRow key={skill} label={skill.charAt(0).toUpperCase() + skill.slice(1)+(skill==="capture"?" (🎯)":"")} value={sel.skills[skill]} max={rankInfo.skillLimit}
+                      <PipRow key={skill} hint={TRAINER_SKILL_HINTS[skill]} label={skill.charAt(0).toUpperCase() + skill.slice(1)+(skill==="capture"?" (🎯)":"")} value={sel.skills[skill]} max={rankInfo.skillLimit}
                         onChange={v => {
                           const cost = v - sel.skills[skill];
                           if (cost > 0 && usedSkillPoints >= rankInfo.skillPoints) return;

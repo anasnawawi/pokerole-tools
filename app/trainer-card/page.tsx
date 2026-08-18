@@ -40,11 +40,11 @@ function Pips({ value, max, color = "#2850A0" }: { value: number; max: number; c
   );
 }
 
-function StatRow({ label, value, max, color }: {
-  label: string; value: number; max: number; color?: string;
+function StatRow({ label, value, max, color, dim }: {
+  label: string; value: number; max: number; color?: string; dim?: boolean;
 }) {
   return (
-    <div style={{display:"flex",alignItems:"center",gap:8,padding:"2px 0"}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,padding:"2px 0",opacity:dim?0.45:1}}>
       <span style={{flex:1,minWidth:0,fontSize:11,textTransform:"capitalize",
         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
       <Pips value={value} max={max} color={color}/>
@@ -172,18 +172,24 @@ function TrainerStats({ trainer }: { trainer: TrainerData }) {
         ))}
       </Section>
 
+      {/* Every skill, not just the trained ones. Hiding zeros made the card
+          look like the sheet had only five skills and gave no way to see the
+          rest without opening the editor — and "I have nothing in Stealth" is
+          itself worth reading off a character sheet. Untrained rows are dimmed
+          so the trained ones still carry the eye. */}
       <Section title={`SKILLS · LIMIT ${skillLimit}`}>
-        {spent.length === 0 && trainer.customSkills.length === 0 ? (
-          <div style={{fontSize:11,color:"#585858",fontStyle:"italic"}}>No skill points spent yet.</div>
-        ) : (
-          <>
-            {spent.map(([k,v])=>(
-              <StatRow key={k} label={k==="capture"?"capture 🎯":k} value={v} max={skillLimit} color="#00A080"/>
-            ))}
-            {trainer.customSkills.filter(s=>s.name.trim()).map(s=>(
-              <StatRow key={s.name} label={s.name} value={s.points} max={skillLimit} color="#C08018"/>
-            ))}
-          </>
+        {skills.map(([k,v])=>(
+          <StatRow key={k} label={k==="capture"?"capture 🎯":k} value={v}
+            max={skillLimit} color="#00A080" dim={v===0}/>
+        ))}
+        {trainer.customSkills.filter(s=>s.name.trim()).map(s=>(
+          <StatRow key={s.name} label={s.name} value={s.points} max={skillLimit}
+            color="#C08018" dim={s.points===0}/>
+        ))}
+        {spent.length === 0 && trainer.customSkills.length === 0 && (
+          <div style={{fontSize:10,color:"#585858",fontStyle:"italic",marginTop:6}}>
+            No skill points spent yet.
+          </div>
         )}
       </Section>
     </div>
@@ -290,10 +296,10 @@ function PokemonCard({ sheetKey, sheet, battle }: {
         {/* Skills */}
         <Section title="SKILLS">
           {(Object.keys(sheet.skills) as (keyof PokemonSheetData["skills"])[])
-            .filter(k => sheet.skills[k] > 0)
-            .map(k => <StatRow key={k} label={k} value={sheet.skills[k]} max={5} color="#00A080"/>)}
+            .map(k => <StatRow key={k} label={k} value={sheet.skills[k]} max={5}
+              color="#00A080" dim={sheet.skills[k]===0}/>)}
           {Object.values(sheet.skills).every(v => v === 0) && (
-            <div style={{fontSize:11,color:"#585858",fontStyle:"italic"}}>No skill points spent yet.</div>
+            <div style={{fontSize:10,color:"#585858",fontStyle:"italic",marginTop:6}}>No skill points spent yet.</div>
           )}
         </Section>
 
