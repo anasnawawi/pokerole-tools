@@ -3554,6 +3554,11 @@ export default function BattleTrackerPage(){
   const [sceneEnemyId,setSceneEnemyId]=useState<string|null>(null);
   const [menuMode,setMenuMode]=useState<"root"|"fight"|"bag"|"pokemon">("root");
   const [sceneMsg,setSceneMsg]=useState<string>("");
+  // BAG's own "throw a ball" launcher — separate from BattleCard's CATCH
+  // button (which opens the same popup from a specific card) because BAG has
+  // no card of its own to hang state off; this is the fix for the report that
+  // Poké Balls in the bag "didn't appear as an option in the battle encounter."
+  const [showSceneCapture,setShowSceneCapture]=useState(false);
   const [drawerId,setDrawerId]=useState<string|null>(null);
   const [scenePopup,setScenePopup]=useState<Move|null>(null);
   const [sceneTargetIds,setSceneTargetIds]=useState<string[]>([]);
@@ -4119,6 +4124,24 @@ export default function BattleTrackerPage(){
                           ))}
                         </div>
                       ):<div style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#A00808"}}>No party Pokémon on field.</div>}
+
+                      {/* Poké Balls — a separate section from restoratives,
+                          since a ball is thrown at the opponent, not used on
+                          your own side. Only offered when there's actually a
+                          wild/enemy mon in focus to throw one at. */}
+                      {onFieldEnemy&&onFieldEnemy.side==="enemy"&&(
+                        <div style={{marginTop:10,paddingTop:8,borderTop:"2px dashed #C8C8A8"}}>
+                          <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",marginBottom:5,lineHeight:1.6}}>
+                            Throw at {nameOf(onFieldEnemy,entries)}.
+                          </div>
+                          <button onClick={()=>{setShowSceneCapture(true);setMenuMode("root");}}
+                            style={{width:"100%",fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#F0ECD4",
+                              border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"7px 8px",cursor:"pointer",
+                              textAlign:"left",display:"flex",alignItems:"center",gap:6}}>
+                            <span aria-hidden>🎯</span>POKé BALL
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -4233,6 +4256,13 @@ export default function BattleTrackerPage(){
               </div>
             );
           })()}
+
+          {/* Capture popup (from BAG → POKé BALL) */}
+          {mounted&&showSceneCapture&&onFieldEnemy&&(
+            <CapturePopup allEntries={entries} defaultTargetId={onFieldEnemy.id}
+              onClose={()=>setShowSceneCapture(false)}
+              onCaptured={id=>{remove(id);setShowSceneCapture(false);}}/>
+          )}
 
           {/* Move detail popup (from FIGHT) */}
           {mounted&&scenePopup&&onFieldPlayer&&(
