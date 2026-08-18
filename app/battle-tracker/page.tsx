@@ -604,25 +604,42 @@ function getEffectiveAttrs(e:BattleEntry):AttrSet{
 }
 
 type PokemonSkills={brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;intimidate:number;perform:number};
-function calcAccPool(move:Move,attrs:AttrSet,weather?:WeatherData,skills?:Partial<PokemonSkills>):number{
-  const acc=move.accuracy.toLowerCase();let p=0;
-  if(acc.includes("strength"))p+=attrs.strength;
-  if(acc.includes("dexterity"))p+=attrs.dexterity;
-  if(acc.includes("special"))p+=attrs.special;
-  if(acc.includes("insight"))p+=attrs.insight;
-  if(acc.includes("vitality"))p+=attrs.vitality;
-  // Add skill rank — use actual value if non-zero, else fall back to fixed defaults
+const ACC_ATTR_KEYS=["strength","dexterity","special","insight","vitality"] as const;
+const ACC_SKILL_KEYS:(keyof PokemonSkills)[]=["brawl","athletic","channel","perform","clash","alert","intimidate","stealth","nature"];
+const ATTR_ABBR:Record<keyof AttrSet,string>={strength:"STR",dexterity:"DEX",special:"SPC",insight:"INS",vitality:"VIT"};
+
+/* "Dexterity/Strength + Athletic" means roll whichever of Dexterity or
+   Strength is higher, not both added together — "/" is PokeRole's OR,
+   not a plus. Segmenting on the formula's own "+" first keeps an
+   attribute name from ever being read out of the skill half (and vice
+   versa); each half then picks its best match instead of summing all
+   matches. */
+function splitAccFormula(accuracy:string):{attrSeg:string;skillSeg:string}{
+  const i=accuracy.indexOf("+");
+  return i<0?{attrSeg:accuracy,skillSeg:""}:{attrSeg:accuracy.slice(0,i),skillSeg:accuracy.slice(i+1)};
+}
+
+function accAttrChoices(move:Move):(keyof AttrSet)[]{
+  const{attrSeg}=splitAccFormula(move.accuracy.toLowerCase());
+  return ACC_ATTR_KEYS.filter(k=>attrSeg.includes(k));
+}
+
+function resolveAccAttr(move:Move,attrs:AttrSet,chosenAttr?:keyof AttrSet):keyof AttrSet|null{
+  const choices=accAttrChoices(move);
+  if(choices.length===0)return null;
+  if(chosenAttr&&choices.includes(chosenAttr))return chosenAttr;
+  return choices.reduce((best,k)=>attrs[k]>attrs[best]?k:best,choices[0]);
+}
+
+function calcAccPool(move:Move,attrs:AttrSet,weather?:WeatherData,skills?:Partial<PokemonSkills>,chosenAttr?:keyof AttrSet):number{
+  let p=0;
+  const attrKey=resolveAccAttr(move,attrs,chosenAttr);
+  if(attrKey)p+=attrs[attrKey];
+  const{skillSeg}=splitAccFormula(move.accuracy.toLowerCase());
+  // Use actual value if non-zero, else fall back to fixed defaults
   const sk=(k:keyof PokemonSkills)=>skills?.[k]||((k==="brawl"||k==="channel"||k==="athletic"||k==="perform"||k==="clash")?2:1);
-  if(acc.includes("brawl"))p+=sk("brawl");
-  else if(acc.includes("athletic"))p+=sk("athletic");
-  else if(acc.includes("channel"))p+=sk("channel");
-  else if(acc.includes("perform"))p+=sk("perform");
-  else if(acc.includes("clash"))p+=sk("clash");
-  else if(acc.includes("alert"))p+=sk("alert");
-  else if(acc.includes("intimidate"))p+=sk("intimidate");
-  else if(acc.includes("stealth"))p+=sk("stealth");
-  else if(acc.includes("nature"))p+=sk("nature");
-  else p+=1; // unknown skill — minimal bonus
+  const skillChoices=ACC_SKILL_KEYS.filter(k=>skillSeg.includes(k));
+  p+=skillChoices.length>0?Math.max(...skillChoices.map(sk)):1; // unknown skill — minimal bonus
   if(weather?.accuracyPenalty)p=Math.max(0,p-weather.accuracyPenalty);
   return Math.max(1,p);
 }
@@ -1165,13 +1182,19 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     !(STATUS_CONDITIONS[primaryStatus(attacker)]?.requiresRollToAct)?{canAct:true,detail:""}:null
   );
   const [loyaltyRoll,setLoyaltyRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  // MovePopup is only ever mounted for one move at a time (the popup
+  // unmounts on close before a different move's popup opens), so this
+  // resets naturally per-move without needing an effect.
+  const [accAttrOverride,setAccAttrOverride]=useState<keyof AttrSet|null>(null);
 
   const attrs=getEffectiveAttrs(attacker);
   const attackerPain=getPainPenalty(attacker.currentHp,attacker.maxHp);
   const stab=attacker.pokemon.types.includes(move.type as PokemonType);
   const actReq=[1,2,3,4,5][Math.min(attacker.actionCount,4)];
   const abilMods=calcAbilityBonus(attacker,move,weather);
-  const accPool=calcAccPool(move,attrs,weather,attacker.pokemonSkills);
+  const accAttrChoicesForMove=accAttrChoices(move);
+  const resolvedAccAttr=resolveAccAttr(move,attrs,accAttrOverride??undefined);
+  const accPool=calcAccPool(move,attrs,weather,attacker.pokemonSkills,accAttrOverride??undefined);
   const canAct=preRollDone?.canAct??false;
 
   // Disobedience: ONLY for player side, and never blocks rolls — just a warning
@@ -1207,16 +1230,15 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
 
   // Pool breakdown
   const accBreakdown=(()=>{
-    const acc=move.accuracy.toLowerCase();const parts:string[]=[];
-    if(acc.includes("strength"))parts.push(`STR ${attrs.strength}`);
-    if(acc.includes("dexterity"))parts.push(`DEX ${attrs.dexterity}`);
-    if(acc.includes("special"))parts.push(`SPC ${attrs.special}`);
-    if(acc.includes("insight"))parts.push(`INS ${attrs.insight}`);
-    if(acc.includes("vitality"))parts.push(`VIT ${attrs.vitality}`);
-    const sk=acc.includes("brawl")?"Brawl":acc.includes("athletic")?"Athletic":acc.includes("channel")?"Channel":acc.includes("perform")?"Perform":acc.includes("clash")?"Clash":acc.includes("alert")?"Alert":acc.includes("intimidate")?"Intimidate":acc.includes("stealth")?"Stealth":acc.includes("nature")?"Nature":"Skill";
-    const skKey=sk.toLowerCase() as keyof PokemonSkills;
-    const sv=attacker.pokemonSkills?.[skKey]||((acc.includes("brawl")||acc.includes("athletic")||acc.includes("channel")||acc.includes("perform")||acc.includes("clash"))?2:1);
-    parts.push(`${sk} ${sv}`);
+    const parts:string[]=[];
+    if(resolvedAccAttr)parts.push(`${ATTR_ABBR[resolvedAccAttr]} ${attrs[resolvedAccAttr]}`);
+    const{skillSeg}=splitAccFormula(move.accuracy.toLowerCase());
+    const skFn=(k:keyof PokemonSkills)=>attacker.pokemonSkills?.[k]||((k==="brawl"||k==="channel"||k==="athletic"||k==="perform"||k==="clash")?2:1);
+    const skillChoices=ACC_SKILL_KEYS.filter(k=>skillSeg.includes(k));
+    if(skillChoices.length>0){
+      const bestSkill=skillChoices.reduce((best,k)=>skFn(k)>skFn(best)?k:best,skillChoices[0]);
+      parts.push(`${bestSkill.charAt(0).toUpperCase()+bestSkill.slice(1)} ${skFn(bestSkill)}`);
+    }else parts.push("Skill 1");
     const statusPen=STATUS_CONDITIONS[primaryStatus(attacker)]?.accuracyPenalty??0;
     if(statusPen>0)parts.push(`${primaryStatus(attacker)} −${statusPen}`);
     if(attackerPain>0)parts.push(`Pain −${attackerPain}`);
@@ -1641,6 +1663,19 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
           {canAct&&(
             <div style={{background:"rgba(104,144,240,0.05)",border:"1px solid #6890f020",borderRadius:6,padding:"8px 10px"}}>
               <div style={{fontSize:9,fontWeight:700,color:"#6890f0",letterSpacing:"1px",textTransform:"uppercase",marginBottom:5}}>① Accuracy Roll — {move.accuracy} · Need {actReq}+ hits</div>
+              {accAttrChoicesForMove.length>1&&(
+                <div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                  <span style={{fontSize:9,color:"#5a6080",textTransform:"uppercase",letterSpacing:"0.5px"}}>Use:</span>
+                  {accAttrChoicesForMove.map(k=>{
+                    const active=resolvedAccAttr===k;
+                    return(
+                      <button key={k} onClick={()=>setAccAttrOverride(k)} style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:4,cursor:"pointer",border:`1px solid ${active?"#6890f0":"#2a2f45"}`,background:active?"rgba(104,144,240,0.18)":"#13151f",color:active?"#6890f0":"#8b90a8"}}>
+                        {ATTR_ABBR[k]} {attrs[k]}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <div style={{fontSize:10,color:"#5a6080",marginBottom:6,fontStyle:"italic"}}>Pool: {accBreakdown} = <strong style={{color:accPool<actReq?"#ff4757":"#6890f0"}}>{accPool}d</strong></div>
               {accPool<=0&&<div style={{background:"rgba(255,71,87,0.12)",border:"1px solid #ff475740",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Dice pool is 0 — cannot roll. Action is impossible.</div>}
               {accPool>0&&accPool<actReq&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Pool ({accPool}d) is less than required hits ({actReq}) — success is very unlikely.</div>}
