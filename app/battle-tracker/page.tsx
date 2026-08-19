@@ -637,15 +637,28 @@ function resolveAccAttr(move:Move,attrs:AttrSet,chosenAttr?:keyof AttrSet):keyof
   return choices.reduce((best,k)=>attrs[k]>attrs[best]?k:best,choices[0]);
 }
 
-function calcAccPool(move:Move,attrs:AttrSet,weather?:WeatherData,skills?:Partial<PokemonSkills>,chosenAttr?:keyof AttrSet):number{
+function accSkillDefault(k:keyof PokemonSkills,skills?:Partial<PokemonSkills>):number{
+  return skills?.[k]||((k==="brawl"||k==="channel"||k==="athletic"||k==="perform"||k==="clash")?2:1);
+}
+
+function accSkillChoices(move:Move):(keyof PokemonSkills)[]{
+  const{skillSeg}=splitAccFormula(move.accuracy.toLowerCase());
+  return ACC_SKILL_KEYS.filter(k=>skillSeg.includes(k));
+}
+
+function resolveAccSkill(move:Move,skills:Partial<PokemonSkills>|undefined,chosenSkill?:keyof PokemonSkills):keyof PokemonSkills|null{
+  const choices=accSkillChoices(move);
+  if(choices.length===0)return null;
+  if(chosenSkill&&choices.includes(chosenSkill))return chosenSkill;
+  return choices.reduce((best,k)=>accSkillDefault(k,skills)>accSkillDefault(best,skills)?k:best,choices[0]);
+}
+
+function calcAccPool(move:Move,attrs:AttrSet,weather?:WeatherData,skills?:Partial<PokemonSkills>,chosenAttr?:keyof AttrSet,chosenSkill?:keyof PokemonSkills):number{
   let p=0;
   const attrKey=resolveAccAttr(move,attrs,chosenAttr);
   if(attrKey)p+=attrs[attrKey];
-  const{skillSeg}=splitAccFormula(move.accuracy.toLowerCase());
-  // Use actual value if non-zero, else fall back to fixed defaults
-  const sk=(k:keyof PokemonSkills)=>skills?.[k]||((k==="brawl"||k==="channel"||k==="athletic"||k==="perform"||k==="clash")?2:1);
-  const skillChoices=ACC_SKILL_KEYS.filter(k=>skillSeg.includes(k));
-  p+=skillChoices.length>0?Math.max(...skillChoices.map(sk)):1; // unknown skill — minimal bonus
+  const skillKey=resolveAccSkill(move,skills,chosenSkill);
+  p+=skillKey?accSkillDefault(skillKey,skills):1; // unknown skill — minimal bonus
   if(weather?.accuracyPenalty)p=Math.max(0,p-weather.accuracyPenalty);
   return Math.max(1,p);
 }
@@ -1196,6 +1209,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   // unmounts on close before a different move's popup opens), so this
   // resets naturally per-move without needing an effect.
   const [accAttrOverride,setAccAttrOverride]=useState<keyof AttrSet|null>(null);
+  const [accSkillOverride,setAccSkillOverride]=useState<keyof PokemonSkills|null>(null);
 
   const attrs=getEffectiveAttrs(attacker);
   const attackerPain=getPainPenalty(attacker.currentHp,attacker.maxHp);
@@ -1204,7 +1218,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const abilMods=calcAbilityBonus(attacker,move,weather);
   const accAttrChoicesForMove=accAttrChoices(move);
   const resolvedAccAttr=resolveAccAttr(move,attrs,accAttrOverride??undefined);
-  const accPool=calcAccPool(move,attrs,weather,attacker.pokemonSkills,accAttrOverride??undefined);
+  const accSkillChoicesForMove=accSkillChoices(move);
+  const resolvedAccSkill=resolveAccSkill(move,attacker.pokemonSkills,accSkillOverride??undefined);
+  const accPool=calcAccPool(move,attrs,weather,attacker.pokemonSkills,accAttrOverride??undefined,accSkillOverride??undefined);
   const canAct=preRollDone?.canAct??false;
 
   // Disobedience: ONLY for player side, and never blocks rolls — just a warning
@@ -1242,13 +1258,8 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const accBreakdown=(()=>{
     const parts:string[]=[];
     if(resolvedAccAttr)parts.push(`${ATTR_ABBR[resolvedAccAttr]} ${attrs[resolvedAccAttr]}`);
-    const{skillSeg}=splitAccFormula(move.accuracy.toLowerCase());
-    const skFn=(k:keyof PokemonSkills)=>attacker.pokemonSkills?.[k]||((k==="brawl"||k==="channel"||k==="athletic"||k==="perform"||k==="clash")?2:1);
-    const skillChoices=ACC_SKILL_KEYS.filter(k=>skillSeg.includes(k));
-    if(skillChoices.length>0){
-      const bestSkill=skillChoices.reduce((best,k)=>skFn(k)>skFn(best)?k:best,skillChoices[0]);
-      parts.push(`${bestSkill.charAt(0).toUpperCase()+bestSkill.slice(1)} ${skFn(bestSkill)}`);
-    }else parts.push("Skill 1");
+    if(resolvedAccSkill)parts.push(`${resolvedAccSkill.charAt(0).toUpperCase()+resolvedAccSkill.slice(1)} ${accSkillDefault(resolvedAccSkill,attacker.pokemonSkills)}`);
+    else parts.push("Skill 1");
     const statusPen=STATUS_CONDITIONS[primaryStatus(attacker)]?.accuracyPenalty??0;
     if(statusPen>0)parts.push(`${primaryStatus(attacker)} −${statusPen}`);
     if(attackerPain>0)parts.push(`Pain −${attackerPain}`);
@@ -1681,6 +1692,19 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     return(
                       <button key={k} onClick={()=>setAccAttrOverride(k)} style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:4,cursor:"pointer",border:`1px solid ${active?"#6890f0":"#2a2f45"}`,background:active?"rgba(104,144,240,0.18)":"#13151f",color:active?"#6890f0":"#8b90a8"}}>
                         {ATTR_ABBR[k]} {attrs[k]}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {accSkillChoicesForMove.length>1&&(
+                <div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+                  <span style={{fontSize:9,color:"#5a6080",textTransform:"uppercase",letterSpacing:"0.5px"}}>Use:</span>
+                  {accSkillChoicesForMove.map(k=>{
+                    const active=resolvedAccSkill===k;
+                    return(
+                      <button key={k} onClick={()=>setAccSkillOverride(k)} style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:4,cursor:"pointer",border:`1px solid ${active?"#6890f0":"#2a2f45"}`,background:active?"rgba(104,144,240,0.18)":"#13151f",color:active?"#6890f0":"#8b90a8"}}>
+                        {k.charAt(0).toUpperCase()+k.slice(1)} {accSkillDefault(k,attacker.pokemonSkills)}
                       </button>
                     );
                   })}
