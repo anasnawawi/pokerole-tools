@@ -354,9 +354,10 @@ function BenchMon({entry,back,allEntries,onClick,trainerSpriteId}:{entry:BattleE
    goes when". One sprite per combatant in initiative order, fastest at the
    top — the same order the turn actually runs in, so scanning down the
    column answers "who's next" without opening anything. */
-function CollapsedRoster({sorted,activeId,entries,onExpand,onPick}:{
+function CollapsedRoster({sorted,activeId,entries,onExpand,onPick,trainerSpriteFor}:{
   sorted:BattleEntry[]; activeId?:string; entries:BattleEntry[];
   onExpand:()=>void; onPick:(id:string)=>void;
+  trainerSpriteFor:(entry:BattleEntry)=>string|undefined;
 }){
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
@@ -391,7 +392,7 @@ function CollapsedRoster({sorted,activeId,entries,onExpand,onPick}:{
                 background:fainted?"#B8B8A0":"#F8F8E8"}}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- local
                     pixel art at a fixed tiny size; next/image would blur it. */}
-                <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={34} height={34}
+                <img src={e.pokemon.number>0?`/sprites/pokemon/${e.pokemon.number}.png`:trainerSpriteFor(e)?`/sprites/trainers/${trainerSpriteFor(e)}.png`:""} alt="" width={34} height={34}
                   draggable={false}
                   style={{imageRendering:"pixelated",objectFit:"contain",
                     filter:fainted?"grayscale(1)":undefined}}
@@ -3940,7 +3941,7 @@ export default function BattleTrackerPage(){
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
-              onPick={id=>setDrawerId(id)}/>
+              onPick={id=>setDrawerId(id)} trainerSpriteFor={trainerSpriteFor}/>
           ) : (
             <>
               {/* Sidebar tabs */}
