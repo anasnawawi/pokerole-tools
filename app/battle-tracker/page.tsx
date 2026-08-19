@@ -195,9 +195,14 @@ function loadSpriteBounds(src:string):Promise<SpriteBounds|null>{
   return p;
 }
 
-function PokeSprite({number,back,boxW=160,boxH=150,fainted}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean}){
+function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean;trainerSpriteId?:string}){
   const [broken,setBroken]=useState(false);
-  const src=number>0?`/sprites/pokemon/${back?"back/":""}${number}.png`:"";
+  // A "trainer" combatant (added via + ADD TRAINER) carries a placeholder
+  // Pokémon with number -1 — there's no species sprite for that, so fall
+  // back to the linked trainer's own chosen battler sprite instead.
+  const src=number>0?`/sprites/pokemon/${back?"back/":""}${number}.png`
+    :trainerSpriteId?`/sprites/trainers/${back?"back/":""}${trainerSpriteId}.png`
+    :"";
   const [bounds,setBounds]=useState<SpriteBounds|null>(null);
   useEffect(()=>{
     if(!src)return;
@@ -206,7 +211,7 @@ function PokeSprite({number,back,boxW=160,boxH=150,fainted}:{number:number;back?
     return ()=>{live=false;};
   },[src]);
 
-  if(broken||number<=0)return<div style={{width:boxW,height:boxH,pointerEvents:"none"}}/>;
+  if(broken||!src)return<div style={{width:boxW,height:boxH,pointerEvents:"none"}}/>;
 
   const filter=fainted?"grayscale(1) brightness(1.15)":"drop-shadow(0 3px 2px rgba(0,0,0,0.35))";
   const opacity=fainted?0.4:1;
@@ -296,7 +301,7 @@ function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enem
 }
 // A Pokémon standing on a FireRed-style grass platform. The sprite's feet are pinned to
 // the platform's mid-line so it sits correctly regardless of the sprite's source size.
-function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void}){
+function FieldMon({number,back,fainted,onClick,trainerSpriteId}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string}){
   const w=back?340:300, h=back?232:200, plat=back?74:62;
   return(
     <div onClick={onClick} style={{position:"relative",width:w,height:h,cursor:onClick?"pointer":"default"}}>
@@ -309,7 +314,7 @@ function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fai
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={number} back={back} boxW={back?300:250} boxH={back?232:200} fainted={fainted}/>
+        <PokeSprite number={number} back={back} boxW={back?300:250} boxH={back?232:200} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
       </div>
     </div>
   );
@@ -319,7 +324,7 @@ function FieldMon({number,back,fainted,onClick}:{number:number;back?:boolean;fai
    so it reads as present-but-not-the-subject. They used to be 26px icons in a
    cream card, which said "list of names" rather than "who else is out here".
    Clicking one brings it into the focused slot. */
-function BenchMon({entry,back,allEntries,onClick}:{entry:BattleEntry;back?:boolean;allEntries:BattleEntry[];onClick:()=>void}){
+function BenchMon({entry,back,allEntries,onClick,trainerSpriteId}:{entry:BattleEntry;back?:boolean;allEntries:BattleEntry[];onClick:()=>void;trainerSpriteId?:string}){
   const [hover,setHover]=useState(false);
   const fainted=entry.currentHp<=0;
   const w=back?84:72, h=back?60:48, plat=back?19:15;
@@ -340,7 +345,7 @@ function BenchMon({entry,back,allEntries,onClick}:{entry:BattleEntry;back?:boole
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={entry.pokemon.number} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted}/>
+        <PokeSprite number={entry.pokemon.number} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
       </div>
     </button>
   );
@@ -3609,6 +3614,10 @@ export default function BattleTrackerPage(){
   const [sceneTargetIds,setSceneTargetIds]=useState<string[]>([]);
   const [showAddModal,setShowAddModal]=useState(false);
   const [hazards,setHazards]=useState<{player:HazardSide;enemy:HazardSide}>(()=>loadFromStorage("bt_hazards",{player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS}));
+  // A "+ ADD TRAINER" entry has no species sprite (pokemon.number -1) — this
+  // resolves its on-field sprite to the linked trainer's own chosen battler.
+  const allTrainersForSprites=useMemo(()=>loadFromStorage<TrainerData[]>("trainers",[]),[]);
+  const trainerSpriteFor=useCallback((entry:BattleEntry)=>entry.linkedTrainerId?allTrainersForSprites.find(t=>t.id===entry.linkedTrainerId)?.spriteId||undefined:undefined,[allTrainersForSprites]);
 
   useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
   useEffect(()=>{saveToStorage("bt_hazards",hazards);},[hazards]);
@@ -4061,7 +4070,7 @@ export default function BattleTrackerPage(){
                     gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
                     {benchFar.map(e=>(
                       <span key={e.id} style={{pointerEvents:"auto"}}>
-                        <BenchMon entry={e} allEntries={entries} onClick={()=>setSceneEnemyId(e.id)}/>
+                        <BenchMon entry={e} allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
                       </span>
                     ))}
                   </div>
@@ -4073,7 +4082,7 @@ export default function BattleTrackerPage(){
                     gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
                     {benchNear.map(e=>(
                       <span key={e.id} style={{pointerEvents:"auto"}}>
-                        <BenchMon entry={e} back allEntries={entries} onClick={()=>setSceneEnemyId(e.id)}/>
+                        <BenchMon entry={e} back allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
                       </span>
                     ))}
                   </div>
@@ -4081,7 +4090,7 @@ export default function BattleTrackerPage(){
                 {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
                 {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
                   <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                    <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                    <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)}/>
                     <StatusFX statuses={onFieldEnemy.statuses}/>
                     <HazardMarkers hazards={hazards.enemy}/>
                   </div>
@@ -4090,7 +4099,7 @@ export default function BattleTrackerPage(){
                 {mounted&&onFieldPlayer&&(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
                     <div style={{position:"relative"}}>
-                      <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                      <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
                       <StatusFX statuses={onFieldPlayer.statuses}/>
                       <HazardMarkers hazards={hazards.player}/>
                     </div>
