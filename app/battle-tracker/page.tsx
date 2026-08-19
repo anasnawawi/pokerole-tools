@@ -11,7 +11,7 @@ import {
   STATUS_CONDITIONS, WEATHER_DATA, WeatherData,
   getDisobedienceLevel, getPainPenalty,
 } from "../data/game-rules";
-import { saveToStorage, loadFromStorage } from "../lib/storage";
+import { saveToStorage, loadFromStorage, STORAGE_PREFIX } from "../lib/storage";
 import { notifySession } from "../lib/session";
 import type { TrainerData, PokemonSheetData } from "../lib/trainer";
 import PokedexFrame from "../components/PokedexFrame";
@@ -141,7 +141,7 @@ function StatusBadge({status,onRemove}:{status:string;onRemove?:()=>void}){
           {status.slice(0,3).toUpperCase()}
         </span>
       )}
-      {onRemove&&<button onClick={onRemove} style={{background:"none",border:"none",color:"#F8D8F8",cursor:"pointer",fontSize:8,padding:"0 1px",lineHeight:1}}>×</button>}
+      {onRemove&&<button onClick={onRemove} title="Remove status" style={{background:"none",border:"none",color:"#F8D8F8",cursor:"pointer",fontSize:8,padding:"0 1px",lineHeight:1}}>×</button>}
     </span>
   );
 }
@@ -601,6 +601,47 @@ function HpBar({cur,max,isWp}:{cur:number;max:number;isWp?:boolean}){
   );
 }
 const adjBtn:React.CSSProperties={width:20,height:20,background:"#1a1d27",border:"1px solid #3a4060",borderRadius:3,color:"#00d4aa",cursor:"pointer",fontSize:14,display:"inline-flex",alignItems:"center",justifyContent:"center"};
+
+/* A Pokémon's real stats live on its Characters-page sheet (base attributes
+   plus training, current skills) rather than on the static species entry —
+   shared by the initial add and by the live-sync effect below so both stay
+   in exact agreement about what "current stats" means. */
+function deriveSheetStats(pokemon:PokemonEntry,sheet:PokemonSheetData):{attrs:AttrSet;maxHp:number;maxWill:number;skills:PokemonSkills|null}{
+  const a=sheet.attributes,t=sheet.trainingAttributes;
+  const sum=(k:keyof AttrSet)=>(a[k]??pokemon.attributes[k]??1)+(t[k]??0);
+  const attrs={strength:sum("strength"),dexterity:sum("dexterity"),vitality:sum("vitality"),
+    special:sum("special"),insight:sum("insight")};
+  const maxHp=pokemon.number<=0?10:pokemon.baseHp+attrs.vitality;
+  const maxWill=pokemon.number<=0?5:attrs.insight+3;
+  return{attrs,maxHp,maxWill,skills:sheet.skills??null};
+}
+
+/* Stats used to be captured once at add-time and never revisited, so a rank-
+   up or a hand-edited attribute on the Characters page never reached a
+   Pokémon already sitting in an open battle. Re-deriving from each linked
+   entry's current sheet keeps them in step; a max-stat change carries its
+   current value along with it (heal on a VIT gain, clamp down on a loss)
+   rather than silently resetting the Pokémon to full. */
+function reconcileEntriesWithSheets(entries:BattleEntry[],sheets:Record<string,PokemonSheetData>):BattleEntry[]{
+  let changed=false;
+  const next=entries.map(en=>{
+    if(!en.linkedPokemonSheetKey)return en;
+    const sheet=sheets[en.linkedPokemonSheetKey];
+    if(!sheet)return en;
+    const{attrs,maxHp,maxWill,skills}=deriveSheetStats(en.pokemon,sheet);
+    if(attrs.strength===en.attrs.strength&&attrs.dexterity===en.attrs.dexterity&&attrs.vitality===en.attrs.vitality&&
+       attrs.special===en.attrs.special&&attrs.insight===en.attrs.insight&&maxHp===en.maxHp&&maxWill===en.maxWill&&
+       JSON.stringify(skills)===JSON.stringify(en.pokemonSkills??null)){
+      return en;
+    }
+    changed=true;
+    return{...en,attrs,maxHp,maxWill,
+      currentHp:Math.max(0,Math.min(maxHp,en.currentHp+(maxHp-en.maxHp))),
+      currentWill:Math.max(0,Math.min(maxWill,en.currentWill+(maxWill-en.maxWill))),
+      pokemonSkills:skills??en.pokemonSkills};
+  });
+  return changed?next:entries;
+}
 
 function getEffectiveAttrs(e:BattleEntry):AttrSet{
   const sc=STATUS_CONDITIONS[primaryStatus(e)];const accPen=sc?.accuracyPenalty??0;
@@ -1064,7 +1105,7 @@ function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:a
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:18}}>👤</span>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#3d8bff",margin:0,flex:1}}>{trainerData?.name||"Trainer"} — Skill Action</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+          <button onClick={onClose} title="Close" style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
         </div>
         <div style={{padding:16,overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>
           <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
@@ -1366,7 +1407,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
           {selfTarget&&<span style={{fontSize:7,color:"#780878",background:"#E8D8F8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>SELF</span>}
           {selfDestruct&&<span style={{fontSize:7,color:"#F8F8E8",background:"#D82808",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>BOOM</span>}
           <span style={{fontSize:11,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{move.name}</span>
-          <button onClick={onClose} style={{background:"#E8E8D0",border:"2px solid #181818",color:"#181818",cursor:"pointer",fontSize:10,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 #787878",flexShrink:0}}>×</button>
+          <button onClick={onClose} title="Close" style={{background:"#E8E8D0",border:"2px solid #181818",color:"#181818",cursor:"pointer",fontSize:10,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 #787878",flexShrink:0}}>×</button>
         </div>
         <div style={{padding:12,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,flex:1,background:"#F8F8E8"}}>
           <p style={{fontSize:9,color:"#484830",lineHeight:1.6,margin:0,fontFamily:"inherit"}}>{move.description}</p>
@@ -1690,7 +1731,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   {accAttrChoicesForMove.map(k=>{
                     const active=resolvedAccAttr===k;
                     return(
-                      <button key={k} onClick={()=>setAccAttrOverride(k)} style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:4,cursor:"pointer",border:`1px solid ${active?"#6890f0":"#2a2f45"}`,background:active?"rgba(104,144,240,0.18)":"#13151f",color:active?"#6890f0":"#8b90a8"}}>
+                      <button key={k} onClick={()=>setAccAttrOverride(k)} title={`Use ${k.charAt(0).toUpperCase()+k.slice(1)} for this roll`} style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:4,cursor:"pointer",border:`1px solid ${active?"#6890f0":"#2a2f45"}`,background:active?"rgba(104,144,240,0.18)":"#13151f",color:active?"#6890f0":"#8b90a8"}}>
                         {ATTR_ABBR[k]} {attrs[k]}
                       </button>
                     );
@@ -2470,7 +2511,7 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
       <div style={{background:"#1e2235",border:"1px solid #3a4060",borderRadius:10,width:480,maxHeight:"88vh",overflow:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
         <div style={{padding:"12px 16px",borderBottom:"1px solid #2a2f45",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <h3 style={{fontFamily:"'Exo 2'",fontWeight:700,fontSize:16,color:"#ffd32a",margin:0}}>🎯 Capture Pokémon</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+          <button onClick={onClose} title="Close" style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
         </div>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:12}}>
 
@@ -2849,7 +2890,7 @@ function MegaEvolutionPopup({entry,allEntries,onClose,onApply}:{
       <div style={{background:"#1e2235",border:"2px solid #f08030",borderRadius:10,width:460,padding:24,fontFamily:"'Exo 2'"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h3 style={{color:"#f08030",margin:0,fontSize:16}}>⚡ Mega Evolution</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+          <button onClick={onClose} title="Close" style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
         </div>
         {entry.isMegaEvolved?(
           <div>
@@ -2915,7 +2956,7 @@ function DynamaxPopup({entry,onClose,onApply}:{
       <div style={{background:"#1e2235",border:"2px solid #ff4757",borderRadius:10,width:460,padding:24,fontFamily:"'Exo 2'"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h3 style={{color:"#ff4757",margin:0,fontSize:16}}>💫 {isGiga?"Gigamax":"Dynamax"}</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+          <button onClick={onClose} title="Close" style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
         </div>
         {isDynaxActive?(
           <div>
@@ -3004,7 +3045,7 @@ function TerastallizationPopup({entry,onClose,onApply}:{
       <div style={{background:"#1e2235",border:"2px solid #a040a0",borderRadius:10,width:480,padding:24,fontFamily:"'Exo 2'"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h3 style={{color:"#a040a0",margin:0,fontSize:16}}>💎 Terastallization</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+          <button onClick={onClose} title="Close" style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
         </div>
         {isTeraActive?(
           <div>
@@ -3093,7 +3134,7 @@ function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
       <div style={{background:"#1e2235",border:"2px solid #ffd32a",borderRadius:10,width:480,maxHeight:"90vh",display:"flex",flexDirection:"column",padding:24,fontFamily:"'Exo 2'"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h3 style={{color:"#ffd32a",margin:0,fontSize:16}}>⭐ Z-Move</h3>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+          <button onClick={onClose} title="Close" style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
         </div>
         <div style={{overflowY:"auto",flex:1}}>
           {alreadyUsed&&<div style={{background:"rgba(255,71,87,0.1)",border:"1px solid #ff475730",borderRadius:5,padding:8,marginBottom:12,fontSize:11,color:"#ff4757"}}>⚠ Z-Move already used this battle. Using again costs <strong>3 WP</strong> from both Trainer and Pokémon.</div>}
@@ -3239,9 +3280,9 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
               }
               {entry.currentHp<=0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:"#705898",border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>FNT</span>}
               {isActive&&entry.currentHp>0&&<span style={{fontSize:7,fontWeight:700,color:"#181818",background:sideAccent,border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>▶</span>}
-              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{trainerView?"PKM":"TRN"}</button>}
-              <button onClick={()=>upd({isExpanded:!entry.isExpanded})} style={{background:"none",border:"none",color:"#B0C0E8",cursor:"pointer",fontSize:9,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
-              <button onClick={()=>onRemove(entry.id)} style={{background:"none",border:"none",color:"#F8A8A8",cursor:"pointer",fontSize:12,flexShrink:0,fontWeight:700}}>×</button>
+              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} title={trainerView?"Switch to Pokémon view":"Switch to Trainer view"} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{trainerView?"PKM":"TRN"}</button>}
+              <button onClick={()=>upd({isExpanded:!entry.isExpanded})} title={entry.isExpanded?"Collapse details":"Expand details"} style={{background:"none",border:"none",color:"#B0C0E8",cursor:"pointer",fontSize:9,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
+              <button onClick={()=>onRemove(entry.id)} title="Remove from battle" style={{background:"none",border:"none",color:"#F8A8A8",cursor:"pointer",fontSize:12,flexShrink:0,fontWeight:700}}>×</button>
             </div>
           );
         })()}
@@ -3249,7 +3290,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
         {/* Action economy + Reaction */}
         <div style={{padding:"3px 7px",background:"rgba(0,0,0,0.18)",display:"flex",gap:3,alignItems:"center",borderBottom:"1px solid rgba(0,0,0,0.3)"}}>
           <span style={{fontSize:7,color:"#C8D8F8",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>ACT</span>
-          {[0,1,2,3,4].map(i=><button key={i} onClick={()=>upd({actionCount:entry.actionCount===i+1?i:i+1})} style={{width:14,height:14,border:`2px solid ${i<entry.actionCount?"#F8C800":"rgba(255,255,255,0.3)"}`,background:i<entry.actionCount?"#E8A800":"rgba(0,0,0,0.2)",cursor:"pointer",fontSize:6,color:i<entry.actionCount?"#181818":"rgba(255,255,255,0.4)",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{i+1}</button>)}
+          {[0,1,2,3,4].map(i=><button key={i} onClick={()=>upd({actionCount:entry.actionCount===i+1?i:i+1})} title={`Set actions taken to ${i+1}`} style={{width:14,height:14,border:`2px solid ${i<entry.actionCount?"#F8C800":"rgba(255,255,255,0.3)"}`,background:i<entry.actionCount?"#E8A800":"rgba(0,0,0,0.2)",cursor:"pointer",fontSize:6,color:i<entry.actionCount?"#181818":"rgba(255,255,255,0.4)",fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>{i+1}</button>)}
           {entry.actionCount>0&&<span style={{fontSize:6,color:"#F8C800",marginLeft:2,fontFamily:"'Press Start 2P',monospace"}}>→{Math.min(entry.actionCount+1,5)}+</span>}
           <span style={{width:1,height:10,background:"rgba(255,255,255,0.2)",flexShrink:0,margin:"0 2px"}}/>
           <span style={{fontSize:7,color:"#C8D8F8",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>RXN</span>
@@ -3348,11 +3389,11 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
           {(entry.statuses||[]).includes("Asleep")&&entry.statusTurnsLeft>0&&<span style={{fontSize:7,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>Z{entry.statusTurnsLeft}</span>}
           {entry.abilityOverride&&<span title={`Ability: ${entry.abilityOverride}`} style={{fontSize:7,color:"#807008",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help"}}>✨{entry.abilityOverride.slice(0,6).toUpperCase()}</span>}
           {entry.abilitySuppressed&&<span title="Ability suppressed" style={{fontSize:7,color:"#F8F8E8",background:"#888870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help"}}>NO-ABL</span>}
-          {entry.typeOverride&&<span title={`Type: ${entry.typeOverride.join("/")}`} style={{fontSize:7,color:"#F8F8E8",background:"#18A870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>{entry.typeOverride.map(t=>t.slice(0,3).toUpperCase()).join("/")}<button onClick={()=>upd({typeOverride:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
-          {entry.heldItem&&<span title={`Item: ${entry.heldItem}`} style={{fontSize:7,color:"#181818",background:"#F8E8C8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>🎒{entry.heldItem.slice(0,5).toUpperCase()}<button onClick={()=>upd({heldItem:undefined})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
-          {entry.itemEmbargoed&&<span title="Cannot use held items (Embargo)" style={{fontSize:7,color:"#F8F8E8",background:"#D82808",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>NO-ITM<button onClick={()=>upd({itemEmbargoed:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
-          {entry.isFollowMeTarget&&<span title="All moves redirect here (Follow Me)" style={{fontSize:7,color:"#F8F8E8",background:"#2858C0",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>🎯FOCUS<button onClick={()=>upd({isFollowMeTarget:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
-          {entry.chargeActive&&<span title="Charged: +2 to next Electric move" style={{fontSize:7,color:"#181818",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>⚡CHG<button onClick={()=>upd({chargeActive:false})} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.typeOverride&&<span title={`Type: ${entry.typeOverride.join("/")}`} style={{fontSize:7,color:"#F8F8E8",background:"#18A870",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>{entry.typeOverride.map(t=>t.slice(0,3).toUpperCase()).join("/")}<button onClick={()=>upd({typeOverride:undefined})} title="Remove type override" style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.heldItem&&<span title={`Item: ${entry.heldItem}`} style={{fontSize:7,color:"#181818",background:"#F8E8C8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>🎒{entry.heldItem.slice(0,5).toUpperCase()}<button onClick={()=>upd({heldItem:undefined})} title="Clear held item" style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.itemEmbargoed&&<span title="Cannot use held items (Embargo)" style={{fontSize:7,color:"#F8F8E8",background:"#D82808",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>NO-ITM<button onClick={()=>upd({itemEmbargoed:false})} title="Clear Embargo" style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.isFollowMeTarget&&<span title="All moves redirect here (Follow Me)" style={{fontSize:7,color:"#F8F8E8",background:"#2858C0",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>🎯FOCUS<button onClick={()=>upd({isFollowMeTarget:false})} title="Clear Follow Me focus" style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
+          {entry.chargeActive&&<span title="Charged: +2 to next Electric move" style={{fontSize:7,color:"#181818",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help",display:"flex",alignItems:"center",gap:1}}>⚡CHG<button onClick={()=>upd({chargeActive:false})} title="Clear Charge" style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:8,padding:0}}>×</button></span>}
         </div>
 
 
@@ -3441,7 +3482,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
               {entry.statMods.length>0&&<div style={{marginTop:4,display:"flex",flexWrap:"wrap",gap:2}}>
                 {entry.statMods.map((m,i)=><div key={i} title={m.appliedBy?`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source} used by ${m.appliedBy}`:`${m.attr} ${m.amount>0?"+":""}${m.amount} — ${m.source}`} style={{fontSize:7,display:"flex",alignItems:"center",gap:2,background:m.amount>0?"#C8F0C8":"#F8C8C8",border:"1px solid #181818",padding:"0 4px",fontFamily:"'Press Start 2P',monospace",cursor:"help"}}>
                   <span style={{color:m.amount>0?"#187028":"#A00808"}}>{m.amount>0?"▲":"▼"}{Math.abs(m.amount)} {m.attr.slice(0,3).toUpperCase()}</span>
-                  <button onClick={()=>upd({statMods:entry.statMods.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#484830",cursor:"pointer",fontSize:9,padding:0}}>×</button>
+                  <button onClick={()=>upd({statMods:entry.statMods.filter((_,j)=>j!==i)})} title="Remove this stat modifier" style={{background:"none",border:"none",color:"#484830",cursor:"pointer",fontSize:9,padding:0}}>×</button>
                 </div>)}
               </div>}
             </div>
@@ -3507,7 +3548,7 @@ function CharactersSidebar({onAddPokemon}:{onAddPokemon:(pokemon:PokemonEntry,tr
                 <div key={key} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 0",borderBottom:"1px solid #C8C8A8"}}>
                   <div style={{width:5,height:5,background:TYPE_COLORS[p.types[0]],border:"1px solid #181818",flexShrink:0}}/>
                   <span style={{fontSize:8,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sheet.nickname||p.name}</span>
-                  <button onClick={()=>onAddPokemon(p,t.id,sheet.nickname||"",sheet.loyalty??1,sheet.happiness??1,activeMovs,key,t.rank)} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#187028",padding:"1px 5px",fontSize:8,fontWeight:700,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>+</button>
+                  <button onClick={()=>onAddPokemon(p,t.id,sheet.nickname||"",sheet.loyalty??1,sheet.happiness??1,activeMovs,key,t.rank)} title={`Add ${sheet.nickname||p.name} to battle`} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#187028",padding:"1px 5px",fontSize:8,fontWeight:700,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>+</button>
                 </div>
               );
             })}
@@ -3557,7 +3598,7 @@ function AddPokemonModal({onAdd,onClose}:{onAdd:(p:PokemonEntry,side:"player"|"e
         {/* Header */}
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:11,color:"#F8F8E8",textShadow:"2px 2px 0 #0C2024",flex:1}}>ADD POKéMON</span>
-          <button onClick={onClose} style={{width:20,height:20,background:"#F8F8E8",border:"2px solid #0C2024",color:"#181818",cursor:"pointer",fontSize:10,lineHeight:1}}>✕</button>
+          <button onClick={onClose} title="Close" style={{width:20,height:20,background:"#F8F8E8",border:"2px solid #0C2024",color:"#181818",cursor:"pointer",fontSize:10,lineHeight:1}}>✕</button>
         </div>
         {/* Side selector */}
         <div style={{display:"flex",gap:5}}>
@@ -3611,7 +3652,10 @@ function AddPokemonModal({onAdd,onClose}:{onAdd:(p:PokemonEntry,side:"player"|"e
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function BattleTrackerPage(){
-  const [entries,setEntries]=useState<BattleEntry[]>(()=>loadFromStorage("bt_entries",[]));
+  // Reconciled against pokemon_sheets right in the initializer — a mount-
+  // time effect doing the same setState would fire after the first paint
+  // and flash the stale snapshot first.
+  const [entries,setEntries]=useState<BattleEntry[]>(()=>reconcileEntriesWithSheets(loadFromStorage("bt_entries",[]),loadFromStorage("pokemon_sheets",{})));
   const [weather,setWeather]=useState<WeatherData>(WEATHER_DATA[0]);
   const [terrain,setTerrain]=useState<string>("None");
   const [turn,setTurn]=useState(0);
@@ -3652,13 +3696,23 @@ export default function BattleTrackerPage(){
   useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
   useEffect(()=>{saveToStorage("bt_hazards",hazards);},[hazards]);
 
-  // Sync with GM Screen battle tracker (and other tabs) via storage events
+  // Sync with GM Screen battle tracker (and other tabs) via storage events.
+  // StorageEvent.key is the raw localStorage key (STORAGE_PREFIX-prefixed),
+  // not the short name saveToStorage/loadFromStorage take — comparing
+  // against the bare name here meant this listener never actually matched
+  // anything and the whole cross-tab sync was silently dead.
   useEffect(()=>{
     const onStorage=(e:StorageEvent)=>{
-      if(e.key==="bt_entries"&&e.newValue){
+      if(e.key===`${STORAGE_PREFIX}bt_entries`&&e.newValue){
         try{
           const updated=JSON.parse(e.newValue);
           setEntries(updated);
+        }catch{}
+      }
+      if(e.key===`${STORAGE_PREFIX}pokemon_sheets`&&e.newValue){
+        try{
+          const sheets=JSON.parse(e.newValue);
+          setEntries(prev=>reconcileEntriesWithSheets(prev,sheets));
         }catch{}
       }
     };
@@ -3726,18 +3780,13 @@ export default function BattleTrackerPage(){
        out-of-the-box stats — moves updated, HP didn't. Sheet wins when there
        is one; the species entry is the fallback for wild//custom adds. */
     const sheet=sheetKey?loadFromStorage<Record<string,any>>("pokemon_sheets",{})[sheetKey]:null;
-    const sheetAttrs=sheet?(()=>{
-      const a=sheet.attributes??{},t=sheet.trainingAttributes??{};
-      const sum=(k:string)=>(a[k]??pokemon.attributes[k as keyof typeof pokemon.attributes]??1)+(t[k]??0);
-      return{strength:sum("strength"),dexterity:sum("dexterity"),vitality:sum("vitality"),
-        special:sum("special"),insight:sum("insight")};
-    })():null;
-    const attrs=sheetAttrs??{...pokemon.attributes};
-    const hp=pokemon.number<=0?10:pokemon.baseHp+attrs.vitality;
-    const will=pokemon.number<=0?5:attrs.insight+3;
+    const derived=sheet?deriveSheetStats(pokemon,sheet):null;
+    const attrs=derived?.attrs??{...pokemon.attributes};
+    const hp=derived?.maxHp??(pokemon.number<=0?10:pokemon.baseHp+attrs.vitality);
+    const will=derived?.maxWill??(pokemon.number<=0?5:attrs.insight+3);
     const ini=Math.floor(Math.random()*6)+1+(attrs?.dexterity??1);
     const defaultMoves=pokemon.moves.slice(0,4).map(m=>MOVES.find(mv=>mv.name===m.name)||{name:m.name,type:m.type,category:"Physical" as const,power:"-",accuracy:"-",damagePool:"-",effect:"",description:""} as Move);
-    const sheetSkills=sheet?.skills??null;
+    const sheetSkills=derived?.skills??null;
     setEntries(prev=>[...prev,{
       id:`${pokemon.number}-${Date.now()}`,pokemon,nickname:nickname||"",
       initiative:ini,currentHp:hp,maxHp:hp,currentWill:will,maxWill:will,
@@ -3945,8 +3994,8 @@ export default function BattleTrackerPage(){
                b.style, and a duplicate key would just be overwritten. */
             <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#181818",...b.style}}>{b.label}</button>
           ))}
-          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}}} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
-          <button onClick={rollAllIni} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
+          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}}} title="Reset battle" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
+          <button onClick={rollAllIni} title="Roll initiative for all combatants (also resets round/turn)" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
           <button onClick={()=>setShowPriority(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}} title="Priority phase">⚡</button>
           <button onClick={()=>setShowEOR(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D88018"}} title="End of Round">EOR</button>
           <select value={battleType} onChange={e=>setBattleType(e.target.value as any)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:9,padding:"2px 4px",cursor:"pointer",fontFamily:"'Press Start 2P',monospace"}}>
@@ -3957,7 +4006,7 @@ export default function BattleTrackerPage(){
             <option value="danger">DANGER</option>
           </select>
           <button onClick={endBattle} style={{background:"#D82808",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#F8F8E8",fontWeight:700}} title="End battle">END</button>
-          <Link href="/gm-screen" style={{fontSize:9,color:"#181818",textDecoration:"none",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 6px",fontFamily:"'Press Start 2P',monospace"}}>GM</Link>
+          <Link href="/gm-screen" title="Open GM Screen" style={{fontSize:9,color:"#181818",textDecoration:"none",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 6px",fontFamily:"'Press Start 2P',monospace"}}>GM</Link>
         </div>
       </div>
 
