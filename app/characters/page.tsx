@@ -151,21 +151,29 @@ function PointBudget({ used, total, label }: { used: number; total: number; labe
   );
 }
 
-function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange, hint }: {
+function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange, hint, footnote }: {
   label: string; value: number; max: number; onChange: (v: number) => void;
   locked?: boolean; base?: number; dot?: boolean;
   training?: number; onTrainingChange?: (v: number) => void;
   /** What this attribute/skill actually does. Sits on the label, not the row,
    *  so hovering the pips doesn't look like the pips are being described. */
   hint?: string;
+  /** A visible one-liner for a skill that quietly does double duty elsewhere
+   *  (e.g. Channel also rolls the Poké Ball throw) — a hover-only hint is
+   *  easy to miss for something this load-bearing, so it prints under the
+   *  label instead of waiting to be hovered. */
+  footnote?: string;
 }) {
   const total = value + (training ?? 0);
   const totalMax = max;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-      <span title={hint} style={{ width: 76, fontSize: 11, color: "#383838", flexShrink: 0,
-        cursor: hint ? "help" : undefined,
-        textDecoration: hint ? "underline dotted rgba(56,56,56,0.4)" : undefined, textUnderlineOffset: 2 }}>{label}</span>
+      <span style={{ width: 76, flexShrink: 0 }}>
+        <span title={hint} style={{ display: "block", fontSize: 11, color: "#383838",
+          cursor: hint ? "help" : undefined,
+          textDecoration: hint ? "underline dotted rgba(56,56,56,0.4)" : undefined, textUnderlineOffset: 2 }}>{label}</span>
+        {footnote && <span style={{ display: "block", fontSize: 8, color: "#A07000", lineHeight: 1.2 }}>↳ {footnote}</span>}
+      </span>
       <div style={{ display: "flex", gap: 3 }}>
         {Array.from({ length: totalMax }).map((_, i) => {
           const filled = i < total;
@@ -222,7 +230,7 @@ const TRAINER_SOCIAL_HINTS: Record<string, string> = {
 };
 const TRAINER_SKILL_HINTS: Record<string, string> = {
   brawl:      "Fighting hand-to-hand yourself.",
-  channel:    "Directing your Pokémon's special and ranged moves — also used to throw Poké Balls.",
+  channel:    "Directing your Pokémon's special and ranged moves.",
   clash:      "Meeting an incoming attack head-on as a reaction.",
   evasion:    "Dodging an incoming attack as a reaction.",
   alert:      "Noticing things — perception and avoiding surprise.",
@@ -246,6 +254,19 @@ const TRAINING_ROLLS: Record<string, { trainerAttr: "strength"|"dexterity"|"vita
   special:  { trainerAttr: "insight",  trainerSkill: "channel",  label: "SPC" },
   insight:  { trainerAttr: "insight",  trainerSkill: "nature",   label: "INS" },
 };
+
+/* A skill can quietly do double duty elsewhere in the app with nothing on
+   its own row to say so — Channel throws Poké Balls (there's no separate
+   Capture skill anymore) and several skills roll a Pokémon's training. This
+   surfaces that link right under the skill's name instead of leaving it
+   for the player to discover. */
+function trainerSkillFootnote(skill: string): string | undefined {
+  const parts: string[] = [];
+  if (skill === "channel") parts.push("Also rolls the Poké Ball throw when catching");
+  const trains = Object.values(TRAINING_ROLLS).filter(cfg => cfg.trainerSkill === skill).map(cfg => cfg.label);
+  if (trains.length) parts.push(`Also rolls ${trains.join("/")} training`);
+  return parts.length ? parts.join(" · ") : undefined;
+}
 
 function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox, onDesignatePartner, onRevokePartner, partyHasPartner, trainerInventory, onTransferItemToTrainer, onTransferItemFromTrainer, trainerAttrs, trainerSkills }: {
   sheet: PokemonSheetData;
@@ -1429,7 +1450,7 @@ function CharactersPageInner() {
                   badge={<PointBudget used={usedSkillPoints} total={rankInfo.skillPoints} label={`pts · max ${rankInfo.skillLimit}`} />}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                     {(Object.keys(sel.skills) as (keyof typeof sel.skills)[]).map(skill => (
-                      <PipRow key={skill} hint={TRAINER_SKILL_HINTS[skill]} label={skill.charAt(0).toUpperCase() + skill.slice(1)} value={sel.skills[skill]} max={rankInfo.skillLimit}
+                      <PipRow key={skill} hint={TRAINER_SKILL_HINTS[skill]} footnote={trainerSkillFootnote(skill)} label={skill.charAt(0).toUpperCase() + skill.slice(1)} value={sel.skills[skill]} max={rankInfo.skillLimit}
                         onChange={v => {
                           const cost = v - sel.skills[skill];
                           if (cost > 0 && usedSkillPoints >= rankInfo.skillPoints) return;
