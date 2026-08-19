@@ -91,26 +91,34 @@ function TrainerCard({ trainer, owned }: { trainer: TrainerData; owned: number }
         </div>
 
         {!flipped ? (
-          <div style={{display:"flex",flexDirection:"column",gap:7}}>
-            <CardLine label="NAME" value={name.toUpperCase()}/>
-            <CardLine label="MONEY" value={`₽${trainer.money.toLocaleString()}`}/>
-            <CardLine label="POKéDEX" value={String(owned)}/>
-            <CardLine label="RANK" value={trainer.rank}/>
-            <CardLine label="AGE" value={trainer.age}/>
+          <div style={{display:"flex",gap:10}}>
+            {trainer.spriteId&&(
+              <div style={{flexShrink:0,width:56,height:56,borderRadius:6,border:`2px solid ${INK}`,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/sprites/trainers/${trainer.spriteId}.png`} alt="" width={48} height={48} style={{imageRendering:"pixelated",objectFit:"contain"}}/>
+              </div>
+            )}
+            <div style={{display:"flex",flexDirection:"column",gap:7,flex:1,minWidth:0}}>
+              <CardLine label="NAME" value={name.toUpperCase()}/>
+              <CardLine label="MONEY" value={`₽${trainer.money.toLocaleString()}`}/>
+              <CardLine label="POKéDEX" value={String(owned)}/>
+              <CardLine label="RANK" value={trainer.rank}/>
+              <CardLine label="AGE" value={trainer.age}/>
 
-            <div style={{marginTop:4}}>
-              <div style={{fontFamily:PIXEL,fontSize:7,marginBottom:5,opacity:0.9}}>BADGES</div>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                {trainer.gymBadges.map((got,i)=>(
-                  <span key={i} title={`Badge ${i+1}${got?" — earned":""}`}
-                    style={{width:22,height:22,borderRadius:"50%",flexShrink:0,
-                      border:`2px solid ${INK}`,
-                      display:"flex",alignItems:"center",justifyContent:"center",
-                      fontSize:11,textShadow:"none",
-                      background:got?"#F8D030":"rgba(255,255,255,0.22)"}}>
-                    {got?"◆":""}
-                  </span>
-                ))}
+              <div style={{marginTop:4}}>
+                <div style={{fontFamily:PIXEL,fontSize:7,marginBottom:5,opacity:0.9}}>BADGES</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                  {trainer.gymBadges.map((got,i)=>(
+                    <span key={i} title={`Badge ${i+1}${got?" — earned":""}`}
+                      style={{width:22,height:22,borderRadius:"50%",flexShrink:0,
+                        border:`2px solid ${INK}`,
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        fontSize:11,textShadow:"none",
+                        background:got?"#F8D030":"rgba(255,255,255,0.22)"}}>
+                      {got?"◆":""}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

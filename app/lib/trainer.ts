@@ -18,7 +18,18 @@ export interface TrainerData {
   battleItem: string;    // Key Stone / Z-Power Ring / Dynamax Band / Tera Orb
   achievements: string[]; notes: string; gymBadges: boolean[]; pokemon: string[];
   pcBox: string[]; // pokemon sheet keys stored in PC
+  spriteId?: string; // key into TRAINER_SPRITES, "" = none chosen
 }
+
+/* Front/back battler sprites, sourced from the Pokémon Essentials community
+   asset pack — files live in /public/sprites/trainers (front) and
+   /public/sprites/trainers/back (back), named "<id>.png". */
+export const TRAINER_SPRITES: { id: string; label: string }[] = [
+  { id: "red", label: "Red" },
+  { id: "leaf", label: "Leaf" },
+  { id: "brendan", label: "Brendan" },
+  { id: "may", label: "May" },
+];
 
 export interface PokemonSheetData {
   number: number;
@@ -50,6 +61,7 @@ export function makeBlankTrainer(): TrainerData {
     skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, etiquette: 0, intimidate: 0, perform: 0, capture: 0 },
     customSkills: [], inventory: [], equippedItem: "", battleItem: "",
     achievements: [], notes: "", gymBadges: Array(8).fill(false), pokemon: [], pcBox: [],
+    spriteId: "",
   };
 }
 

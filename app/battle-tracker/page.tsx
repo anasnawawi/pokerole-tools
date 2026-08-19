@@ -2680,6 +2680,12 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
   const inventory:any[]=(trainer?.inventory||[]);
   return(
     <div style={{display:"flex",flexDirection:"column",gap:0,padding:0}}>
+      {trainer?.spriteId&&(
+        <div style={{display:"flex",justifyContent:"center",padding:"8px 0 2px",background:"#0f1117"}}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/sprites/trainers/${trainer.spriteId}.png`} alt="" width={64} height={64} style={{imageRendering:"pixelated",objectFit:"contain"}}/>
+        </div>
+      )}
       {/* HP + WP bars with inline ± buttons */}
       <div style={{padding:"5px 8px 5px",background:"#0f1117"}}>
         {/* HP row */}
@@ -3186,6 +3192,10 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
           return(
             <div style={{padding:"5px 8px",background:"rgba(0,0,0,0.25)",borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:4}}>
               <span style={{color:"#B0C0E8",cursor:"grab",fontSize:11,flexShrink:0,userSelect:"none"}} title="Drag to reorder">≡</span>
+              {trainerView&&linkedTrainer?.spriteId&&(
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/sprites/trainers/${linkedTrainer.spriteId}.png`} alt="" width={18} height={18} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
+              )}
               {trainerView
                 ? <><span style={{fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#F8F8E8",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,textShadow:"1px 1px 0 #181818"}}>{displayName.toUpperCase()}</span>
                   {linkedTrainer?.rank&&<span style={{fontSize:6,color:sideAccent,border:`1px solid ${sideAccent}80`,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{linkedTrainer.rank}</span>}

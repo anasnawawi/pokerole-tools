@@ -16,7 +16,7 @@ import {
 import { saveToStorage, loadFromStorage } from "../lib/storage";
 import {
   TrainerData, PokemonSheetData, makeBlankTrainer as makeBlank,
-  setActiveTrainer, getActiveTrainer,
+  setActiveTrainer, getActiveTrainer, TRAINER_SPRITES,
 } from "../lib/trainer";
 import { MOVES_DATA } from "../data/moves-data";
 import { POKEMON_EGG_GROUPS } from "../data/egg-groups-data";
@@ -1302,6 +1302,27 @@ function CharactersPageInner() {
                   {/* Wraps rather than overflowing: eight badge buttons plus
                       three stat blocks is wider than a phone, and an unwrapped
                       row pushed the whole sheet sideways. */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>Battle Sprite</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <button onClick={() => upd(sel.id, { spriteId: "" })} title="No sprite"
+                        style={{ width: 44, height: 44, borderRadius: 4, flexShrink: 0, border: `2px solid ${!sel.spriteId ? "#2850A0" : "#7888A8"}`, background: !sel.spriteId ? "rgba(40,80,160,0.12)" : "#F8F4D0", cursor: "pointer", fontSize: 16, color: "#7888A8" }}>—</button>
+                      {TRAINER_SPRITES.map(s => (
+                        <button key={s.id} onClick={() => upd(sel.id, { spriteId: s.id })} title={s.label}
+                          style={{ width: 44, height: 44, borderRadius: 4, flexShrink: 0, border: `2px solid ${sel.spriteId === s.id ? "#2850A0" : "#7888A8"}`, background: sel.spriteId === s.id ? "rgba(40,80,160,0.12)" : "#F8F4D0", cursor: "pointer", padding: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={`/sprites/trainers/${s.id}.png`} alt={s.label} width={38} height={38} style={{ imageRendering: "pixelated", objectFit: "contain" }} />
+                        </button>
+                      ))}
+                      {sel.spriteId && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
+                          <span style={{ fontSize: 9, color: "#585858" }}>Back:</span>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={`/sprites/trainers/back/${sel.spriteId}.png`} alt="" height={40} style={{ imageRendering: "pixelated", objectFit: "contain" }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div style={{ display: "flex", gap: narrow ? 14 : 20, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Max HP = 4+VIT</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#2850A0" }}>{4 + sel.attributes.vitality}</div></div>
                     <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#585858", marginBottom: 4 }}>Will = INS+3</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#6890f0" }}>{sel.attributes.insight + 3}</div></div>
