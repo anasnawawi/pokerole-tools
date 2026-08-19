@@ -394,7 +394,7 @@ function CollapsedRoster({sorted,activeId,entries,onExpand,onPick,trainerSpriteF
                     pixel art at a fixed tiny size; next/image would blur it. */}
                 <img src={e.pokemon.number>0?`/sprites/pokemon/${e.pokemon.number}.png`:trainerSpriteFor(e)?`/sprites/trainers/${trainerSpriteFor(e)}.png`:""} alt="" width={34} height={34}
                   draggable={false}
-                  style={{imageRendering:"pixelated",objectFit:"contain",
+                  style={{width:34,height:34,imageRendering:"pixelated",objectFit:"contain",
                     filter:fainted?"grayscale(1)":undefined}}
                   onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
               </span>
@@ -2718,7 +2718,7 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
       {trainer?.spriteId&&(
         <div style={{display:"flex",justifyContent:"center",padding:"8px 0 2px",background:"#0f1117"}}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`/sprites/trainers/${trainer.spriteId}.png`} alt="" width={64} height={64} style={{imageRendering:"pixelated",objectFit:"contain"}}/>
+          <img src={`/sprites/trainers/${trainer.spriteId}.png`} alt="" width={64} height={64} style={{width:64,height:64,imageRendering:"pixelated",objectFit:"contain"}}/>
         </div>
       )}
       {/* HP + WP bars with inline ± buttons */}
@@ -3229,7 +3229,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
               <span style={{color:"#B0C0E8",cursor:"grab",fontSize:11,flexShrink:0,userSelect:"none"}} title="Drag to reorder">≡</span>
               {trainerView&&linkedTrainer?.spriteId&&(
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={`/sprites/trainers/${linkedTrainer.spriteId}.png`} alt="" width={18} height={18} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
+                <img src={`/sprites/trainers/${linkedTrainer.spriteId}.png`} alt="" width={18} height={18} style={{width:18,height:18,imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
               )}
               {trainerView
                 ? <><span style={{fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#F8F8E8",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,textShadow:"1px 1px 0 #181818"}}>{displayName.toUpperCase()}</span>

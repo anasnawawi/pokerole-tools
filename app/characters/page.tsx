@@ -151,10 +151,15 @@ function PointBudget({ used, total, label }: { used: number; total: number; labe
   );
 }
 
-function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange, hint, footnote }: {
+function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange, hint, footnote, min = TRAINER_ATTR_BASE }: {
   label: string; value: number; max: number; onChange: (v: number) => void;
   locked?: boolean; base?: number; dot?: boolean;
   training?: number; onTrainingChange?: (v: number) => void;
+  /** Floor for the − button. Attributes and social stats start at 1
+   *  (TRAINER_ATTR_BASE); skills start at 0 — the button used to hardcode
+   *  the attribute floor for every caller, so it silently refused to take a
+   *  skill below 1 instead of down to its real minimum. */
+  min?: number;
   /** What this attribute/skill actually does. Sits on the label, not the row,
    *  so hovering the pips doesn't look like the pips are being described. */
   hint?: string;
@@ -198,7 +203,7 @@ function PipRow({ label, value, max, onChange, locked, base, dot, training, onTr
       </div>
       <span style={{ fontSize: 13, fontFamily: "'Exo 2'", fontWeight: 700, color: "#202020", minWidth: 20 }}>{total}</span>
       {!locked && <>
-        <button onClick={() => onChange(Math.max(TRAINER_ATTR_BASE, value - 1))} style={{ background: "none", border: "none", color: "#585858", cursor: "pointer", fontSize: 14, padding: "0 2px" }}>−</button>
+        <button onClick={() => onChange(Math.max(min, value - 1))} style={{ background: "none", border: "none", color: "#585858", cursor: "pointer", fontSize: 14, padding: "0 2px" }}>−</button>
         <button onClick={() => value < max && onChange(value + 1)} style={{ background: "none", border: "none", color: value < max ? "#2850A0" : "#7888A8", cursor: value < max ? "pointer" : "default", fontSize: 14, padding: "0 2px" }}>+</button>
       </>}
       {onTrainingChange && (
@@ -246,6 +251,14 @@ const TRAINER_SKILL_HINTS: Record<string, string> = {
   medicine:   "Treating injuries and illness.",
   science:    "Technical and academic know-how.",
 };
+/* Matches the official 3.0 sheet's FIGHT/SURVIVAL/SOCIAL/KNOWLEDGE
+   grouping, so the skill list reads the same way here as on paper. */
+const TRAINER_SKILL_GROUPS: { label: string; skills: string[] }[] = [
+  { label: "Fight", skills: ["brawl", "channel", "clash", "evasion"] },
+  { label: "Survival", skills: ["alert", "athletic", "nature", "stealth"] },
+  { label: "Social", skills: ["empathy", "etiquette", "intimidate", "perform"] },
+  { label: "Knowledge", skills: ["crafts", "lore", "medicine", "science"] },
+];
 
 const TRAINING_ROLLS: Record<string, { trainerAttr: "strength"|"dexterity"|"vitality"|"insight"; trainerSkill: "brawl"|"channel"|"athletic"|"nature"; label: string }> = {
   strength: { trainerAttr: "strength", trainerSkill: "brawl",    label: "STR" },
@@ -796,7 +809,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                           const cost = newVal - val;
                           if (cost > 0 && usedSocialPts >= socialInfo.socialPoints) return;
                           upd({ socialAttributes: { ...social, [key]: newVal } });
-                        }} style={{ width: 12, height: 12, borderRadius: 2, border: `1px solid ${i < val ? "#A040A0" : "#2850A0"}`, background: i < val ? "#A040A0" : "transparent", cursor: i === 0 ? "default" : "pointer", padding: 0 }} />
+                        }} style={{ width: 12, height: 12, borderRadius: "50%", border: `1px solid ${i < val ? "#A040A0" : "#2850A0"}`, background: i < val ? "#A040A0" : "transparent", cursor: i === 0 ? "default" : "pointer", padding: 0 }} />
                       ))}
                     </div>
                     <span style={{ fontSize: 10, color: "#585858", marginLeft: 2 }}>{val}</span>
@@ -848,7 +861,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                           const cost = newVal - val;
                           if (cost > 0 && usedPts >= skillInfo.skillPoints) return;
                           upd({ skills: { ...sheet.skills, [key]: newVal } });
-                        }} style={{ width: 12, height: 12, borderRadius: 2, border: `1px solid ${i < val ? "#6890f0" : "#2850A0"}`, background: i < val ? "#6890f0" : "transparent", cursor: "pointer", padding: 0 }} />
+                        }} style={{ width: 12, height: 12, borderRadius: "50%", border: `1px solid ${i < val ? "#6890f0" : "#2850A0"}`, background: i < val ? "#6890f0" : "transparent", cursor: "pointer", padding: 0 }} />
                       ))}
                     </div>
                     <span style={{ fontSize: 10, color: "#585858", marginLeft: 2 }}>{val}</span>
@@ -1376,15 +1389,25 @@ function CharactersPageInner() {
                       {TRAINER_SPRITES.map(s => (
                         <button key={s.id} onClick={() => upd(sel.id, { spriteId: s.id })} title={s.label}
                           style={{ width: 44, height: 44, borderRadius: 4, flexShrink: 0, border: `2px solid ${sel.spriteId === s.id ? "#2850A0" : "#7888A8"}`, background: sel.spriteId === s.id ? "rgba(40,80,160,0.12)" : "#F8F4D0", cursor: "pointer", padding: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={`/sprites/trainers/${s.id}.png`} alt={s.label} width={38} height={38} style={{ imageRendering: "pixelated", objectFit: "contain" }} />
+                          {/* eslint-disable-next-line @next/next/no-img-element -- width/height
+                              pinned in style, not just as attributes: Tailwind's preflight sets
+                              img{height:auto}, which overrides a bare height attribute and lets
+                              the image render at its native size instead of this box. */}
+                          <img src={`/sprites/trainers/${s.id}.png`} alt={s.label} width={38} height={38} style={{ width: 38, height: 38, imageRendering: "pixelated", objectFit: "contain" }} />
                         </button>
                       ))}
                       {sel.spriteId && (
                         <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
                           <span style={{ fontSize: 9, color: "#585858" }}>Back:</span>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={`/sprites/trainers/back/${sel.spriteId}.png`} alt="" height={40} style={{ imageRendering: "pixelated", objectFit: "contain" }} />
+                          {/* Source back sprites are cropped tight to each character's own
+                              pose, so their aspect ratios differ a lot (e.g. a full-body idle
+                              vs. a closer bust shot) — a fixed box + objectFit:contain is what
+                              keeps them all reading as the same size here, same as elsewhere
+                              sprites render at a fixed slot. */}
+                          <div style={{ width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={`/sprites/trainers/back/${sel.spriteId}.png`} alt="" style={{ maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto", imageRendering: "pixelated", objectFit: "contain" }} />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1419,7 +1442,7 @@ function CharactersPageInner() {
                     {sel.age} + {sel.rank}: +{ageInfo.attrPoints} + {rankInfo.attrPoints} = {totalAttrPoints} distributable points (base 1 per attribute)
                   </div>
                   {(["strength", "dexterity", "vitality", "insight"] as const).map(attr => (
-                    <PipRow key={attr} hint={TRAINER_ATTR_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={TRAINER_ATTR_MAX}
+                    <PipRow key={attr} dot hint={TRAINER_ATTR_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={TRAINER_ATTR_MAX}
                       onChange={v => {
                         const cost = v - sel.attributes[attr];
                         if (cost > 0 && attrBudgetLeft <= 0) return;
@@ -1432,7 +1455,7 @@ function CharactersPageInner() {
                       <PointBudget used={usedSocialPoints} total={totalSocialPoints} label="pts" />
                     </div>
                     {(["tough", "cool", "beauty", "cute", "clever"] as const).map(attr => (
-                      <PipRow key={attr} hint={TRAINER_SOCIAL_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.socialAttributes[attr]} max={TRAINER_ATTR_MAX}
+                      <PipRow key={attr} dot hint={TRAINER_SOCIAL_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.socialAttributes[attr]} max={TRAINER_ATTR_MAX}
                         onChange={v => {
                           const cost = v - sel.socialAttributes[attr];
                           if (cost > 0 && socialBudgetLeft <= 0) return;
@@ -1448,19 +1471,24 @@ function CharactersPageInner() {
                   sectionRef={el => { sectionRefs.current.skills = el; }}
                   hint={`Rank ${sel.rank} gives ${rankInfo.skillPoints} skill points, and no single skill may go above ${rankInfo.skillLimit}.`}
                   badge={<PointBudget used={usedSkillPoints} total={rankInfo.skillPoints} label={`pts · max ${rankInfo.skillLimit}`} />}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                    {(Object.keys(sel.skills) as (keyof typeof sel.skills)[]).map(skill => (
-                      <PipRow key={skill} hint={TRAINER_SKILL_HINTS[skill]} footnote={trainerSkillFootnote(skill)} label={skill.charAt(0).toUpperCase() + skill.slice(1)} value={sel.skills[skill]} max={rankInfo.skillLimit}
-                        onChange={v => {
-                          const cost = v - sel.skills[skill];
-                          if (cost > 0 && usedSkillPoints >= rankInfo.skillPoints) return;
-                          upd(sel.id, { skills: { ...sel.skills, [skill]: v } });
-                        }} />
-                    ))}
-                  </div>
-                  {/* Custom Skills */}
+                  {TRAINER_SKILL_GROUPS.map(group => (
+                    <div key={group.label} style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 9, color: "#A07000", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4, fontWeight: 700 }}>{group.label}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                        {group.skills.map(skill => (
+                          <PipRow key={skill} dot min={0} hint={TRAINER_SKILL_HINTS[skill]} footnote={trainerSkillFootnote(skill)} label={skill.charAt(0).toUpperCase() + skill.slice(1)} value={sel.skills[skill as keyof typeof sel.skills]} max={rankInfo.skillLimit}
+                            onChange={v => {
+                              const cost = v - sel.skills[skill as keyof typeof sel.skills];
+                              if (cost > 0 && usedSkillPoints >= rankInfo.skillPoints) return;
+                              upd(sel.id, { skills: { ...sel.skills, [skill]: v } });
+                            }} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Extra — custom skills, same slot the card leaves blank */}
                   <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>Custom Skills</div>
+                    <div style={{ fontSize: 9, color: "#A07000", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6, fontWeight: 700 }}>Extra</div>
                     {(sel.customSkills||[]).map((cs, i) => (
                       <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 5 }}>
                         <input value={cs.name} onChange={e => { const arr=[...(sel.customSkills||[])];arr[i]={...arr[i],name:e.target.value};upd(sel.id,{customSkills:arr}); }}

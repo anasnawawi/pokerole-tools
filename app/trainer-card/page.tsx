@@ -95,7 +95,7 @@ function TrainerCard({ trainer, owned }: { trainer: TrainerData; owned: number }
             {trainer.spriteId&&(
               <div style={{flexShrink:0,width:56,height:56,borderRadius:6,border:`2px solid ${INK}`,background:"rgba(255,255,255,0.22)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/sprites/trainers/${trainer.spriteId}.png`} alt="" width={48} height={48} style={{imageRendering:"pixelated",objectFit:"contain"}}/>
+                <img src={`/sprites/trainers/${trainer.spriteId}.png`} alt="" width={48} height={48} style={{width:48,height:48,imageRendering:"pixelated",objectFit:"contain"}}/>
               </div>
             )}
             <div style={{display:"flex",flexDirection:"column",gap:7,flex:1,minWidth:0}}>
