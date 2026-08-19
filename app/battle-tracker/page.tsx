@@ -36,7 +36,7 @@ interface BattleEntry{
   attrs:AttrSet; statMods:StatMod[];
   weatherImmune:boolean; actionCount:number;
   reactionUsed:boolean;
-  pokemonSkills?:{brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;intimidate:number;perform:number};
+  pokemonSkills?:{brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;charm:number;etiquette:number;intimidate:number;perform:number};
   linkedTrainerId?:string; linkedPokemonSheetKey?:string; showTrainerView?:boolean;
   isProtected?:boolean;            // Protect: blocks incoming attacks this round
   morphedTo?:PokemonEntry;         // Transform: copied target's pokemon
@@ -609,9 +609,9 @@ function getEffectiveAttrs(e:BattleEntry):AttrSet{
   return{strength:Math.max(0,(mods.strength??e.attrs.strength)-pain),dexterity:Math.max(0,(mods.dexterity??e.attrs.dexterity)-accPen-pain),vitality:Math.max(0,mods.vitality??e.attrs.vitality),special:Math.max(0,(mods.special??e.attrs.special)-pain),insight:Math.max(0,(mods.insight??e.attrs.insight)-pain)};
 }
 
-type PokemonSkills={brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;intimidate:number;perform:number};
+type PokemonSkills={brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;charm:number;etiquette:number;intimidate:number;perform:number};
 const ACC_ATTR_KEYS=["strength","dexterity","special","insight","vitality"] as const;
-const ACC_SKILL_KEYS:(keyof PokemonSkills)[]=["brawl","athletic","channel","perform","clash","alert","intimidate","stealth","nature"];
+const ACC_SKILL_KEYS:(keyof PokemonSkills)[]=["brawl","athletic","channel","perform","clash","alert","intimidate","stealth","nature","charm","etiquette"];
 const ATTR_ABBR:Record<keyof AttrSet,string>={strength:"STR",dexterity:"DEX",special:"SPC",insight:"INS",vitality:"VIT"};
 
 /* "Dexterity/Strength + Athletic" means roll whichever of Dexterity or
@@ -933,10 +933,14 @@ const TRAINER_SKILL_DEFS: Record<string,{attr:string;attr2?:string;desc:string;c
   athletic:  {attr:"strength",attr2:"dexterity",desc:"Running, climbing, swimming.",    combat:"Roll STR or DEX + Athletic for physical feats in combat."},
   nature:    {attr:"insight",             desc:"Interact with wild Pokémon.",            combat:"Roll INS + Nature to calm or influence Pokémon."},
   stealth:   {attr:"dexterity",           desc:"Move silently, set ambushes.",          combat:"Roll DEX + Stealth vs target Alert to set up a surprise."},
+  empathy:   {attr:"insight",             desc:"Read and connect with others' feelings.",combat:"Roll INS + Empathy to sense intent or calm someone down."},
   etiquette: {attr:"insight",             desc:"Social protocol and persuasion.",       combat:"Roll INS + Etiquette to negotiate or de-escalate."},
   intimidate:{attr:"strength",            desc:"Frighten or coerce others.",            combat:"Roll STR + Intimidate. 3+ succ: target Flinches or −1 next roll."},
   perform:   {attr:"special",             desc:"Entertain, distract, or dazzle.",       combat:"Roll SPC + Perform. Success: target −2 dice on next action."},
-  capture:   {attr:"special",attr2:"dexterity",desc:"Throw Pokéballs accurately.",      combat:"Roll SPC/DEX + Capture (Channel). Seal potency adds to success count."},
+  crafts:    {attr:"dexterity",           desc:"Build, repair and make things by hand.", combat:"Roll DEX + Crafts to fashion or fix equipment."},
+  lore:      {attr:"insight",             desc:"General knowledge — history and trivia.",combat:"Roll INS + Lore to recall relevant information."},
+  medicine:  {attr:"insight",             desc:"Treat injuries and illness.",            combat:"Roll INS + Medicine to patch someone up."},
+  science:   {attr:"insight",             desc:"Technical and academic know-how.",       combat:"Roll INS + Science for technical problem-solving."},
 };
 
 // ── Clash Section ─────────────────────────────────────────────────────────────
@@ -1040,7 +1044,7 @@ function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:a
   const av=(k:string)=>(attrs as any)[k]??1;
   const pool=def?av(def.attr)+(skills[selSkill!]||0):0;
   const others=allEntries.filter(e=>e.id!==entry.id&&e.currentHp>0);
-  const combatSkills=["brawl","clash","evasion","intimidate","channel","capture"];
+  const combatSkills=["brawl","clash","evasion","intimidate","channel"];
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
       <div style={{background:"#1e2235",border:"1px solid #3d8bff40",borderRadius:10,width:490,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.8)"}}>
@@ -2417,7 +2421,8 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
         rank:target.pokemon.suggestedRank,loyalty:1,happiness:1,
         attributes:{...target.attrs},
         trainingAttributes:{strength:0,dexterity:0,vitality:0,special:0,insight:0},
-        skills:target.pokemonSkills??{brawl:0,channel:0,clash:0,evasion:0,alert:0,athletic:0,nature:0,stealth:0,intimidate:0,perform:0},
+        socialAttributes:{tough:1,cool:1,beauty:1,cute:1,clever:1},
+        skills:target.pokemonSkills??{brawl:0,channel:0,clash:0,evasion:0,alert:0,athletic:0,nature:0,stealth:0,charm:0,etiquette:0,intimidate:0,perform:0},
         moves:(target.moves||[]).slice(0,4).map(m=>m.name),
         partnerMoves:[],isPartner:false,nature:"Hardy",origin:"wild" as const,
         heldItem:"",cruelty:false,inPokeball:true,happinessPending:0,notes:"",
@@ -3719,7 +3724,7 @@ export default function BattleTrackerPage(){
       moves:moves||defaultMoves,
       attrs,statMods:[],weatherImmune:false,actionCount:0,
       reactionUsed:false,isProtected:false,linkedTrainerId:trainerId,linkedPokemonSheetKey:sheetKey,
-      pokemonSkills:sheetSkills??{brawl:1,channel:1,clash:1,evasion:1,alert:1,athletic:1,nature:1,stealth:1,intimidate:1,perform:1},
+      pokemonSkills:sheetSkills??{brawl:1,channel:1,clash:1,evasion:1,alert:1,athletic:1,nature:1,stealth:1,charm:1,etiquette:1,intimidate:1,perform:1},
     }]);
     if(trainerId){
       saveToStorage("pending_link",{pokemonNumber:pokemon.number,trainerId,nickname:nickname||""});

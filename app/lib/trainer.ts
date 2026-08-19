@@ -11,7 +11,7 @@ export interface TrainerData {
   age: TrainerAge; rank: Rank; money: number;
   attributes: { strength: number; dexterity: number; vitality: number; insight: number };
   socialAttributes: { tough: number; cool: number; beauty: number; cute: number; clever: number };
-  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; etiquette: number; intimidate: number; perform: number; capture: number };
+  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; empathy: number; etiquette: number; intimidate: number; perform: number; crafts: number; lore: number; medicine: number; science: number };
   customSkills: { name: string; points: number }[];
   inventory: { name: string; quantity: number; description: string }[];
   equippedItem: string;  // bike, fishing rod, etc. — persistent
@@ -39,7 +39,8 @@ export interface PokemonSheetData {
   happiness: number; // 0-5
   attributes: { strength: number; dexterity: number; vitality: number; special: number; insight: number };
   trainingAttributes: { strength: number; dexterity: number; vitality: number; special: number; insight: number };
-  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; intimidate: number; perform: number };
+  socialAttributes: { tough: number; cool: number; beauty: number; cute: number; clever: number };
+  skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; charm: number; etiquette: number; intimidate: number; perform: number };
   moves: string[]; // active move names (max insight+3)
   partnerMoves: string[]; // bonus moves unlocked by Partner status
   isPartner: boolean;
@@ -58,7 +59,7 @@ export function makeBlankTrainer(): TrainerData {
     age: "Teen", rank: "Rookie", money: 2000,
     attributes: { strength: 1, dexterity: 1, vitality: 1, insight: 1 },
     socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
-    skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, etiquette: 0, intimidate: 0, perform: 0, capture: 0 },
+    skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, empathy: 0, etiquette: 0, intimidate: 0, perform: 0, crafts: 0, lore: 0, medicine: 0, science: 0 },
     customSkills: [], inventory: [], equippedItem: "", battleItem: "",
     achievements: [], notes: "", gymBadges: Array(8).fill(false), pokemon: [], pcBox: [],
     spriteId: "",
@@ -82,4 +83,49 @@ export function getActiveTrainer(trainers: TrainerData[]): TrainerData | null {
 
 export function setActiveTrainer(id: string) {
   saveToStorage(ACTIVE_TRAINER_KEY, id);
+}
+
+const BLANK_TRAINER_SKILLS = makeBlankTrainer().skills;
+const BLANK_SOCIAL: TrainerData["socialAttributes"] = { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 };
+const BLANK_POKEMON_SKILLS: PokemonSheetData["skills"] = { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, charm: 0, etiquette: 0, intimidate: 0, perform: 0 };
+
+/* Skills 3.0 dropped Capture (catching already rolls Channel) and added
+   Empathy/Crafts/Lore/Medicine/Science; Pokémon gained Charm and Etiquette.
+   Saves made before that migration are missing the new keys and carry the
+   stale "capture" one — merge in defaults for what's missing rather than
+   silently hiding the new skills on every pre-existing character. */
+export function normalizeTrainer(t: TrainerData): TrainerData {
+  const skills = { ...BLANK_TRAINER_SKILLS, ...t.skills } as Record<string, number>;
+  delete skills.capture;
+  return {
+    ...t,
+    socialAttributes: t.socialAttributes ?? BLANK_SOCIAL,
+    skills: skills as TrainerData["skills"],
+  };
+}
+
+export function normalizePokemonSheet(s: PokemonSheetData): PokemonSheetData {
+  return {
+    ...s,
+    socialAttributes: s.socialAttributes ?? BLANK_SOCIAL,
+    skills: { ...BLANK_POKEMON_SKILLS, ...s.skills },
+  };
+}
+
+/* Reads + migrates in one step, and writes the migrated shape straight back
+   so every other page's plain loadFromStorage("trainers"/"pokemon_sheets")
+   call also sees the fixed data from then on, without having to route every
+   read site through these helpers. */
+export function loadTrainers(): TrainerData[] {
+  const raw = loadFromStorage<TrainerData[]>(TRAINERS_KEY, []);
+  const normalized = raw.map(normalizeTrainer);
+  if (JSON.stringify(normalized) !== JSON.stringify(raw)) saveToStorage(TRAINERS_KEY, normalized);
+  return normalized;
+}
+
+export function loadPokemonSheets(): Record<string, PokemonSheetData> {
+  const raw = loadFromStorage<Record<string, PokemonSheetData>>(SHEETS_KEY, {});
+  const normalized = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, normalizePokemonSheet(v)]));
+  if (JSON.stringify(normalized) !== JSON.stringify(raw)) saveToStorage(SHEETS_KEY, normalized);
+  return normalized;
 }

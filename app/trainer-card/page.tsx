@@ -187,7 +187,7 @@ function TrainerStats({ trainer }: { trainer: TrainerData }) {
           so the trained ones still carry the eye. */}
       <Section title={`SKILLS · LIMIT ${skillLimit}`}>
         {skills.map(([k,v])=>(
-          <StatRow key={k} label={k==="capture"?"capture 🎯":k} value={v}
+          <StatRow key={k} label={k} value={v}
             max={skillLimit} color="#00A080" dim={v===0}/>
         ))}
         {trainer.customSkills.filter(s=>s.name.trim()).map(s=>(
@@ -298,6 +298,13 @@ function PokemonCard({ sheetKey, sheet, battle }: {
           {(["strength","dexterity","vitality","special","insight"] as const).map(k=>(
             <StatRow key={k} label={k} value={attr(k)}
               max={limits?.[k] ?? 5}/>
+          ))}
+        </Section>
+
+        {/* Social — Contest stats, same five as a trainer's own */}
+        <Section title="SOCIAL">
+          {(Object.entries(sheet.socialAttributes ?? { tough:1, cool:1, beauty:1, cute:1, clever:1 }) as [string, number][]).map(([k,v])=>(
+            <StatRow key={k} label={k} value={v} max={5} color="#A040A0"/>
           ))}
         </Section>
 

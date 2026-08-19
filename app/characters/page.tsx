@@ -13,10 +13,11 @@ import {
   RANK_ORDER, getRankIndex, getDisobedienceLevel,
   POKEMON_RANK_ATTR_UPGRADES,
 } from "../data/game-rules";
-import { saveToStorage, loadFromStorage } from "../lib/storage";
+import { saveToStorage } from "../lib/storage";
 import {
   TrainerData, PokemonSheetData, makeBlankTrainer as makeBlank,
   setActiveTrainer, getActiveTrainer, TRAINER_SPRITES,
+  loadTrainers, loadPokemonSheets,
 } from "../lib/trainer";
 import { MOVES_DATA } from "../data/moves-data";
 import { POKEMON_EGG_GROUPS } from "../data/egg-groups-data";
@@ -101,7 +102,8 @@ function makeBlankPokemonSheet(number: number, trainerRank: Rank): PokemonSheetD
     loyalty: 1, happiness: 1,
     attributes: pokemon ? { ...pokemon.attributes } : { strength: 1, dexterity: 1, vitality: 1, special: 1, insight: 1 },
     trainingAttributes: { strength: 0, dexterity: 0, vitality: 0, special: 0, insight: 0 },
-    skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, intimidate: 0, perform: 0 },
+    socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
+    skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, charm: 0, etiquette: 0, intimidate: 0, perform: 0 },
     moves: pokemon?.moves.filter(m => RANK_ORDER.indexOf(m.rank) <= RANK_ORDER.indexOf(trainerRank)).slice(0, 4).map(m => m.name) ?? [],
     partnerMoves: [],
     isPartner: false,
@@ -220,17 +222,21 @@ const TRAINER_SOCIAL_HINTS: Record<string, string> = {
 };
 const TRAINER_SKILL_HINTS: Record<string, string> = {
   brawl:      "Fighting hand-to-hand yourself.",
-  channel:    "Directing your Pokémon's special and ranged moves.",
+  channel:    "Directing your Pokémon's special and ranged moves — also used to throw Poké Balls.",
   clash:      "Meeting an incoming attack head-on as a reaction.",
   evasion:    "Dodging an incoming attack as a reaction.",
   alert:      "Noticing things — perception and avoiding surprise.",
   athletic:   "Running, climbing, jumping and physical feats.",
   nature:     "Wilderness lore, tracking and handling wild Pokémon.",
   stealth:    "Moving unseen and unheard.",
+  empathy:    "Reading and connecting with others' feelings.",
   etiquette:  "Formal manners and navigating polite society.",
   intimidate: "Leaning on someone through force of presence.",
   perform:    "Contests, performances and entertaining a crowd.",
-  capture:    "Throwing Poké Balls — used when you attempt a catch.",
+  crafts:     "Building, repairing and making things by hand.",
+  lore:       "General knowledge — history, culture and trivia.",
+  medicine:   "Treating injuries and illness.",
+  science:    "Technical and academic know-how.",
 };
 
 const TRAINING_ROLLS: Record<string, { trainerAttr: "strength"|"dexterity"|"vitality"|"insight"; trainerSkill: "brawl"|"channel"|"athletic"|"nature"; label: string }> = {
@@ -254,7 +260,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
   onTransferItemToTrainer: (itemName: string) => void;
   onTransferItemFromTrainer: (itemName: string) => void;
   trainerAttrs: { strength: number; dexterity: number; vitality: number; insight: number };
-  trainerSkills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; etiquette: number; intimidate: number; perform: number; capture: number };
+  trainerSkills: TrainerData["skills"];
 }) {
   const pokemon = POKEMON.find(p => p.number === sheet.number);
   if (!pokemon) return null;
@@ -743,6 +749,43 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
           </div>
         </div>
       </div>
+      {/* Pokémon Social Attributes — Contest stats, same five as a trainer's own. */}
+      {(() => {
+        const socialInfo = TRAINER_RANK_POINTS[sheet.rank];
+        const social = sheet.socialAttributes ?? { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 };
+        const usedSocialPts = Object.values(social).reduce((a, b) => a + b, 0) - 5; // base 1 each isn't "spent"
+        const SOCIAL_ATTRS: (keyof typeof social)[] = ["tough", "cool", "beauty", "cute", "clever"];
+        return (
+          <div style={{ marginTop: 12, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 6, padding: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#383838", letterSpacing: "1px", textTransform: "uppercase" }}>Social</span>
+              <span style={{ fontSize: 9, color: usedSocialPts > socialInfo.socialPoints ? "#C02820" : "#585858" }}>{usedSocialPts}/{socialInfo.socialPoints} pts</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 8px" }}>
+              {SOCIAL_ATTRS.map(key => {
+                const val = social[key] ?? 1;
+                const label = key.charAt(0).toUpperCase() + key.slice(1);
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontSize: 10, color: "#383838", width: 68, flexShrink: 0 }}>{label}</span>
+                    <div style={{ display: "flex", gap: 2 }}>
+                      {Array.from({ length: TRAINER_ATTR_MAX }).map((_, i) => (
+                        <button key={i} disabled={i === 0} onClick={() => {
+                          const newVal = val === i + 1 ? Math.max(1, i) : i + 1;
+                          const cost = newVal - val;
+                          if (cost > 0 && usedSocialPts >= socialInfo.socialPoints) return;
+                          upd({ socialAttributes: { ...social, [key]: newVal } });
+                        }} style={{ width: 12, height: 12, borderRadius: 2, border: `1px solid ${i < val ? "#A040A0" : "#2850A0"}`, background: i < val ? "#A040A0" : "transparent", cursor: i === 0 ? "default" : "pointer", padding: 0 }} />
+                      ))}
+                    </div>
+                    <span style={{ fontSize: 10, color: "#585858", marginLeft: 2 }}>{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
       {/* Pokémon Skills */}
       {(() => {
         const skillInfo = TRAINER_RANK_POINTS[sheet.rank];
@@ -756,6 +799,8 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
           { key: "athletic",   label: "Athletic",   desc: "Speed, jumping, physical feats" },
           { key: "nature",     label: "Nature",     desc: "Wilderness, tracking" },
           { key: "stealth",    label: "Stealth",    desc: "Hiding, silent movement" },
+          { key: "charm",      label: "Charm",      desc: "Endearing or persuading through cuteness" },
+          { key: "etiquette",  label: "Etiquette",  desc: "Formal manners and polite behavior" },
           { key: "intimidate", label: "Intimidate", desc: "Intimidation" },
           { key: "perform",    label: "Perform",    desc: "Contests & performance" },
         ];
@@ -967,13 +1012,13 @@ export default function CharactersPage() {
 
 function CharactersPageInner() {
   const searchParams = useSearchParams();
-  const [trainers, setTrainers] = useState<TrainerData[]>(() => loadFromStorage("trainers", []));
-  const [pokemonSheets, setPokemonSheets] = useState<Record<string, PokemonSheetData>>(() => loadFromStorage("pokemon_sheets", {}));
+  const [trainers, setTrainers] = useState<TrainerData[]>(() => loadTrainers());
+  const [pokemonSheets, setPokemonSheets] = useState<Record<string, PokemonSheetData>>(() => loadPokemonSheets());
   /* Open on whoever the Pokédex device is currently playing as. Landing on an
      empty panel when a trainer is already saved is a step nobody wants, and
      the active trainer is the one they were just looking at. */
   const [selId, setSelId] = useState<string | null>(
-    () => getActiveTrainer(loadFromStorage<TrainerData[]>("trainers", []))?.id ?? null
+    () => getActiveTrainer(loadTrainers())?.id ?? null
   );
   /* The landing device's POKéMON row links straight to ?tab=pokemon rather
      than always opening on the trainer sheet — a click meant "show me my
@@ -1384,7 +1429,7 @@ function CharactersPageInner() {
                   badge={<PointBudget used={usedSkillPoints} total={rankInfo.skillPoints} label={`pts · max ${rankInfo.skillLimit}`} />}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                     {(Object.keys(sel.skills) as (keyof typeof sel.skills)[]).map(skill => (
-                      <PipRow key={skill} hint={TRAINER_SKILL_HINTS[skill]} label={skill.charAt(0).toUpperCase() + skill.slice(1)+(skill==="capture"?" (🎯)":"")} value={sel.skills[skill]} max={rankInfo.skillLimit}
+                      <PipRow key={skill} hint={TRAINER_SKILL_HINTS[skill]} label={skill.charAt(0).toUpperCase() + skill.slice(1)} value={sel.skills[skill]} max={rankInfo.skillLimit}
                         onChange={v => {
                           const cost = v - sel.skills[skill];
                           if (cost > 0 && usedSkillPoints >= rankInfo.skillPoints) return;
