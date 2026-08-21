@@ -3728,18 +3728,17 @@ export default function BattleTrackerPage(){
     window.addEventListener("resize",check);
     return()=>window.removeEventListener("resize",check);
   },[]);
-  // FieldMon's sprite box is a fixed 300-340px regardless of screen size —
-  // fine on desktop, but wider (or taller) than the stage itself on a phone,
-  // or once the inline move panel eats vertical room from it, which is what
-  // actually caused sprites to overlap the opposite corner's nameplate (not
-  // just a font-size problem the cqw conversion above already covers).
-  // The player sprite (back, 340 wide) and player nameplate (min 210 wide)
-  // sit in the same bottom row — width scale is solved directly from "these
-  // two must fit side by side with their margins", not from an arbitrary
-  // reference box, so it prevents that overlap by construction instead of
-  // by a tuned-and-hopefully-right constant. Height scale still comes from
-  // measured stage height against the sprite's own design height, for the
-  // move-panel-squeeze case.
+  // FieldMon's sprite box is a fixed 300-340px regardless of screen size.
+  // Shrinking it to fit a narrow stage next to the nameplate worked but
+  // read as "the Pokémon are tiny now" — what actually needs to give on a
+  // narrow phone is the sprite's position, not its size: the back/front
+  // sprite and its nameplate sit in the same row (bottom-left + bottom-right
+  // for the player, top-right + top-left for the enemy), so floating the
+  // sprite further from that edge — closer to the horizon — separates it
+  // from the nameplate vertically instead of needing to shrink out of its
+  // way horizontally. `narrowness` drives that: 0 on a normal/wide stage
+  // (sprite stays at its original corner offset), rising to 1 on a genuinely
+  // narrow one (sprite floats in toward the middle instead).
   const sceneRef=useRef<HTMLDivElement>(null);
   const [sceneBox,setSceneBox]=useState({w:900,h:600});
   useEffect(()=>{
@@ -3754,10 +3753,16 @@ export default function BattleTrackerPage(){
     ro.observe(el);
     return()=>ro.disconnect();
   },[mounted]);
-  const playerNameplateW=Math.min(210,sceneBox.w*0.42);
-  const widthScale=(sceneBox.w*0.95-24-playerNameplateW)/340;
+  const narrowness=Math.max(0,Math.min(1,(480-sceneBox.w)/(480-260)));
+  const playerSpriteBottomPct=3+narrowness*29; // 3% → 32%
+  const enemySpriteTopPct=9+narrowness*23; // 9% → 32%
+  // Height still shrinks the sprite for the one case position alone can't
+  // fix: the inline move panel eating most of the stage's height. Width
+  // keeps only a loose last-resort floor now that positioning does the real
+  // work of avoiding the nameplate.
   const heightScale=sceneBox.h/380;
-  const fieldScale=Math.max(0.4,Math.min(1.8,widthScale,heightScale));
+  const widthFloorScale=sceneBox.w/260;
+  const fieldScale=Math.max(0.55,Math.min(1.8,heightScale,widthFloorScale));
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4334,7 +4339,7 @@ export default function BattleTrackerPage(){
                   </div>
                 )}
                 {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
-                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
+                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:`${enemySpriteTopPct}%`,right:"7%",zIndex:2}}>
                   <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
                     <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} scale={fieldScale}/>
                     <StatusFX statuses={onFieldEnemy.statuses}/>
@@ -4347,7 +4352,7 @@ export default function BattleTrackerPage(){
                     "sent out" yet regardless of what's first in the roster,
                     so the trainer placeholder below takes this spot instead. */}
                 {mounted&&battleStarted&&onFieldPlayer&&(
-                  <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:"5%",zIndex:2}}>
                     <div style={{position:"relative"}}>
                       <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} scale={fieldScale}/>
                       <StatusFX statuses={onFieldPlayer.statuses}/>
@@ -4359,7 +4364,7 @@ export default function BattleTrackerPage(){
                     setup, same spot the real back sprite takes over once the
                     battle begins. Purely visual, not a roster entry. */}
                 {mounted&&!battleStarted&&setupTrainerSpriteId&&(
-                  <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:"5%",zIndex:2}}>
                     <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} scale={fieldScale}/>
                   </div>
                 )}
