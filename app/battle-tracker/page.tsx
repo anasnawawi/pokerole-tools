@@ -3741,26 +3741,31 @@ export default function BattleTrackerPage(){
     window.addEventListener("resize",check);
     return()=>window.removeEventListener("resize",check);
   },[]);
-  // FieldMon's sprite box is a fixed 300-340px regardless of screen size.
-  // Shrinking it to fit a narrow stage next to the nameplate worked but
-  // read as "the Pokémon are tiny now" — what actually needs to give on a
-  // narrow phone is the player sprite's position, not its size: the back
-  // sprite and its nameplate share the bottom row (sprite bottom-left,
-  // nameplate bottom-right), so floating it up toward the horizon separates
-  // them vertically instead of needing to shrink out of the nameplate's way.
-  // The enemy sprite stays at its original fixed top-right corner — moving
-  // it toward the horizon put it in the middle of the field instead, which
-  // read as broken positioning rather than a fix, and it wasn't the one
-  // overlapping to begin with. `narrowness` drives the player's float: 0 on
-  // a normal/wide stage (original corner offset), rising to 1 on a
-  // genuinely narrow one (floats in toward the middle instead).
+  // Independently resizing/repositioning the sprite, its platform, and the
+  // nameplate (three separate formulas fighting for the same space) kept
+  // producing new mismatches — wrong side, wrong size, still overlapping.
+  // The actual FRLG screen never resizes any of that relative to itself; the
+  // whole picture is a fixed composition that only ever gets scaled as one
+  // unit. Reproduce that instead: on a compact (mobile/tablet) viewport, the
+  // scene renders at its normal fixed design size (480x560, the box this
+  // layout was actually built for) and the whole thing is uniformly
+  // transform-scaled down to fit, sprites/discs/nameplates/menu all shrinking
+  // together at the same ratio, exactly as they're laid out on desktop —
+  // never resized or repositioned individually. Desktop is untouched: no
+  // wrapper, no transform, same fluid flex layout as always.
+  // Wide enough that the 300-340px sprites read the way they do on desktop
+  // (occupying a modest share of a roomy stage, clearly hugging their own
+  // corner) instead of dominating a cramped canvas — a narrower reference
+  // here made a 340px sprite span most of the design box's width regardless
+  // of which edge it was anchored to.
+  const SCENE_DESIGN_W=620, SCENE_DESIGN_H=680;
   const sceneRef=useRef<HTMLDivElement>(null);
   const [sceneBox,setSceneBox]=useState({w:900,h:600});
   useEffect(()=>{
-    // The stage this ref points to only exists once `mounted` flips true
-    // (a hydration-safety gate) — on the very first render sceneRef.current
-    // is null and, with an empty dep array, this effect would never run
-    // again to pick up the real element once it appears. Re-run on mounted.
+    // This ref's element only exists once `mounted` flips true (a
+    // hydration-safety gate) — on the very first render sceneRef.current is
+    // null and, with an empty dep array, this effect would never run again
+    // to pick up the real element once it appears. Re-run on mounted.
     const el=sceneRef.current;if(!el)return;
     const ro=new ResizeObserver(entries=>{
       for(const entry of entries)setSceneBox({w:entry.contentRect.width,h:entry.contentRect.height});
@@ -3768,23 +3773,9 @@ export default function BattleTrackerPage(){
     ro.observe(el);
     return()=>ro.disconnect();
   },[mounted]);
-  const narrowness=isCompactViewport?Math.max(0,Math.min(1,(480-sceneBox.w)/(480-260))):0;
-  const playerSpriteBottomPct=3+narrowness*29; // 3% → 32%
-  // Pushes toward its own edge as it floats up, rather than staying at the
-  // original fixed offset — at full float the sprites otherwise drifted
-  // toward each other/center on a narrow phone instead of staying anchored
-  // to their own side of the field.
-  const playerSpriteLeftPct=5-narrowness*5; // 5% → 0%
-  const enemySpriteRightPct=7-narrowness*7; // 7% → 0%
-  // Height still shrinks the sprite for the one case position alone can't
-  // fix: the inline move panel eating most of the stage's height. On a
-  // compact viewport there's no reason for it to ever grow past the
-  // original size the way desktop's does — a /260 width floor let scale
-  // climb above 1 on an ordinary ~320-375px phone stage (since 320/260 >
-  // 1), which oversized both sprites enough that they overflowed the stage
-  // on both sides and visually crossed over each other. Capped at 1 here.
-  const heightScale=sceneBox.h/380;
-  const fieldScale=isCompactViewport?Math.max(0.55,Math.min(1,heightScale)):1;
+  const uiScale=isCompactViewport
+    ?Math.max(0.35,Math.min(1,sceneBox.w/SCENE_DESIGN_W,sceneBox.h/SCENE_DESIGN_H))
+    :1;
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4245,13 +4236,23 @@ export default function BattleTrackerPage(){
         </div>
 
         {/* ── FIRERED BATTLE SCENE ─────────────────────────────────────────── */}
-        {/* Container query, not just flex — the bottom bar's clamp()s below
-            need to track the scene's own rendered width, not the viewport's.
-            vw sizing drifted from the actual available space whenever
-            something else (the sidebar, an expanded move panel) changed how
-            much of the viewport this box actually got, which is exactly
-            when overlap showed up. cqw always measures this box. */}
-        <div style={{flex:1,position:"relative",overflow:"hidden",display:"flex",flexDirection:"column",containerType:"inline-size"} as React.CSSProperties}>
+        {/* This outer box just measures available space and (on a compact
+            viewport) centers the scaled-down scene inside it. The scene
+            itself — status strip, stage, bottom bar — renders at its normal
+            fixed design size (480x560) in an inner box and gets scaled down
+            uniformly with a single transform, so sprites/discs/nameplates/
+            menu all shrink together at the same ratio instead of each
+            reflowing independently. Container query units inside resolve
+            against that fixed 480px design width regardless of viewport, so
+            text sizing is part of the same uniform scale, not a second
+            competing responsive system. Desktop (isCompactViewport false)
+            skips all of this — inset:0 fills the outer box exactly like a
+            plain fluid layout, unscaled. */}
+        <div ref={sceneRef} style={{flex:1,position:"relative",overflow:"hidden",...(isCompactViewport?{display:"flex",alignItems:"center",justifyContent:"center"}:{})}}>
+        <div style={{display:"flex",flexDirection:"column",containerType:"inline-size",
+          ...(isCompactViewport
+            ?{width:SCENE_DESIGN_W,height:SCENE_DESIGN_H,flexShrink:0,transform:`scale(${uiScale})`,transformOrigin:"center center"}
+            :{position:"absolute",inset:0})} as React.CSSProperties}>
           {/* Thin status summary strip */}
           {mounted&&entries.length>0&&(()=>{
             const withStatus=sorted.filter(e=>e.currentHp>0).filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
@@ -4292,7 +4293,7 @@ export default function BattleTrackerPage(){
                   Pokémon is added. */}
               {mounted&&setupTrainerSpriteId&&(
                 <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
-                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} scale={fieldScale}/>
+                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
                 </div>
               )}
               <div style={{position:"relative",zIndex:6,background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
@@ -4303,7 +4304,7 @@ export default function BattleTrackerPage(){
           ):(
             <>
               {/* STAGE */}
-              <div ref={sceneRef} style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
+              <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
                 <StageBackdrop/>
                 {/* Weather + terrain FX — scoped to the stage */}
                 <TerrainFX terrain={terrain}/>
@@ -4312,7 +4313,7 @@ export default function BattleTrackerPage(){
                 {/* Enemy nameplate — top-left, with that side's field hazards below it */}
                 {mounted&&onFieldEnemy&&(
                   <div style={{position:"absolute",top:16,left:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
-                    <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} compact={fieldScale<0.7}/>
+                    <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
                     <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                   </div>
                 )}
@@ -4361,9 +4362,9 @@ export default function BattleTrackerPage(){
                   </div>
                 )}
                 {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
-                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:`${enemySpriteRightPct}%`,zIndex:2}}>
+                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
                   <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                    <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} scale={fieldScale}/>
+                    <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)}/>
                     <StatusFX statuses={onFieldEnemy.statuses}/>
                     <HazardMarkers hazards={hazards.enemy}/>
                   </div>
@@ -4374,9 +4375,9 @@ export default function BattleTrackerPage(){
                     "sent out" yet regardless of what's first in the roster,
                     so the trainer placeholder below takes this spot instead. */}
                 {mounted&&battleStarted&&onFieldPlayer&&(
-                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:`${playerSpriteLeftPct}%`,zIndex:2}}>
+                  <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
                     <div style={{position:"relative"}}>
-                      <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} scale={fieldScale}/>
+                      <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
                       <StatusFX statuses={onFieldPlayer.statuses}/>
                       <HazardMarkers hazards={hazards.player}/>
                     </div>
@@ -4386,15 +4387,15 @@ export default function BattleTrackerPage(){
                     setup, same spot the real back sprite takes over once the
                     battle begins. Purely visual, not a roster entry. */}
                 {mounted&&!battleStarted&&setupTrainerSpriteId&&(
-                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:`${playerSpriteLeftPct}%`,zIndex:2}}>
-                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} scale={fieldScale}/>
+                  <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
                   </div>
                 )}
                 {/* Player nameplate — lower-right, with that side's field hazards above it */}
                 {mounted&&battleStarted&&onFieldPlayer&&(
                   <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                     <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
-                    <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} compact={fieldScale<0.7}/>
+                    <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
                   </div>
                 )}
 
@@ -4623,8 +4624,12 @@ export default function BattleTrackerPage(){
               )}
             </>
           )}
+        </div>
 
-          {/* Cards-on-demand drawer */}
+          {/* Cards-on-demand drawer — deliberately outside the scaled-down
+              scene box above: it's a full interactive panel (forms, buttons,
+              scrolling), not part of the fixed FRLG-style composition, so it
+              stays at normal size and usable touch targets even on mobile. */}
           {mounted&&drawerId&&(()=>{
             const e=entries.find(x=>x.id===drawerId);
             if(!e)return null;
