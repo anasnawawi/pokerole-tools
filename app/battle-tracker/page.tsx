@@ -3711,9 +3711,12 @@ export default function BattleTrackerPage(){
   // Below this, the sidebar's fixed width eats too much of the viewport for
   // the scene to lay out without overlap. Float it over the scene instead
   // of squeezing it, so the scene always keeps its full width to work with.
+  // 700 was too generous — a perfectly normal, not-maximized desktop
+  // browser window can sit under that and got treated as mobile. This
+  // should only fire for an actually narrow (phone-width) viewport.
   const [isNarrow,setIsNarrow]=useState(false);
   useEffect(()=>{
-    const check=()=>setIsNarrow(window.innerWidth<700);
+    const check=()=>setIsNarrow(window.innerWidth<480);
     check();
     window.addEventListener("resize",check);
     return()=>window.removeEventListener("resize",check);
