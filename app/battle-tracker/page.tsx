@@ -270,13 +270,20 @@ function nameOf(entry:BattleEntry,roster:BattleEntry[]):string{
 
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
 // (as in-game); player plates show HP n/n + WP n/n.
-function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void}){
+function SceneNameplate({entry,enemy,allEntries,onClick,compact}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void;compact?:boolean}){
   const name=nameOf(entry,allEntries).toUpperCase();
   const sts=(entry.statuses||[]).filter(s=>s!=="Healthy");
   const rank=entry.trainerRank||entry.pokemon.suggestedRank;
+  // When the stage is squeezed short (the inline move panel eating most of
+  // its height, on top of an already-narrow window), the nameplate's own
+  // fixed vertical padding/rows were enough on their own to collide with
+  // the sprite beneath — cqw-based width shrinking didn't touch height.
+  // Compact trims padding and drops the WP row's gap rather than changing
+  // what's shown.
+  const pad=compact?"2px 6px 3px":"5px 9px 6px";
   return(
-    <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"5px 9px 6px",minWidth:enemy?188:210,cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+    <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:pad,minWidth:`min(${enemy?188:210}px, ${enemy?38:42}cqw)`,maxWidth:"48cqw",cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"} as React.CSSProperties}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:compact?1:3}}>
         <span style={{fontSize:9,fontWeight:700,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
         <span style={{fontSize:7,color:entry.side==="player"?"#2858C0":"#D82808"}}>{rank}</span>
       </div>
@@ -285,12 +292,12 @@ function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enem
         <div style={{flex:1}}><HpBar cur={entry.currentHp} max={entry.maxHp}/></div>
       </div>
       {!enemy&&(
-        <div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
+        <div style={{display:"flex",alignItems:"center",gap:5,marginTop:compact?1:3}}>
           <span style={{fontSize:8,fontWeight:700,color:"#2858C0"}}>WP</span>
           <div style={{flex:1}}><HpBar cur={entry.currentWill} max={entry.maxWill} isWp/></div>
         </div>
       )}
-      <div style={{display:"flex",justifyContent:enemy?"flex-end":"space-between",alignItems:"center",gap:4,marginTop:4}}>
+      <div style={{display:"flex",justifyContent:enemy?"flex-end":"space-between",alignItems:"center",gap:4,marginTop:compact?1:4}}>
         {!enemy&&<span style={{fontSize:8,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#807008":"#A00808",fontWeight:700}}>{entry.currentHp}/{entry.maxHp}</span>}
         <div style={{display:"flex",gap:3,alignItems:"center",flexWrap:"wrap"}}>
           {sts.map(s=><StatusBadge key={s} status={s}/>)}
@@ -302,8 +309,8 @@ function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enem
 }
 // A Pokémon standing on a FireRed-style grass platform. The sprite's feet are pinned to
 // the platform's mid-line so it sits correctly regardless of the sprite's source size.
-function FieldMon({number,back,fainted,onClick,trainerSpriteId}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string}){
-  const w=back?340:300, h=back?232:200, plat=back?74:62;
+function FieldMon({number,back,fainted,onClick,trainerSpriteId,scale=1}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;scale?:number}){
+  const w=(back?340:300)*scale, h=(back?232:200)*scale, plat=(back?74:62)*scale;
   return(
     <div onClick={onClick} style={{position:"relative",width:w,height:h,cursor:onClick?"pointer":"default"}}>
       <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:w,height:plat,borderRadius:"50%",
@@ -315,7 +322,7 @@ function FieldMon({number,back,fainted,onClick,trainerSpriteId}:{number:number;b
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={number} back={back} boxW={back?300:250} boxH={back?232:200} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
+        <PokeSprite number={number} back={back} boxW={(back?300:250)*scale} boxH={(back?232:200)*scale} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
       </div>
     </div>
   );
@@ -537,7 +544,7 @@ function HazardRow({hazards,onChange,align}:{hazards:HazardSide;onChange:(h:Haza
     onChange(next);
   };
   return(
-    <div style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:210}}>
+    <div style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:"min(210px, 48cqw)"} as React.CSSProperties}>
       {items.map(it=>(
         <button key={it.key} onClick={()=>cycle(it.key)} title="Click to cycle"
           style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",padding:"2px 4px",cursor:"pointer",
@@ -3708,6 +3715,43 @@ export default function BattleTrackerPage(){
      at turn order than as a search box. Collapsed, it becomes exactly that:
      one sprite per combatant, fastest initiative on top. */
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
+  // Below this, the sidebar's fixed 220px eats too much of the viewport for
+  // the scene to lay out without overlap — nameplates, hazard tags, and the
+  // command bar all have real minimum sizes and there just isn't room left
+  // for them next to a 220px column on a phone. Float the expanded sidebar
+  // over the scene here instead of squeezing it, so the scene always keeps
+  // its full width to work with.
+  const [isNarrow,setIsNarrow]=useState(false);
+  useEffect(()=>{
+    const check=()=>setIsNarrow(window.innerWidth<700);
+    check();
+    window.addEventListener("resize",check);
+    return()=>window.removeEventListener("resize",check);
+  },[]);
+  // FieldMon's sprite box is a fixed 300-340px regardless of screen size —
+  // fine on desktop, but wider (or taller) than the stage itself on a phone,
+  // or once the inline move panel eats vertical room from it, which is what
+  // actually caused sprites to overlap the opposite corner's nameplate (not
+  // just a font-size problem the cqw conversion above already covers).
+  // Measure the stage's real rendered box and derive a shrink factor from
+  // whichever dimension is tighter, so the back sprite (340x232, the larger
+  // of the two) never exceeds roughly half the stage's width or most of its
+  // height.
+  const sceneRef=useRef<HTMLDivElement>(null);
+  const [sceneBox,setSceneBox]=useState({w:900,h:600});
+  useEffect(()=>{
+    // The stage this ref points to only exists once `mounted` flips true
+    // (a hydration-safety gate) — on the very first render sceneRef.current
+    // is null and, with an empty dep array, this effect would never run
+    // again to pick up the real element once it appears. Re-run on mounted.
+    const el=sceneRef.current;if(!el)return;
+    const ro=new ResizeObserver(entries=>{
+      for(const entry of entries)setSceneBox({w:entry.contentRect.width,h:entry.contentRect.height});
+    });
+    ro.observe(el);
+    return()=>ro.disconnect();
+  },[mounted]);
+  const fieldScale=Math.max(0.4,Math.min(1,(sceneBox.w*0.55)/340,(sceneBox.h*0.85)/232));
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4106,9 +4150,15 @@ export default function BattleTrackerPage(){
       {/* Weather banner — FireRed dialogue box style */}
       {weather.name!=="Clear"&&<div style={{background:"#F8F8E8",borderBottom:"2px solid #181818",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:9,flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#181818"}}>{weather.name.toUpperCase()}</span><span style={{color:"#484830",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:8}}>{weather.description}</span>{terrain!=="None"&&<span style={{color:"#2858C0",fontSize:8}}>· {terrain}</span>}</div>}
 
-      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        {/* Left sidebar — FireRed style */}
-        <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms"}}>
+      <div style={{flex:1,display:"flex",overflow:"hidden",position:"relative"}}>
+        {/* Left sidebar — FireRed style. On a narrow viewport with the
+            sidebar expanded, float it over the scene instead of taking flex
+            width from it, so the scene keeps the room it needs. */}
+        {isNarrow&&!sidebarCollapsed&&(
+          <div onClick={()=>setSidebarCollapsed(true)} style={{position:"absolute",inset:0,zIndex:29,background:"rgba(24,16,8,0.5)"}}/>
+        )}
+        <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms",
+          ...(isNarrow&&!sidebarCollapsed?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
@@ -4159,7 +4209,13 @@ export default function BattleTrackerPage(){
         </div>
 
         {/* ── FIRERED BATTLE SCENE ─────────────────────────────────────────── */}
-        <div style={{flex:1,position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+        {/* Container query, not just flex — the bottom bar's clamp()s below
+            need to track the scene's own rendered width, not the viewport's.
+            vw sizing drifted from the actual available space whenever
+            something else (the sidebar, an expanded move panel) changed how
+            much of the viewport this box actually got, which is exactly
+            when overlap showed up. cqw always measures this box. */}
+        <div style={{flex:1,position:"relative",overflow:"hidden",display:"flex",flexDirection:"column",containerType:"inline-size"} as React.CSSProperties}>
           {/* Thin status summary strip */}
           {mounted&&entries.length>0&&(()=>{
             const withStatus=sorted.filter(e=>e.currentHp>0).filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
@@ -4200,7 +4256,7 @@ export default function BattleTrackerPage(){
                   Pokémon is added. */}
               {mounted&&setupTrainerSpriteId&&(
                 <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
-                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
+                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} scale={fieldScale}/>
                 </div>
               )}
               <div style={{position:"relative",zIndex:6,background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
@@ -4211,7 +4267,7 @@ export default function BattleTrackerPage(){
           ):(
             <>
               {/* STAGE */}
-              <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
+              <div ref={sceneRef} style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
                 <StageBackdrop/>
                 {/* Weather + terrain FX — scoped to the stage */}
                 <TerrainFX terrain={terrain}/>
@@ -4220,7 +4276,7 @@ export default function BattleTrackerPage(){
                 {/* Enemy nameplate — top-left, with that side's field hazards below it */}
                 {mounted&&onFieldEnemy&&(
                   <div style={{position:"absolute",top:16,left:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
-                    <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                    <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} compact={fieldScale<0.7}/>
                     <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                   </div>
                 )}
@@ -4271,7 +4327,7 @@ export default function BattleTrackerPage(){
                 {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
                 {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
                   <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                    <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)}/>
+                    <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} scale={fieldScale}/>
                     <StatusFX statuses={onFieldEnemy.statuses}/>
                     <HazardMarkers hazards={hazards.enemy}/>
                   </div>
@@ -4284,7 +4340,7 @@ export default function BattleTrackerPage(){
                 {mounted&&battleStarted&&onFieldPlayer&&(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
                     <div style={{position:"relative"}}>
-                      <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
+                      <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} scale={fieldScale}/>
                       <StatusFX statuses={onFieldPlayer.statuses}/>
                       <HazardMarkers hazards={hazards.player}/>
                     </div>
@@ -4295,14 +4351,14 @@ export default function BattleTrackerPage(){
                     battle begins. Purely visual, not a roster entry. */}
                 {mounted&&!battleStarted&&setupTrainerSpriteId&&(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
-                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} scale={fieldScale}/>
                   </div>
                 )}
                 {/* Player nameplate — lower-right, with that side's field hazards above it */}
                 {mounted&&battleStarted&&onFieldPlayer&&(
                   <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                     <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
-                    <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                    <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} compact={fieldScale<0.7}/>
                   </div>
                 )}
 
@@ -4409,7 +4465,7 @@ export default function BattleTrackerPage(){
                    scene) since target-select/accuracy/damage/effects often
                    don't fit in the usual strip; content scrolls internally
                    once it hits that cap. */
-                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden"}}>
+                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8cqw,8px)",background:"#283030",overflow:"hidden"}}>
                   <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
                     onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
                     onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
@@ -4417,11 +4473,11 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
+              <div style={{flexShrink:0,height:"clamp(130px, 20cqw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
-                <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
-                  <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                    <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
+                <div style={{flex:1,minWidth:0,padding:"clamp(4px,0.8cqw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
+                  <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6cqw,16px) clamp(12px,2cqw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <span style={{fontSize:"clamp(11px,1.7cqw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
                         (sceneMsg||(onFieldPlayer?actionPromptFor(onFieldPlayer)
                           :onFieldEnemy?`${(nameOf(onFieldEnemy,entries)).toUpperCase()} appeared!`
@@ -4430,8 +4486,8 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
                 {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
-                  <div className="frw-menu" style={{flex:1,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                <div style={{width:"44%",maxWidth:420,minWidth:"min(280px, 42cqw)",background:"#283030",padding:"clamp(4px,0.8cqw,8px)",display:"flex"}}>
+                  <div className="frw-menu" style={{flex:1,padding:"clamp(6px,1.2cqw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -4478,7 +4534,7 @@ export default function BattleTrackerPage(){
                           {l:"POKéMON",fn:()=>setMenuMode("pokemon")},
                           {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
-                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700}}
+                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7cqw,16px)",fontWeight:700}}
                             onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E8D8F8";}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
                             <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
@@ -4514,14 +4570,14 @@ export default function BattleTrackerPage(){
                    full-width message box (matching FRLG's textbox when
                    nothing's being chosen) with a way to kick the fight off
                    once the roster's ready. */
-                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030"}}>
-                  <div className="frw-battle" style={{flex:1,padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-                    <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
+                <div style={{flexShrink:0,height:"clamp(130px, 20cqw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8cqw,8px)",background:"#283030"}}>
+                  <div className="frw-battle" style={{flex:1,padding:"clamp(10px,1.6cqw,16px) clamp(12px,2cqw,18px)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                    <span style={{fontSize:"clamp(11px,1.7cqw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {entries.length===0?"Add Pokémon to begin the battle.":`${entries.length} combatant${entries.length===1?"":"s"} ready.`}
                     </span>
                     <button onClick={beginBattle} disabled={entries.length===0}
-                      style={{flexShrink:0,fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(10px,1.5vw,14px)",fontWeight:700,
-                        padding:"clamp(6px,1vw,10px) clamp(10px,1.6vw,16px)",borderRadius:8,cursor:entries.length===0?"default":"pointer",
+                      style={{flexShrink:0,fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(10px,1.5cqw,14px)",fontWeight:700,
+                        padding:"clamp(6px,1cqw,10px) clamp(10px,1.6cqw,16px)",borderRadius:8,cursor:entries.length===0?"default":"pointer",
                         background:entries.length===0?"rgba(255,255,255,0.12)":"#E8B048",color:entries.length===0?"rgba(255,255,255,0.4)":"#283030",
                         border:"2px solid #283030",boxShadow:entries.length===0?"none":"2px 2px 0 #283030"}}>
                       ▶ BEGIN BATTLE
