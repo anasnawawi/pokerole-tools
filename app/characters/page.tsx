@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   POKEMON, NATURES, TYPE_COLORS, PokemonType,
-  RANK_BONUSES, ITEMS,
+  RANK_BONUSES, ITEMS, Move,
 } from "../data/pokerole-data";
 import {
   Rank, TrainerAge,
@@ -136,6 +136,40 @@ function applyHappinessGain(sheet: PokemonSheetData, delta: number, source?: "tr
 
 function TypeBadge({ type }: { type: PokemonType }) {
   return <span style={{ display:"inline-flex",alignItems:"center",padding:"1px 5px",borderRadius:3,fontSize:9,fontWeight:700,color:"#fff",background:TYPE_COLORS[type] }}>{type}</span>;
+}
+
+const MOVE_CATEGORY_COLORS: Record<string,string> = { Physical:"#f08030", Special:"#2850A0", Support:"#78c850" };
+
+// A small "ⓘ" toggle a move row can include — separate click target (stops
+// propagation) from the row's own add/remove-move click, so looking up a
+// move's mechanics doesn't accidentally toggle it in or out of the moveset.
+function MoveInfoToggle({ name, infoMove, setInfoMove }: { name: string; infoMove: string | null; setInfoMove: (v: string | null) => void }) {
+  const open = infoMove === name;
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); setInfoMove(open ? null : name); }}
+      title={open ? "Hide move details" : "Show move details"}
+      style={{ width:14, height:14, borderRadius:"50%", border:"1px solid #7888A8", background:open?"#2850A0":"transparent", color:open?"#fff":"#7888A8", fontSize:9, fontWeight:700, lineHeight:1, cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", padding:0 }}
+    >ⓘ</button>
+  );
+}
+
+// The breakdown itself: what roll the move uses to hit, what roll (and base
+// power) it uses for damage if any, its effect text, and flavor text.
+function MoveInfoPanel({ move }: { move: Move }) {
+  const hasPower = move.power && move.power.trim() !== "" && move.power.trim() !== "-";
+  return (
+    <div style={{ margin:"2px 0 5px 20px", padding:"6px 9px", borderRadius:4, background:"#2850A008", border:"1px solid #2850A025", fontSize:10, color:"#404850", display:"flex", flexDirection:"column", gap:3 }}>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        <span style={{ color:MOVE_CATEGORY_COLORS[move.category] ?? "#585858", fontWeight:700 }}>{move.category}</span>
+        {(move.priority ?? 0) > 0 && <span style={{ color:"#187028", fontWeight:700 }}>Priority +{move.priority}</span>}
+      </div>
+      <div><strong style={{ color:"#2850A0" }}>Accuracy roll:</strong> {move.accuracy}</div>
+      {hasPower && <div><strong style={{ color:"#2850A0" }}>Damage roll:</strong> {move.damagePool} <span style={{ color:"#7888A8" }}>(base power {move.power})</span></div>}
+      {move.effect?.trim() && <div><strong style={{ color:"#2850A0" }}>Effect:</strong> {move.effect}</div>}
+      {move.description?.trim() && <div style={{ fontStyle:"italic", color:"#585858" }}>{move.description}</div>}
+    </div>
+  );
 }
 
 // Point budget display
@@ -328,6 +362,11 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
 
   const maxMoves = (sheet.attributes.insight + ta.insight) + 3;
   const [editMoves, setEditMoves] = useState(false);
+  // Which move's roll/power/effect breakdown is currently expanded — an
+  // alpha tester asked to see this while picking moves, since the picker
+  // only ever showed name + type + rank, nothing about what the move
+  // actually does mechanically.
+  const [infoMove, setInfoMove] = useState<string | null>(null);
   const [showFeedPanel, setShowFeedPanel] = useState(false);
   const nature = sheet.nature ?? "Hardy";
   const origin = sheet.origin ?? "wild";
@@ -707,16 +746,24 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                 {Array.from({ length: maxMoves }).map((_, i) => {
                   const name = sheet.moves[i];
                   const move = name ? (MOVES_DATA.find(m => m.name === name) ?? pokemon.moves.find(m => m.name === name)) : null;
+                  // pokemon.moves only carries a learnset stub (name/type/
+                  // rank/priority), not the full move data — the info panel
+                  // needs the canonical MOVES_DATA entry specifically.
+                  const fullMove = name ? MOVES_DATA.find(m => m.name === name) : undefined;
                   if (name && move) {
                     return (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", borderRadius: 3, background: "#2850A008" }}>
-                        <TypeBadge type={move.type} />
-                        <span style={{ fontSize: 11, color: "#202020", flex: 1 }}>
-                          {name}
-                          {(name === "Return") && <span style={{ fontSize: 9, color: "#f85888", marginLeft: 4 }}>(Power {sheet.happiness * 10 + 10})</span>}
-                          {(name === "Frustration") && <span style={{ fontSize: 9, color: "#585880", marginLeft: 4 }}>(Power {(5 - sheet.happiness) * 10 + 10})</span>}
-                        </span>
-                        <span style={{ fontSize: 9, color: RANK_COLORS[move.rank as Rank] ?? "#585858", marginLeft: "auto" }}>{move.rank}</span>
+                      <div key={i}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", borderRadius: 3, background: "#2850A008" }}>
+                          <TypeBadge type={move.type} />
+                          <span style={{ fontSize: 11, color: "#202020", flex: 1 }}>
+                            {name}
+                            {(name === "Return") && <span style={{ fontSize: 9, color: "#f85888", marginLeft: 4 }}>(Power {sheet.happiness * 10 + 10})</span>}
+                            {(name === "Frustration") && <span style={{ fontSize: 9, color: "#585880", marginLeft: 4 }}>(Power {(5 - sheet.happiness) * 10 + 10})</span>}
+                          </span>
+                          <MoveInfoToggle name={move.name} infoMove={infoMove} setInfoMove={setInfoMove} />
+                          <span style={{ fontSize: 9, color: RANK_COLORS[move.rank as Rank] ?? "#585858" }}>{move.rank}</span>
+                        </div>
+                        {infoMove === move.name && fullMove && <MoveInfoPanel move={fullMove} />}
                       </div>
                     );
                   }
@@ -735,15 +782,20 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                 <div style={{ fontSize: 9, color: "#585858", marginBottom: 4 }}>Click to add/remove from active moves</div>
                 {pokemon.moves.filter(m => RANK_ORDER.indexOf(m.rank) <= RANK_ORDER.indexOf(sheet.rank)).map(m => {
                   const active = sheet.moves.includes(m.name);
+                  const fullMove = MOVES_DATA.find(x => x.name === m.name);
                   return (
-                    <div key={m.name} onClick={() => {
-                      if (active) upd({ moves: sheet.moves.filter(x => x !== m.name) });
-                      else if (sheet.moves.length < maxMoves) upd({ moves: [...sheet.moves, m.name] });
-                    }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", borderRadius: 3, cursor: "pointer", opacity: !active && sheet.moves.length >= maxMoves ? 0.35 : 1, background: active ? "#2850A015" : "transparent" }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, border: `1px solid ${active ? "#2850A0" : "#7888A8"}`, background: active ? "#2850A0" : "transparent", flexShrink: 0 }} />
-                      <TypeBadge type={m.type} />
-                      <span style={{ fontSize: 11, color: "#202020" }}>{m.name}</span>
-                      <span style={{ fontSize: 9, color: RANK_COLORS[m.rank], marginLeft: "auto" }}>{m.rank}</span>
+                    <div key={m.name}>
+                      <div onClick={() => {
+                        if (active) upd({ moves: sheet.moves.filter(x => x !== m.name) });
+                        else if (sheet.moves.length < maxMoves) upd({ moves: [...sheet.moves, m.name] });
+                      }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", borderRadius: 3, cursor: "pointer", opacity: !active && sheet.moves.length >= maxMoves ? 0.35 : 1, background: active ? "#2850A015" : "transparent" }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 2, border: `1px solid ${active ? "#2850A0" : "#7888A8"}`, background: active ? "#2850A0" : "transparent", flexShrink: 0 }} />
+                        <TypeBadge type={m.type} />
+                        <span style={{ fontSize: 11, color: "#202020", flex: 1 }}>{m.name}</span>
+                        <MoveInfoToggle name={m.name} infoMove={infoMove} setInfoMove={setInfoMove} />
+                        <span style={{ fontSize: 9, color: RANK_COLORS[m.rank] }}>{m.rank}</span>
+                      </div>
+                      {infoMove === m.name && fullMove && <MoveInfoPanel move={fullMove} />}
                     </div>
                   );
                 })}
@@ -760,17 +812,21 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                         const learned = (sheet.partnerMoves || []).includes(m.name);
                         const active = sheet.moves.includes(m.name);
                         return (
-                          <div key={m.name} onClick={() => {
-                            if (learned) {
-                              upd({ partnerMoves: (sheet.partnerMoves || []).filter(x => x !== m.name), moves: sheet.moves.filter(x => x !== m.name) });
-                            } else {
-                              upd({ partnerMoves: [...(sheet.partnerMoves || []), m.name], moves: active ? sheet.moves : sheet.moves.length < maxMoves ? [...sheet.moves, m.name] : sheet.moves });
-                            }
-                          }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", borderRadius: 3, cursor: "pointer", opacity: !learned && sheet.moves.length >= maxMoves ? 0.4 : 1, background: learned ? "#A070000d" : "transparent" }}>
-                            <div style={{ width: 10, height: 10, borderRadius: 2, border: `1px solid ${learned ? "#A07000" : "#7888A8"}`, background: learned ? "#A07000" : "transparent", flexShrink: 0 }} />
-                            <TypeBadge type={m.type} />
-                            <span style={{ fontSize: 11, color: "#202020", flex: 1 }}>{m.name}</span>
-                            <span style={{ fontSize: 9, color: RANK_COLORS[m.rank as Rank] ?? "#585858" }}>{m.rank}</span>
+                          <div key={m.name}>
+                            <div onClick={() => {
+                              if (learned) {
+                                upd({ partnerMoves: (sheet.partnerMoves || []).filter(x => x !== m.name), moves: sheet.moves.filter(x => x !== m.name) });
+                              } else {
+                                upd({ partnerMoves: [...(sheet.partnerMoves || []), m.name], moves: active ? sheet.moves : sheet.moves.length < maxMoves ? [...sheet.moves, m.name] : sheet.moves });
+                              }
+                            }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px", borderRadius: 3, cursor: "pointer", opacity: !learned && sheet.moves.length >= maxMoves ? 0.4 : 1, background: learned ? "#A070000d" : "transparent" }}>
+                              <div style={{ width: 10, height: 10, borderRadius: 2, border: `1px solid ${learned ? "#A07000" : "#7888A8"}`, background: learned ? "#A07000" : "transparent", flexShrink: 0 }} />
+                              <TypeBadge type={m.type} />
+                              <span style={{ fontSize: 11, color: "#202020", flex: 1 }}>{m.name}</span>
+                              <MoveInfoToggle name={m.name} infoMove={infoMove} setInfoMove={setInfoMove} />
+                              <span style={{ fontSize: 9, color: RANK_COLORS[m.rank as Rank] ?? "#585858" }}>{m.rank}</span>
+                            </div>
+                            {infoMove === m.name && <MoveInfoPanel move={m} />}
                           </div>
                         );
                       })}
