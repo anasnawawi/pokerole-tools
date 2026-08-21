@@ -268,18 +268,6 @@ function nameOf(entry:BattleEntry,roster:BattleEntry[]):string{
   return base+suffix;
 }
 
-/* A distinct color per trainer id, stable across renders and reloads (it's
-   a hash of the id, not an assignment order that could drift as trainers
-   are added/removed). Picked for contrast against each other and against
-   the cream sidebar / dark scene backgrounds they show up on. Wild/NPC
-   entries (no linkedTrainerId) get a flat neutral gray instead. */
-const TRAINER_COLOR_PALETTE=["#2858C0","#D82808","#187828","#A040A0","#C87818","#0898A0","#B03060","#585858"];
-function trainerColorForId(trainerId?:string):string{
-  if(!trainerId)return "#888870";
-  let hash=0;
-  for(let i=0;i<trainerId.length;i++)hash=(hash*31+trainerId.charCodeAt(i))>>>0;
-  return TRAINER_COLOR_PALETTE[hash%TRAINER_COLOR_PALETTE.length];
-}
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
 // (as in-game); player plates show HP n/n + WP n/n.
 function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void}){
@@ -367,11 +355,10 @@ function BenchMon({entry,back,allEntries,onClick,trainerSpriteId}:{entry:BattleE
    goes when". One sprite per combatant in initiative order, fastest at the
    top — the same order the turn actually runs in, so scanning down the
    column answers "who's next" without opening anything. */
-function CollapsedRoster({sorted,activeId,entries,onExpand,onPick,trainerSpriteFor,trainerColorFor}:{
+function CollapsedRoster({sorted,activeId,entries,onExpand,onPick,trainerSpriteFor}:{
   sorted:BattleEntry[]; activeId?:string; entries:BattleEntry[];
   onExpand:()=>void; onPick:(id:string)=>void;
   trainerSpriteFor:(entry:BattleEntry)=>string|undefined;
-  trainerColorFor:(entry:BattleEntry)=>string;
 }){
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
@@ -401,7 +388,7 @@ function CollapsedRoster({sorted,activeId,entries,onExpand,onPick,trainerSpriteF
                 borderRadius:2,padding:"0 2px",lineHeight:1.4}}>{idx+1}</span>
               <span style={{display:"flex",alignItems:"center",justifyContent:"center",
                 width:40,height:40,borderRadius:"50%",overflow:"hidden",
-                border:`3px solid ${isActing?"#2858C0":trainerColorFor(e)}`,
+                border:`3px solid ${isActing?"#2858C0":"#181818"}`,
                 boxShadow:isActing?"0 0 0 2px #F8D030":"none",
                 background:fainted?"#B8B8A0":"#F8F8E8"}}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- local
@@ -3269,12 +3256,9 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
       {showZMove&&<ZMovePopup entry={entry} allEntries={allEntries} onClose={()=>setShowZMove(false)} onApply={onUpdate} onApplyDmg={(id,dmg)=>onUpdate(id,{currentHp:Math.max(0,(allEntries.find(e=>e.id===id)?.currentHp??0)-dmg)})}/>}
       {showTrainerSkills&&linkedTrainer&&<TrainerSkillPopup trainerData={linkedTrainer} entry={entry} allEntries={allEntries} onClose={()=>setShowTrainerSkills(false)}/>}
 
-      {/* HORIZONTAL CARD — FireRed party-panel style. Left edge carries the
-          owning trainer's color (same hash as everywhere else this trainer's
-          Pokémon show up) so a GM scrolling a stack of cards from several
-          trainers' parties can tell them apart without opening each one. */}
+      {/* HORIZONTAL CARD — FireRed party-panel style. */}
       <div draggable onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} title={linkedTrainer?.name?`${linkedTrainer.name}'s`:"Wild / no trainer"}
-        style={{width:290,flexShrink:0,background:entry.currentHp<=0?"linear-gradient(180deg,#808898 0%,#606878 100%)":"linear-gradient(180deg,#7898E0 0%,#4868C0 60%,#3858A8 100%)",borderTop:"3px solid #181818",borderRight:"3px solid #181818",borderBottom:"3px solid #181818",borderLeft:`6px solid ${trainerColorForId(entry.linkedTrainerId)}`,boxShadow:isActive?`5px 5px 0 ${entry.side==="player"?"#183088":"#980808"}`:"4px 4px 0 #283060",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)",overflowX:"hidden",overflowY:"auto",opacity:entry.currentHp<=0?0.6:1,cursor:"default"}}>
+        style={{width:290,flexShrink:0,background:entry.currentHp<=0?"linear-gradient(180deg,#808898 0%,#606878 100%)":"linear-gradient(180deg,#7898E0 0%,#4868C0 60%,#3858A8 100%)",border:"3px solid #181818",boxShadow:isActive?`5px 5px 0 ${entry.side==="player"?"#183088":"#980808"}`:"4px 4px 0 #283060",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 120px)",overflowX:"hidden",overflowY:"auto",opacity:entry.currentHp<=0?0.6:1,cursor:"default"}}>
 
         {/* Card header — blue panel top strip */}
         {(()=>{
@@ -3713,20 +3697,18 @@ export default function BattleTrackerPage(){
   // resolves its on-field sprite to the linked trainer's own chosen battler.
   const allTrainersForSprites=useMemo(()=>loadFromStorage<TrainerData[]>("trainers",[]),[]);
   const trainerSpriteFor=useCallback((entry:BattleEntry)=>entry.linkedTrainerId?allTrainersForSprites.find(t=>t.id===entry.linkedTrainerId)?.spriteId||undefined:undefined,[allTrainersForSprites]);
-  // A GM running a full table needs to tell at a glance whose Pokémon is
-  // whose — "player side" alone doesn't distinguish Trainer A's party from
-  // Trainer B's. Every linked trainer gets a stable color from their id, so
-  // the same trainer reads the same color everywhere in the tracker.
-  const trainerColorFor=useCallback((entry:BattleEntry)=>trainerColorForId(entry.linkedTrainerId),[]);
   const trainerNameFor=useCallback((entry:BattleEntry)=>entry.linkedTrainerId?allTrainersForSprites.find(t=>t.id===entry.linkedTrainerId)?.name||undefined:undefined,[allTrainersForSprites]);
-  // The GM asked to tell ownership apart by the prompt's wording instead of a
-  // color ring on the platform: a trainer's own Pokémon is named after them,
-  // an opposing/enemy-side Pokémon with no trainer link reads as "wild", and
-  // a "neutral" entry (bystander, not fighting for either side) reads as
-  // "curious" rather than wild.
+  // The GM asked to tell ownership apart by the prompt's wording: a trainer's
+  // own Pokémon is named after them, an opposing/enemy-side Pokémon with no
+  // trainer link reads as "wild", and a "neutral" entry (bystander, not
+  // fighting for either side) reads as "curious" rather than wild. A trainer
+  // added as a combatant in their own right (pokemon.number<=0, e.g. the
+  // trainer character themself) would otherwise read as "TRAINER's TRAINER" —
+  // collapse that to just their name.
   const actionPromptFor=useCallback((entry:BattleEntry)=>{
     const mon=nameOf(entry,entries).toUpperCase();
     const trainer=trainerNameFor(entry);
+    if(entry.pokemon.number<=0)return `What will ${trainer||mon} do?`;
     if(trainer)return `What will ${trainer}'s ${mon} do?`;
     if(entry.side==="neutral")return `What will the curious ${mon} do?`;
     return `What will the wild ${mon} do?`;
@@ -4067,7 +4049,7 @@ export default function BattleTrackerPage(){
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
-              onPick={id=>setDrawerId(id)} trainerSpriteFor={trainerSpriteFor} trainerColorFor={trainerColorFor}/>
+              onPick={id=>setDrawerId(id)} trainerSpriteFor={trainerSpriteFor}/>
           ) : (
             <>
               {/* Sidebar tabs */}
@@ -4087,11 +4069,6 @@ export default function BattleTrackerPage(){
                     {mounted&&sorted.map((e,idx)=>(
                       <div key={e.id} onClick={()=>upd(e.id,{isExpanded:!e.isExpanded})} title={trainerNameFor(e)?`${trainerNameFor(e)}'s`:"Wild / no trainer"} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 5px",cursor:"pointer",background:activeEntry?.id===e.id?"#C8D8F0":"transparent",borderLeft:`3px solid ${activeEntry?.id===e.id?"#2858C0":"transparent"}`,opacity:e.currentHp<=0?0.45:1,borderBottom:"1px solid #C8C8A8"}}>
                         <span style={{fontSize:7,color:"#888870",fontFamily:"'Press Start 2P',monospace",width:12,flexShrink:0,textAlign:"right"}}>{idx+1}</span>
-                        {/* Owner color — the same hash-derived color as everywhere
-                            else this trainer's Pokémon show up (field, bench,
-                            collapsed roster), so a GM running several trainers'
-                            parties at once can tell them apart at a glance. */}
-                        <div title={trainerNameFor(e)||"Wild / no trainer"} style={{width:6,height:6,borderRadius:"50%",background:trainerColorFor(e),border:"1px solid #181818",flexShrink:0}}/>
                         <div style={{width:5,height:5,background:e.currentHp<=0?"#787878":TYPE_COLORS[e.pokemon.types[0]],border:"1px solid #181818",flexShrink:0}}/>
                         <span style={{fontSize:10,color:e.currentHp<=0?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none",fontWeight:600}}>{nameOf(e,entries)}</span>
                         <span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{e.initiative}</span>
