@@ -651,6 +651,22 @@ function getEffectiveAttrs(e:BattleEntry):AttrSet{
   return{strength:Math.max(0,(mods.strength??e.attrs.strength)-pain),dexterity:Math.max(0,(mods.dexterity??e.attrs.dexterity)-accPen-pain),vitality:Math.max(0,mods.vitality??e.attrs.vitality),special:Math.max(0,(mods.special??e.attrs.special)-pain),insight:Math.max(0,(mods.insight??e.attrs.insight)-pain)};
 }
 
+/* DEF used to be pulled straight from the raw attribute with no visible
+   source — a GM reading "1 − 2 DEF = 1 damage" had no way to tell whether
+   that 2 was just base VIT, or base VIT plus a stat stage or a pain
+   penalty. This mirrors getEffectiveAttrs' math for a single attribute so
+   the number and its breakdown always agree. */
+function defBreakdown(e:BattleEntry,attrKey:"vitality"|"insight"):{value:number;text:string}{
+  const base=e.attrs[attrKey];
+  const modSum=e.statMods.filter(m=>m.attr===attrKey).reduce((s,m)=>s+m.amount,0);
+  const pain=attrKey==="insight"?getPainPenalty(e.currentHp,e.maxHp):0;
+  const value=Math.max(0,base+modSum-pain);
+  const parts=[`${ATTR_ABBR[attrKey]} ${base}`];
+  if(modSum!==0)parts.push(`${modSum>0?"+":""}${modSum} mod${Math.abs(modSum)===1?"":"s"}`);
+  if(pain>0)parts.push(`−${pain} Pain`);
+  return{value,text:parts.join(" ")};
+}
+
 type PokemonSkills={brawl:number;channel:number;clash:number;evasion:number;alert:number;athletic:number;nature:number;stealth:number;charm:number;etiquette:number;intimidate:number;perform:number};
 const ACC_ATTR_KEYS=["strength","dexterity","special","insight","vitality"] as const;
 const ACC_SKILL_KEYS:(keyof PokemonSkills)[]=["brawl","athletic","channel","perform","clash","alert","intimidate","stealth","nature","charm","etiquette"];
@@ -1341,7 +1357,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     if(isSelf){onApplyDmg(tid,dr.successes);setApplied(p=>new Set([...p,tid]));return;}
     const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);
     if(tm.mod===-999){alert(`${nameOf(t,allEntries)} is immune!`);return;}
-    const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;
+    const def=defBreakdown(t,move.category==="Physical"?"vitality":"insight").value;
     let succ=Math.max(1,dr.successes);
     const brutalBonus2=dr.rolls.filter(r=>r===6).length>=2?2:0;
     const rawDmg=Math.max(1,succ-def);
@@ -1498,7 +1514,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
           {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||!t.isProtected)return null;return<div key={`prot-${tid}`} style={{background:"rgba(104,144,240,0.1)",border:"1px solid #6890f040",borderRadius:4,padding:"6px 10px",fontSize:11,fontWeight:700,color:"#6890f0"}}>🛡 {nameOf(t,allEntries)} is PROTECTED — move has no effect this round!</div>;})}
 
           {/* Type effectiveness */}
-          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||t.isProtected)return null;const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;return<div key={tid} style={{background:tm.color+"10",border:`1px solid ${tm.color}30`,borderRadius:4,padding:"6px 10px"}}><div style={{fontSize:11,fontWeight:700,color:tm.color}}>{nameOf(t,allEntries)}: {tm.label}</div><div style={{fontSize:10,color:"#8b90a8",marginTop:2}}>DEF: {def} ({move.category==="Physical"?"VIT":"INS"})</div></div>;})}
+          {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t||t.isProtected)return null;const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);const db=defBreakdown(t,move.category==="Physical"?"vitality":"insight");return<div key={tid} style={{background:tm.color+"10",border:`1px solid ${tm.color}30`,borderRadius:4,padding:"6px 10px"}}><div style={{fontSize:11,fontWeight:700,color:tm.color}}>{nameOf(t,allEntries)}: {tm.label}</div><div style={{fontSize:10,color:"#8b90a8",marginTop:2}}>DEF: {db.text} = {db.value}</div></div>;})}
 
           {/* Defender Reactions — only shown when target has WP and hasn't reacted */}
           {canAct&&targets.filter(tid=>tid!==attacker.id).map(tid=>{
@@ -1791,7 +1807,8 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
             const t=isSelf?attacker:allEntries.find(e=>e.id===tid);if(!t)return null;
             if(!isSelf&&t.isProtected)return null; // protected - no damage
             const tm=isSelf?{label:"Self",color:"#a040a0",mod:0}:getTypeMult(move.type as PokemonType,t.pokemon.types);
-            const def=isSelf?0:(move.category==="Physical"?t.attrs.vitality:t.attrs.insight);
+            const defB=isSelf?null:defBreakdown(t,move.category==="Physical"?"vitality":"insight");
+            const def=defB?.value??0;
             const dr=dmgResults[tid];
             const brutalHit=dr?(dr.rolls.filter(r=>r===6).length>=2):false;
             const brutalBonus=brutalHit?2:0;
@@ -1804,8 +1821,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               <div style={{fontSize:9,fontWeight:700,color:"#f08030",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>② Damage → {isSelf?"SELF":nameOf(t,allEntries)} ({dmgPool}d)</div>
               <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
                 <button onClick={()=>doDmg(tid)} disabled={!!dr} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:dr?"#5a6080":"#f08030",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:dr?"default":"pointer"}}>🎲 Roll Damage ({dmgPool}d)</button>
-                {dr&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{dr.rolls.map(r=>{const s=String(r);return r===6?"★"+s:s;}).join(",")}]={dr.successes}</span>}
+                {dr&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#e8eaf0"}}>[{dr.rolls.map(r=>{const s=String(r);return r===6?"★"+s:s;}).join(",")}]={dr.successes}</span>}
               </div>
+              {!isSelf&&defB&&<div style={{fontSize:10,color:"#8b90a8",marginBottom:6,fontStyle:"italic"}}>Defense: {defB.text} = <strong style={{color:"#f08030"}}>{defB.value}</strong></div>}
               {brutalHit&&<div style={{background:"rgba(255,211,42,0.12)",border:"1px solid #ffd32a60",borderRadius:4,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#ffd32a",marginBottom:6,textAlign:"center",letterSpacing:"1px"}}>⚡ BRUTAL HIT! +2 damage</div>}
               {dr&&tm.mod!==-999&&<div>
                 <div style={{fontSize:11,color:"#8b90a8",marginBottom:6}}>{isSelf?dr.successes:`${dr.successes} − ${def} DEF${tm.mod===2?" +2 SE":tm.mod===-1?" −2 NVE":""}${brutalHit?" +2 Brutal":""}`} = <strong style={{color:"#ff4757"}}>{finalDmg} damage</strong></div>
