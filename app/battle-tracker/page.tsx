@@ -3688,6 +3688,10 @@ export default function BattleTrackerPage(){
   const [sceneTargetIds,setSceneTargetIds]=useState<string[]>([]);
   const [showAddModal,setShowAddModal]=useState(false);
   const [hazards,setHazards]=useState<{player:HazardSide;enemy:HazardSide}>(()=>loadFromStorage("bt_hazards",{player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS}));
+  // Setup phase: before this flips true the bottom bar is one full-width
+  // message box (no FIGHT/BAG/POKéMON/RUN yet) while the GM populates the
+  // fight. Persisted so a reload mid-battle doesn't bounce back to setup.
+  const [battleStarted,setBattleStarted]=useState<boolean>(()=>loadFromStorage("bt_started",false));
   // A "+ ADD TRAINER" entry has no species sprite (pokemon.number -1) — this
   // resolves its on-field sprite to the linked trainer's own chosen battler.
   const allTrainersForSprites=useMemo(()=>loadFromStorage<TrainerData[]>("trainers",[]),[]);
@@ -3695,6 +3699,7 @@ export default function BattleTrackerPage(){
 
   useEffect(()=>{saveToStorage("bt_entries",entries);},[entries]);
   useEffect(()=>{saveToStorage("bt_hazards",hazards);},[hazards]);
+  useEffect(()=>{saveToStorage("bt_started",battleStarted);},[battleStarted]);
 
   // Sync with GM Screen battle tracker (and other tabs) via storage events.
   // StorageEvent.key is the raw localStorage key (STORAGE_PREFIX-prefixed),
@@ -3956,6 +3961,14 @@ export default function BattleTrackerPage(){
     })));
     setTurn(0);setRound(1);
   };
+  // Leaves setup: rolls initiative for the roster as populated so far,
+  // tucks the sidebar away, and swaps the bottom bar over to the FIGHT/
+  // BAG/POKéMON/RUN command box.
+  const beginBattle=()=>{
+    rollAllIni();
+    setSidebarCollapsed(true);
+    setBattleStarted(true);
+  };
   const handleDrop=(targetId:string)=>{if(!dragId||dragId===targetId){setDragId(null);return;}setEntries(prev=>{const a=[...prev];const fi=a.findIndex(e=>e.id===dragId);const ti=a.findIndex(e=>e.id===targetId);const [item]=a.splice(fi,1);a.splice(ti,0,item);return a;});setDragId(null);};
 
   const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
@@ -3994,7 +4007,7 @@ export default function BattleTrackerPage(){
                b.style, and a duplicate key would just be overwritten. */
             <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#181818",...b.style}}>{b.label}</button>
           ))}
-          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}}} title="Reset battle" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
+          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});setBattleStarted(false);setSidebarCollapsed(false);}}} title="Reset battle" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
           <button onClick={rollAllIni} title="Roll initiative for all combatants (also resets round/turn)" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
           <button onClick={()=>setShowPriority(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}} title="Priority phase">⚡</button>
           <button onClick={()=>setShowEOR(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D88018"}} title="End of Round">EOR</button>
@@ -4058,7 +4071,7 @@ export default function BattleTrackerPage(){
                 )}
               </div>
               <div style={{padding:"6px 8px",borderTop:"2px solid #181818",flexShrink:0}}>
-                <button onClick={()=>{setEntries([]);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});}} style={{width:"100%",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",color:"#D82808",padding:"5px",fontSize:8,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>CLEAR ALL</button>
+                <button onClick={()=>{setEntries([]);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});setBattleStarted(false);setSidebarCollapsed(false);}} style={{width:"100%",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",color:"#D82808",padding:"5px",fontSize:8,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>CLEAR ALL</button>
               </div>
             </>
           )}
@@ -4286,6 +4299,7 @@ export default function BattleTrackerPage(){
                   the same proportion of the box on a small or large screen
                   instead of a fixed pixel strip that's oversized on mobile
                   and undersized on a big monitor. */}
+              {battleStarted ? (
               <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
@@ -4377,6 +4391,27 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
               </div>
+              ) : (
+                /* Setup phase — populate the roster first; the FIGHT/BAG/
+                   POKéMON/RUN command box doesn't exist yet, just one
+                   full-width message box (matching FRLG's textbox when
+                   nothing's being chosen) with a way to kick the fight off
+                   once the roster's ready. */
+                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030"}}>
+                  <div className="frw-battle" style={{flex:1,padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                    <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
+                      {entries.length===0?"Add Pokémon to begin the battle.":`${entries.length} combatant${entries.length===1?"":"s"} ready.`}
+                    </span>
+                    <button onClick={beginBattle} disabled={entries.length===0}
+                      style={{flexShrink:0,fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(10px,1.5vw,14px)",fontWeight:700,
+                        padding:"clamp(6px,1vw,10px) clamp(10px,1.6vw,16px)",borderRadius:8,cursor:entries.length===0?"default":"pointer",
+                        background:entries.length===0?"rgba(255,255,255,0.12)":"#E8B048",color:entries.length===0?"rgba(255,255,255,0.4)":"#283030",
+                        border:"2px solid #283030",boxShadow:entries.length===0?"none":"2px 2px 0 #283030"}}>
+                      ▶ BEGIN BATTLE
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
