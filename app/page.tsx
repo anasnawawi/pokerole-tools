@@ -312,15 +312,15 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Landscape has a whole browser-half to fill, so the party gets the
-              FRLG list. Portrait's lower half is a short strip under the menu —
-              six stacked plates would either overflow it or squeeze the menu
-              off the screen, so it gets the compact six-across instead. */}
-          <div style={{flex:portrait?"0 0 auto":"1",minHeight:0,
+          {/* The compact six-across strip is the party display now, in both
+              orientations — it used to swap for the full FRLG list in
+              landscape, which meant the six-slot glance disappeared the
+              moment there was room to spare. Same look either way. */}
+          <div style={{flex:"0 0 auto",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
             background:C.bezel,padding:narrow?8:10,display:"flex",flexDirection:"column",
-            justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
-            <PartyBar compact={portrait} onPanel/>
+            justifyContent:"center",overflowY:"auto"}}>
+            <PartyBar compact onPanel/>
           </div>
 
           <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:narrow?6:9,flexWrap:"wrap"}}>
