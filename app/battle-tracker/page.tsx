@@ -3525,7 +3525,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
 }
 
 // ── Character Party Sidebar ───────────────────────────────────────────────────
-function CharactersSidebar({onAddPokemon}:{onAddPokemon:(pokemon:PokemonEntry,trainerId:string,nickname:string,loyalty:number,happiness:number,moves:Move[],sheetKey?:string,trainerRank?:string)=>void}){
+function CharactersSidebar({onAddPokemon,entries}:{onAddPokemon:(pokemon:PokemonEntry,trainerId:string,nickname:string,loyalty:number,happiness:number,moves:Move[],sheetKey?:string,trainerRank?:string)=>void;entries:BattleEntry[]}){
   const trainers=useMemo(()=>loadFromStorage<any[]>("trainers",[]),[]);
   const pokemonSheets=useMemo(()=>loadFromStorage<Record<string,any>>("pokemon_sheets",{}),[]);
   const [selId,setSelId]=useState<string|null>(null);
@@ -3545,18 +3545,24 @@ function CharactersSidebar({onAddPokemon}:{onAddPokemon:(pokemon:PokemonEntry,tr
               const sheet=pokemonSheets[key];if(!sheet)return null;
               const p=POKEMON.find(x=>x.number===sheet.number);if(!p)return null;
               const activeMovs=((sheet.moves||[]) as string[]).map((mn:string)=>MOVES.find(m=>m.name===mn)).filter(Boolean) as Move[];
+              const alreadyAdded=entries.some(e=>e.linkedTrainerId===t.id&&e.linkedPokemonSheetKey===key);
               return(
                 <div key={key} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 0",borderBottom:"1px solid #C8C8A8"}}>
                   <div style={{width:5,height:5,background:TYPE_COLORS[p.types[0]],border:"1px solid #181818",flexShrink:0}}/>
-                  <span style={{fontSize:8,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sheet.nickname||p.name}</span>
-                  <button onClick={()=>onAddPokemon(p,t.id,sheet.nickname||"",sheet.loyalty??1,sheet.happiness??1,activeMovs,key,t.rank)} title={`Add ${sheet.nickname||p.name} to battle`} style={{background:"#E8E8D0",border:"1px solid #181818",color:"#187028",padding:"1px 5px",fontSize:8,fontWeight:700,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>+</button>
+                  <span style={{fontSize:8,color:alreadyAdded?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sheet.nickname||p.name}</span>
+                  <button onClick={()=>onAddPokemon(p,t.id,sheet.nickname||"",sheet.loyalty??1,sheet.happiness??1,activeMovs,key,t.rank)} disabled={alreadyAdded} title={alreadyAdded?`${sheet.nickname||p.name} is already in the battle`:`Add ${sheet.nickname||p.name} to battle`} style={{background:alreadyAdded?"#D8D8C8":"#E8E8D0",border:"1px solid #181818",color:alreadyAdded?"#888870":"#187028",padding:"1px 5px",fontSize:8,fontWeight:700,cursor:alreadyAdded?"default":"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:alreadyAdded?"none":"1px 1px 0 #787878"}}>{alreadyAdded?"✓":"+"}</button>
                 </div>
               );
             })}
-            <button onClick={()=>{
-              const fakePoke:PokemonEntry={...MISSINGNO,name:t.name,number:-1,attributes:t.attributes||{strength:1,dexterity:1,vitality:1,special:1,insight:1},abilities:[],moves:[]};
-              onAddPokemon(fakePoke,t.id,t.name,0,0,[]);
-            }} style={{marginTop:5,background:"#C8D8F0",border:"1px solid #181818",color:"#2858C0",padding:"2px 6px",fontSize:7,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:"1px 1px 0 #787878"}}>+ ADD TRAINER</button>
+            {(()=>{
+              const trainerAdded=entries.some(e=>e.linkedTrainerId===t.id&&e.pokemon.number<=0);
+              return(
+                <button onClick={()=>{
+                  const fakePoke:PokemonEntry={...MISSINGNO,name:t.name,number:-1,attributes:t.attributes||{strength:1,dexterity:1,vitality:1,special:1,insight:1},abilities:[],moves:[]};
+                  onAddPokemon(fakePoke,t.id,t.name,0,0,[]);
+                }} disabled={trainerAdded} title={trainerAdded?`${t.name} is already in the battle`:`Add ${t.name} to battle`} style={{marginTop:5,background:trainerAdded?"#D8D8C8":"#C8D8F0",border:"1px solid #181818",color:trainerAdded?"#888870":"#2858C0",padding:"2px 6px",fontSize:7,cursor:trainerAdded?"default":"pointer",fontFamily:"'Press Start 2P',monospace",boxShadow:trainerAdded?"none":"1px 1px 0 #787878"}}>{trainerAdded?"✓ TRAINER ADDED":"+ ADD TRAINER"}</button>
+              );
+            })()}
           </div>}
         </div>
       ))}
@@ -3820,6 +3826,14 @@ export default function BattleTrackerPage(){
     const ini=Math.floor(Math.random()*6)+1+(attrs?.dexterity??1);
     const defaultMoves=pokemon.moves.slice(0,4).map(m=>MOVES.find(mv=>mv.name===m.name)||{name:m.name,type:m.type,category:"Physical" as const,power:"-",accuracy:"-",damagePool:"-",effect:"",description:""} as Move);
     const sheetSkills=derived?.skills??null;
+    // A linked trainer's Pokémon (or the trainer themself, via + ADD TRAINER)
+    // can only be on the field once — re-clicking + shouldn't spawn a second
+    // identical combatant. Untethered/wild adds have no trainerId and aren't
+    // checked, since duplicate wild species are expected (see nameParts'
+    // " #2" disambiguation).
+    if(trainerId&&entries.some(e=>e.linkedTrainerId===trainerId&&(sheetKey?e.linkedPokemonSheetKey===sheetKey:e.pokemon.number<=0))){
+      return;
+    }
     setEntries(prev=>[...prev,{
       id:`${pokemon.number}-${Date.now()}`,pokemon,nickname:nickname||"",
       initiative:ini,currentHp:hp,maxHp:hp,currentWill:will,maxWill:will,
@@ -3835,7 +3849,7 @@ export default function BattleTrackerPage(){
     if(trainerId){
       saveToStorage("pending_link",{pokemonNumber:pokemon.number,trainerId,nickname:nickname||""});
     }
-  },[]);
+  },[entries]);
 
   const syncSheetHappinessLoyalty=(entry:BattleEntry,happiness:number,loyalty:number)=>{
     if(!entry.linkedPokemonSheetKey)return;
@@ -4093,6 +4107,7 @@ export default function BattleTrackerPage(){
                         <span style={{fontSize:10,color:e.currentHp<=0?"#888870":"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:e.currentHp<=0?"line-through":"none",fontWeight:600}}>{nameOf(e,entries)}</span>
                         <span style={{fontSize:7,color:"#2858C0",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{e.initiative}</span>
                         <span style={{fontSize:8,color:e.currentHp<=0?"#888870":e.currentHp/e.maxHp>0.5?"#18C840":e.currentHp/e.maxHp>0.25?"#E8B018":"#D82808",fontFamily:"'Press Start 2P',monospace",fontWeight:700,flexShrink:0}}>{e.currentHp}/{e.maxHp}</span>
+                        <button onClick={ev=>{ev.stopPropagation();remove(e.id);}} title={`Remove ${nameOf(e,entries)} from the battle`} style={{background:"none",border:"none",color:"#D82808",cursor:"pointer",fontSize:11,fontWeight:700,flexShrink:0,padding:"0 2px",lineHeight:1}}>×</button>
                       </div>
                     ))}
                     {(!mounted||entries.length===0)&&<div style={{textAlign:"center",color:"#888870",padding:16,fontSize:8,fontFamily:"'Press Start 2P',monospace",lineHeight:2}}>+ ADD POKéMON<br/>to begin</div>}
@@ -4103,7 +4118,7 @@ export default function BattleTrackerPage(){
                     <div style={{fontSize:9,color:"#5a6080",padding:"4px 4px 8px",lineHeight:1.4}}>
                       Expand a trainer below to see their party. Click <strong style={{color:"#00d4aa"}}>+</strong> to add to battle.
                     </div>
-                    <CharactersSidebar onAddPokemon={(p,tid,nick,loy,hap,movs,sk)=>addPokemon(p,tid,nick,loy,hap,movs,sk)}/>
+                    <CharactersSidebar entries={entries} onAddPokemon={(p,tid,nick,loy,hap,movs,sk)=>addPokemon(p,tid,nick,loy,hap,movs,sk)}/>
                   </>
                 )}
               </div>
