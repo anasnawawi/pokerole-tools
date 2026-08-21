@@ -4436,9 +4436,9 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31}}>
+              <div style={{flexShrink:0,height:isNarrow?"clamp(230px, 36vw, 380px)":"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31}}>
                 {/* Text box */}
-                <div style={{flex:1,minWidth:0,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
+                <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
@@ -4448,14 +4448,9 @@ export default function BattleTrackerPage(){
                     </span>
                   </div>
                 </div>
-                {/* Menu / move list — minWidth used to be a hard 280px floor,
-                    which on a narrow phone forced this box wider than the
-                    space actually available and clipped BAG/RUN off the
-                    right edge instead of letting the 1fr/1fr grid inside it
-                    shrink to fit. A much lower floor still keeps the labels
-                    readable but lets it actually shrink with the container. */}
-                <div style={{width:"44%",maxWidth:420,minWidth:150,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
-                  <div className="frw-menu" style={{flex:1,minWidth:0,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                {/* Menu / move list */}
+                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
+                  <div className="frw-menu" style={{flex:1,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -4495,23 +4490,17 @@ export default function BattleTrackerPage(){
                         </div>
                       )
                     ):(
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:4,height:"100%",minWidth:0}}>
+                      <div style={{display:"grid",gridTemplateColumns:isNarrow?"1fr":"1fr 1fr",gridTemplateRows:isNarrow?"repeat(4,1fr)":"1fr 1fr",gap:4,height:"100%"}}>
                         {[
                           {l:"FIGHT",fn:()=>setMenuMode("fight")},
                           {l:"BAG",fn:()=>setMenuMode("bag")},
                           {l:"POKéMON",fn:()=>setMenuMode("pokemon")},
                           {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
-                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:isNarrow?8:"clamp(11px,1.7vw,16px)",fontWeight:700,minWidth:0,overflow:"hidden"}}
+                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700}}
                             onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E8D8F8";}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
-                            {/* Single-word labels (POKéMON) can't wrap on
-                                their own — overflowWrap lets them break
-                                instead of forcing the whole grid column
-                                wider than the available space, which is
-                                what was pushing BAG/RUN off the right edge
-                                on a narrow phone. */}
-                            <span style={{display:"flex",alignItems:"center",gap:5,minWidth:0,overflowWrap:"anywhere"}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
+                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
                             {/* Extra actions this round roll at a rising penalty (needs
                                 2+, then 3+...), so a player about to hit FIGHT again
                                 should see that coming before they commit to it. */}
