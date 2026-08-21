@@ -4283,8 +4283,8 @@ export default function BattleTrackerPage(){
               {/* BOTTOM BAR — text box + menu */}
               <div style={{flexShrink:0,height:176,display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
-                <div style={{flex:1,padding:6,background:"#F0E4B0",borderRight:"3px solid #181818"}}>
-                  <div className="frw-cream" style={{height:"100%",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                <div style={{flex:1,padding:6,background:"#0C2040",borderRight:"3px solid #181818"}}>
+                  <div className="frw-battle" style={{height:"100%",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
                         (sceneMsg||(onFieldPlayer?`What will ${(nameOf(onFieldPlayer,entries)).toUpperCase()} do?`
@@ -4294,8 +4294,8 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
                 {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#F0E4B0",padding:6,display:"flex"}}>
-                  <div className="frw-cream" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#0C2040",padding:6,display:"flex"}}>
+                  <div className="frw-battle" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -4308,12 +4308,12 @@ export default function BattleTrackerPage(){
                                  each being its own bordered, drop-shadowed box. */
                               <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
                                 style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:3,padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
-                                onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D890";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#D02828";}}
+                                onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#3878C8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#F8F8F8";}}
                                 onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
                                 <span style={{display:"flex",alignItems:"flex-start",gap:3,minWidth:0}}>
                                   {/* Cursor keeps its width when hidden so names never shift */}
                                   <span aria-hidden data-cursor style={{fontSize:7,color:"transparent",fontFamily:"'Press Start 2P',monospace",flexShrink:0,lineHeight:1.35}}>▶</span>
-                                  <span className="fr-ink" style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35}}>{m.name}</span>
+                                  <span style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35}}>{m.name}</span>
                                 </span>
                                 <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0,paddingLeft:10}}><TypeBadge type={m.type as PokemonType} small/>{stab&&<span style={{fontSize:6,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:6,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
                               </button>
@@ -4322,35 +4322,35 @@ export default function BattleTrackerPage(){
                         </div>
                       ):onFieldPlayer?(
                         <div style={{height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
-                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#888870",textAlign:"center"}}>{onFieldPlayer.moves.length===0?"No moves.":"Out of WP."}</span>
+                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#B0C8E8",textAlign:"center"}}>{onFieldPlayer.moves.length===0?"No moves.":"Out of WP."}</span>
                           <button onClick={()=>{const s=getStruggleMove();setScenePopup(s);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used STRUGGLE!`);setMenuMode("root");}}
-                            style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"#F0ECD4",border:"2px solid #181818",cursor:"pointer",boxShadow:"2px 2px 0 #181818"}}>
-                            <span style={{fontSize:8,color:"#A00808",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>STRUGGLE</span>
-                            <span style={{fontSize:6,color:"#484830",fontFamily:"'Press Start 2P',monospace"}}>No WP cost</span>
+                            style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"transparent",border:"2px solid #E8A838",borderRadius:4,cursor:"pointer"}}>
+                            <span style={{fontSize:8,color:"#FFFFFF",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>STRUGGLE</span>
+                            <span style={{fontSize:6,color:"#B0C8E8",fontFamily:"'Press Start 2P',monospace"}}>No WP cost</span>
                           </button>
                         </div>
                       ):(
                         <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#888870"}}>No moves.</span>
+                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#B0C8E8"}}>No moves.</span>
                         </div>
                       )
                     ):(
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:4,height:"100%"}}>
                         {[
-                          {l:"FIGHT",c:"#D02828",fn:()=>setMenuMode("fight")},
-                          {l:"BAG",c:"#C87818",fn:()=>setMenuMode("bag")},
-                          {l:"POKéMON",c:"#187828",fn:()=>setMenuMode("pokemon")},
-                          {l:"RUN",c:"#3050B0",fn:()=>endBattle()},
+                          {l:"FIGHT",fn:()=>setMenuMode("fight")},
+                          {l:"BAG",fn:()=>setMenuMode("bag")},
+                          {l:"POKéMON",fn:()=>setMenuMode("pokemon")},
+                          {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
-                          <button key={b.l} onClick={b.fn} className="fr-ink" style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,fontWeight:700}}
-                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="var(--fr-row-sel)";}}
+                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,fontWeight:700}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#3878C8";}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
-                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:b.c,textShadow:"none"}}>▶</span>{b.l}</span>
+                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{textShadow:"none"}}>▶</span>{b.l}</span>
                             {/* Extra actions this round roll at a rising penalty (needs
                                 2+, then 3+...), so a player about to hit FIGHT again
                                 should see that coming before they commit to it. */}
                             {b.l==="FIGHT"&&onFieldPlayer&&onFieldPlayer.actionCount>0&&(
-                              <span style={{fontSize:6,color:"#D02828",paddingLeft:14,fontWeight:700}}>
+                              <span style={{fontSize:6,color:"#F8D888",paddingLeft:14,fontWeight:700}}>
                                 Action #{onFieldPlayer.actionCount+1} — needs {Math.min(onFieldPlayer.actionCount+1,5)}+
                               </span>
                             )}
@@ -4362,11 +4362,11 @@ export default function BattleTrackerPage(){
                     {/* Navigation sits below the move grid so the moves stay put
                         as you switch between the root menu and a submenu. */}
                     {menuMode!=="root"&&(
-                      <button onClick={()=>setMenuMode("root")} className="fr-ink"
+                      <button onClick={()=>setMenuMode("root")}
                         style={{alignSelf:"flex-start",flexShrink:0,fontSize:7,fontFamily:"'Press Start 2P',monospace",
-                          background:"transparent",border:"2px solid #603018",borderRadius:4,
+                          background:"transparent",border:"2px solid #E8A838",borderRadius:4,color:"#FFFFFF",
                           padding:"3px 7px",cursor:"pointer"}}
-                        onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="var(--fr-row-sel)";}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#3878C8";}}
                         onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>◀ BACK</button>
                     )}
                   </div>

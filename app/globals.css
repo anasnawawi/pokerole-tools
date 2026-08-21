@@ -143,16 +143,17 @@ html, body {
   color: #F8F8F8;
   text-shadow: 2px 2px 0 #182848;
 }
-/* Cream variant — the actual FRLG battle textbox/menu color, not the blue
-   Advance-era one above. Both the message pane and the FIGHT/BAG/POKéMON/
-   RUN pane use this in the real games. */
-.frw-cream {
-  background: linear-gradient(180deg, #F8F4D8 0%, #F0E4B0 100%);
-  border: 3px solid #603018;
-  border-radius: 7px;
-  box-shadow: 0 0 0 2px #402008, inset 0 0 0 2px #FFFFFF;
-  color: #202020;
-  text-shadow: 1px 1px 0 #C8B888;
+/* The actual FRLG battle textbox/menu — a dark navy fill inside a thick,
+   heavily rounded gold border, white text. (Not the flat cream box first
+   tried here — reference crops confirmed navy+gold, not cream.) Both the
+   message pane and the FIGHT/BAG/POKéMON/RUN pane use this. */
+.frw-battle {
+  background: linear-gradient(180deg, #2860A8 0%, #163864 100%);
+  border: 4px solid #E8A838;
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px #8C5818, inset 0 0 0 2px #4888D8;
+  color: #FFFFFF;
+  text-shadow: 1px 1px 0 #0C1830;
 }
 
 /* Signature GBA text: near-black with a light drop shadow */
