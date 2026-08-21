@@ -3731,14 +3731,16 @@ export default function BattleTrackerPage(){
   // FieldMon's sprite box is a fixed 300-340px regardless of screen size.
   // Shrinking it to fit a narrow stage next to the nameplate worked but
   // read as "the Pokémon are tiny now" — what actually needs to give on a
-  // narrow phone is the sprite's position, not its size: the back/front
-  // sprite and its nameplate sit in the same row (bottom-left + bottom-right
-  // for the player, top-right + top-left for the enemy), so floating the
-  // sprite further from that edge — closer to the horizon — separates it
-  // from the nameplate vertically instead of needing to shrink out of its
-  // way horizontally. `narrowness` drives that: 0 on a normal/wide stage
-  // (sprite stays at its original corner offset), rising to 1 on a genuinely
-  // narrow one (sprite floats in toward the middle instead).
+  // narrow phone is the player sprite's position, not its size: the back
+  // sprite and its nameplate share the bottom row (sprite bottom-left,
+  // nameplate bottom-right), so floating it up toward the horizon separates
+  // them vertically instead of needing to shrink out of the nameplate's way.
+  // The enemy sprite stays at its original fixed top-right corner — moving
+  // it toward the horizon put it in the middle of the field instead, which
+  // read as broken positioning rather than a fix, and it wasn't the one
+  // overlapping to begin with. `narrowness` drives the player's float: 0 on
+  // a normal/wide stage (original corner offset), rising to 1 on a
+  // genuinely narrow one (floats in toward the middle instead).
   const sceneRef=useRef<HTMLDivElement>(null);
   const [sceneBox,setSceneBox]=useState({w:900,h:600});
   useEffect(()=>{
@@ -3755,7 +3757,10 @@ export default function BattleTrackerPage(){
   },[mounted]);
   const narrowness=Math.max(0,Math.min(1,(480-sceneBox.w)/(480-260)));
   const playerSpriteBottomPct=3+narrowness*29; // 3% → 32%
-  const enemySpriteTopPct=9+narrowness*23; // 9% → 32%
+  // Nudges left as it floats up, rather than staying at a fixed 5% — at
+  // full float the sprite otherwise reads as drifted toward center/right
+  // instead of still anchored to the player's (left) side of the field.
+  const playerSpriteLeftPct=5-narrowness*3; // 5% → 2%
   // Height still shrinks the sprite for the one case position alone can't
   // fix: the inline move panel eating most of the stage's height. Width
   // keeps only a loose last-resort floor now that positioning does the real
@@ -4339,7 +4344,7 @@ export default function BattleTrackerPage(){
                   </div>
                 )}
                 {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
-                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:`${enemySpriteTopPct}%`,right:"7%",zIndex:2}}>
+                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
                   <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
                     <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} scale={fieldScale}/>
                     <StatusFX statuses={onFieldEnemy.statuses}/>
@@ -4352,7 +4357,7 @@ export default function BattleTrackerPage(){
                     "sent out" yet regardless of what's first in the roster,
                     so the trainer placeholder below takes this spot instead. */}
                 {mounted&&battleStarted&&onFieldPlayer&&(
-                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:"5%",zIndex:2}}>
+                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:`${playerSpriteLeftPct}%`,zIndex:2}}>
                     <div style={{position:"relative"}}>
                       <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} scale={fieldScale}/>
                       <StatusFX statuses={onFieldPlayer.statuses}/>
@@ -4364,7 +4369,7 @@ export default function BattleTrackerPage(){
                     setup, same spot the real back sprite takes over once the
                     battle begins. Purely visual, not a roster entry. */}
                 {mounted&&!battleStarted&&setupTrainerSpriteId&&(
-                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:"5%",zIndex:2}}>
+                  <div style={{position:"absolute",bottom:`${playerSpriteBottomPct}%`,left:`${playerSpriteLeftPct}%`,zIndex:2}}>
                     <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} scale={fieldScale}/>
                   </div>
                 )}
