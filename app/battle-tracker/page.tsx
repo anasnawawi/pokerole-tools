@@ -3708,6 +3708,16 @@ export default function BattleTrackerPage(){
      at turn order than as a search box. Collapsed, it becomes exactly that:
      one sprite per combatant, fastest initiative on top. */
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
+  // Below this, the sidebar's fixed width eats too much of the viewport for
+  // the scene to lay out without overlap. Float it over the scene instead
+  // of squeezing it, so the scene always keeps its full width to work with.
+  const [isNarrow,setIsNarrow]=useState(false);
+  useEffect(()=>{
+    const check=()=>setIsNarrow(window.innerWidth<700);
+    check();
+    window.addEventListener("resize",check);
+    return()=>window.removeEventListener("resize",check);
+  },[]);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4106,9 +4116,15 @@ export default function BattleTrackerPage(){
       {/* Weather banner — FireRed dialogue box style */}
       {weather.name!=="Clear"&&<div style={{background:"#F8F8E8",borderBottom:"2px solid #181818",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:9,flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#181818"}}>{weather.name.toUpperCase()}</span><span style={{color:"#484830",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:8}}>{weather.description}</span>{terrain!=="None"&&<span style={{color:"#2858C0",fontSize:8}}>· {terrain}</span>}</div>}
 
-      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        {/* Left sidebar — FireRed style */}
-        <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms"}}>
+      <div style={{flex:1,display:"flex",overflow:"hidden",position:"relative"}}>
+        {/* Left sidebar — FireRed style. On a narrow viewport, float it over
+            the scene (collapsed or expanded) instead of taking flex width
+            from it, so the scene keeps the room it needs. */}
+        {isNarrow&&!sidebarCollapsed&&(
+          <div onClick={()=>setSidebarCollapsed(true)} style={{position:"absolute",inset:0,zIndex:29,background:"rgba(24,16,8,0.5)"}}/>
+        )}
+        <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms",
+          ...(isNarrow?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
@@ -4409,7 +4425,7 @@ export default function BattleTrackerPage(){
                    scene) since target-select/accuracy/damage/effects often
                    don't fit in the usual strip; content scrolls internally
                    once it hits that cap. */
-                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden"}}>
+                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31}}>
                   <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
                     onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
                     onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
@@ -4417,7 +4433,7 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
+              <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
@@ -4514,7 +4530,7 @@ export default function BattleTrackerPage(){
                    full-width message box (matching FRLG's textbox when
                    nothing's being chosen) with a way to kick the fight off
                    once the roster's ready. */
-                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030"}}>
+                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",position:"relative",zIndex:31}}>
                   <div className="frw-battle" style={{flex:1,padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
                     <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {entries.length===0?"Add Pokémon to begin the battle.":`${entries.length} combatant${entries.length===1?"":"s"} ready.`}
