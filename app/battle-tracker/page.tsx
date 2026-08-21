@@ -4151,6 +4151,14 @@ export default function BattleTrackerPage(){
               <StageBackdrop/>
               <TerrainFX terrain={terrain}/>
               <WeatherFX weather={weather}/>
+              {/* Trainer placeholder — same as the setup platform, so the
+                  field doesn't read as fully empty even before the first
+                  Pokémon is added. */}
+              {mounted&&setupTrainerSpriteId&&(
+                <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
+                </div>
+              )}
               <div style={{position:"relative",zIndex:6,background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",marginBottom:10}}>NO COMBATANTS</div>
                 <div style={{fontSize:8,color:"#484830",fontFamily:"'Press Start 2P',monospace",lineHeight:1.8}}>Use the sidebar to<br/>add Pokémon</div>
