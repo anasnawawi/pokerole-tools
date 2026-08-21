@@ -4120,17 +4120,16 @@ export default function BattleTrackerPage(){
       {weather.name!=="Clear"&&<div style={{background:"#F8F8E8",borderBottom:"2px solid #181818",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:9,flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#181818"}}>{weather.name.toUpperCase()}</span><span style={{color:"#484830",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:8}}>{weather.description}</span>{terrain!=="None"&&<span style={{color:"#2858C0",fontSize:8}}>· {terrain}</span>}</div>}
 
       <div style={{flex:1,display:"flex",overflow:"hidden",position:"relative"}}>
-        {/* Left sidebar — FireRed style. On a narrow viewport with the
-            sidebar expanded, float it over the scene instead of taking flex
-            width from it, so the scene keeps the room it needs. Collapsed,
-            it stays in normal flex flow (reserving its real 56px instead of
-            overlaying) — as an overlay it permanently covered the enemy
-            nameplate's health bar, which is worse than the width it costs. */}
+        {/* Left sidebar — FireRed style. On a narrow viewport, float it over
+            the scene (collapsed or expanded) instead of taking flex width
+            from it, so the scene keeps the room it needs. The enemy
+            nameplate pads itself clear of the collapsed icon strip's width
+            (see below) instead of the sidebar giving up the overlay. */}
         {isNarrow&&!sidebarCollapsed&&(
           <div onClick={()=>setSidebarCollapsed(true)} style={{position:"absolute",inset:0,zIndex:29,background:"rgba(24,16,8,0.5)"}}/>
         )}
         <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms",
-          ...(isNarrow&&!sidebarCollapsed?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
+          ...(isNarrow?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
@@ -4239,9 +4238,14 @@ export default function BattleTrackerPage(){
                 <TerrainFX terrain={terrain}/>
                 <WeatherFX weather={weather}/>
                 <TerrainLabel terrain={terrain}/>
-                {/* Enemy nameplate — top-left, with that side's field hazards below it */}
+                {/* Enemy nameplate — top-left, with that side's field hazards
+                    below it. Padded clear of the floating sidebar's current
+                    width on a narrow viewport, since the sidebar overlays
+                    the scene there instead of taking flex width from it —
+                    without this the icon strip (or the expanded drawer)
+                    sits right on top of the health bar. */}
                 {mounted&&onFieldEnemy&&(
-                  <div style={{position:"absolute",top:16,left:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
+                  <div style={{position:"absolute",top:16,left:isNarrow?(sidebarCollapsed?56:220)+16:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
                     <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
                     <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                   </div>
