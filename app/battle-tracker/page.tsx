@@ -3770,10 +3770,12 @@ export default function BattleTrackerPage(){
   },[mounted]);
   const narrowness=isCompactViewport?Math.max(0,Math.min(1,(480-sceneBox.w)/(480-260))):0;
   const playerSpriteBottomPct=3+narrowness*29; // 3% → 32%
-  // Nudges left as it floats up, rather than staying at a fixed 5% — at
-  // full float the sprite otherwise reads as drifted toward center/right
-  // instead of still anchored to the player's (left) side of the field.
-  const playerSpriteLeftPct=5-narrowness*3; // 5% → 2%
+  // Pushes toward its own edge as it floats up, rather than staying at the
+  // original fixed offset — at full float the sprites otherwise drifted
+  // toward each other/center on a narrow phone instead of staying anchored
+  // to their own side of the field.
+  const playerSpriteLeftPct=5-narrowness*5; // 5% → 0%
+  const enemySpriteRightPct=7-narrowness*7; // 7% → 0%
   // Height still shrinks the sprite for the one case position alone can't
   // fix: the inline move panel eating most of the stage's height. Width
   // keeps only a loose last-resort floor now that positioning does the real
@@ -4358,7 +4360,7 @@ export default function BattleTrackerPage(){
                   </div>
                 )}
                 {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
-                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
+                {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:`${enemySpriteRightPct}%`,zIndex:2}}>
                   <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
                     <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} scale={fieldScale}/>
                     <StatusFX statuses={onFieldEnemy.statuses}/>
