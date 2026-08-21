@@ -4474,7 +4474,7 @@ export default function BattleTrackerPage(){
                    scene) since target-select/accuracy/damage/effects often
                    don't fit in the usual strip; content scrolls internally
                    once it hits that cap. */
-                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8cqw,8px)",background:"#283030",overflow:"hidden"}}>
+                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8cqw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31}}>
                   <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
                     onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
                     onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
@@ -4482,7 +4482,7 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:"clamp(130px, 20cqw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
+              <div style={{flexShrink:0,height:"clamp(130px, 20cqw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31}}>
                 {/* Text box */}
                 <div style={{flex:1,minWidth:0,padding:"clamp(4px,0.8cqw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6cqw,16px) clamp(12px,2cqw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
@@ -4579,7 +4579,7 @@ export default function BattleTrackerPage(){
                    full-width message box (matching FRLG's textbox when
                    nothing's being chosen) with a way to kick the fight off
                    once the roster's ready. */
-                <div style={{flexShrink:0,height:"clamp(130px, 20cqw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8cqw,8px)",background:"#283030"}}>
+                <div style={{flexShrink:0,height:"clamp(130px, 20cqw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8cqw,8px)",background:"#283030",position:"relative",zIndex:31}}>
                   <div className="frw-battle" style={{flex:1,padding:"clamp(10px,1.6cqw,16px) clamp(12px,2cqw,18px)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
                     <span style={{fontSize:"clamp(11px,1.7cqw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {entries.length===0?"Add Pokémon to begin the battle.":`${entries.length} combatant${entries.length===1?"":"s"} ready.`}
