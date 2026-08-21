@@ -143,23 +143,26 @@ html, body {
   color: #F8F8F8;
   text-shadow: 2px 2px 0 #182848;
 }
-/* The FRLG battle MESSAGE box — flat navy (no gradient), gold border,
-   white text. Confirmed against reference crops: navy+gold, not cream. */
+/* The FRLG battle MESSAGE box — exact hex values from the reference,
+   layered fill-out: blue fill, a faint fringe line, the gold border
+   proper, then the shared black bounding line outermost. */
 .frw-battle {
-  background: #1858A0;
-  border: 4px solid #E8B048;
+  background: #285068;
+  border: 2px solid #E0D8E0;
   border-radius: 14px;
-  box-shadow: 0 0 0 2px #8C5818, inset 0 0 0 2px #4888D8;
+  box-shadow: 0 0 0 2px #C8A848, 0 0 0 4px #283030;
   color: #FFFFFF;
   text-shadow: 1px 1px 0 #0C1830;
 }
 /* The FRLG battle COMMAND menu (FIGHT/BAG/POKéMON/RUN) — a separate box
-   from the message pane above: white fill, purple border, dark text. */
+   from the message pane above, same layered construction: white fill, a
+   pale fringe, the purple border proper, a dark purple-blue ring, then
+   the same black bounding line outermost. */
 .frw-menu {
-  background: #FFFFFF;
-  border: 4px solid #7848A0;
+  background: #F8F8F8;
+  border: 2px solid #D8D0D8;
   border-radius: 14px;
-  box-shadow: 0 0 0 2px #4C2C68, inset 0 0 0 2px #FFFFFF;
+  box-shadow: 0 0 0 2px #706880, 0 0 0 4px #484868, 0 0 0 6px #283030;
   color: #202020;
 }
 

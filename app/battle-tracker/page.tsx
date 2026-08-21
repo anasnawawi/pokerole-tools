@@ -4288,7 +4288,7 @@ export default function BattleTrackerPage(){
                   and undersized on a big monitor. */}
               <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
-                <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#0C2040",borderRight:"3px solid #181818"}}>
+                <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
@@ -4299,7 +4299,7 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
                 {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#0C2040",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
+                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
                   <div className="frw-menu" style={{flex:1,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
