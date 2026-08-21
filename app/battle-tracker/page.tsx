@@ -3728,6 +3728,19 @@ export default function BattleTrackerPage(){
     window.addEventListener("resize",check);
     return()=>window.removeEventListener("resize",check);
   },[]);
+  // Sprite resizing/repositioning below is meant for an actual mobile or
+  // tablet viewport, not for a desktop window that just happens to be
+  // resized narrower — those should keep the original fixed size and disc
+  // position untouched. Gated on the viewport itself (not the measured
+  // stage box, which shrinks for other reasons too, like the sidebar or the
+  // inline move panel) so plain desktop resizing never triggers it.
+  const [isCompactViewport,setIsCompactViewport]=useState(false);
+  useEffect(()=>{
+    const check=()=>setIsCompactViewport(window.innerWidth<1024);
+    check();
+    window.addEventListener("resize",check);
+    return()=>window.removeEventListener("resize",check);
+  },[]);
   // FieldMon's sprite box is a fixed 300-340px regardless of screen size.
   // Shrinking it to fit a narrow stage next to the nameplate worked but
   // read as "the Pokémon are tiny now" — what actually needs to give on a
@@ -3755,7 +3768,7 @@ export default function BattleTrackerPage(){
     ro.observe(el);
     return()=>ro.disconnect();
   },[mounted]);
-  const narrowness=Math.max(0,Math.min(1,(480-sceneBox.w)/(480-260)));
+  const narrowness=isCompactViewport?Math.max(0,Math.min(1,(480-sceneBox.w)/(480-260))):0;
   const playerSpriteBottomPct=3+narrowness*29; // 3% → 32%
   // Nudges left as it floats up, rather than staying at a fixed 5% — at
   // full float the sprite otherwise reads as drifted toward center/right
@@ -3764,10 +3777,11 @@ export default function BattleTrackerPage(){
   // Height still shrinks the sprite for the one case position alone can't
   // fix: the inline move panel eating most of the stage's height. Width
   // keeps only a loose last-resort floor now that positioning does the real
-  // work of avoiding the nameplate.
+  // work of avoiding the nameplate. Both stay locked at the original size
+  // (1) outside a mobile/tablet viewport, same reasoning as narrowness above.
   const heightScale=sceneBox.h/380;
   const widthFloorScale=sceneBox.w/260;
-  const fieldScale=Math.max(0.55,Math.min(1.8,heightScale,widthFloorScale));
+  const fieldScale=isCompactViewport?Math.max(0.55,Math.min(1.8,heightScale,widthFloorScale)):1;
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
