@@ -3733,12 +3733,13 @@ export default function BattleTrackerPage(){
   // or once the inline move panel eats vertical room from it, which is what
   // actually caused sprites to overlap the opposite corner's nameplate (not
   // just a font-size problem the cqw conversion above already covers).
-  // Measure the stage's real rendered box and derive a scale from whichever
-  // dimension is tighter, referenced against the box size the original
-  // fixed-340px design actually fit comfortably in (~480x380) — so normal
-  // and larger windows render at full size or a bit bigger instead of being
-  // held at a permanent ceiling of 1, and only genuinely cramped stages
-  // (a phone, or the move panel eating most of the height) shrink it.
+  // The player sprite (back, 340 wide) and player nameplate (min 210 wide)
+  // sit in the same bottom row — width scale is solved directly from "these
+  // two must fit side by side with their margins", not from an arbitrary
+  // reference box, so it prevents that overlap by construction instead of
+  // by a tuned-and-hopefully-right constant. Height scale still comes from
+  // measured stage height against the sprite's own design height, for the
+  // move-panel-squeeze case.
   const sceneRef=useRef<HTMLDivElement>(null);
   const [sceneBox,setSceneBox]=useState({w:900,h:600});
   useEffect(()=>{
@@ -3753,7 +3754,10 @@ export default function BattleTrackerPage(){
     ro.observe(el);
     return()=>ro.disconnect();
   },[mounted]);
-  const fieldScale=Math.max(0.4,Math.min(1.6,sceneBox.w/480,sceneBox.h/380));
+  const playerNameplateW=Math.min(210,sceneBox.w*0.42);
+  const widthScale=(sceneBox.w*0.95-24-playerNameplateW)/340;
+  const heightScale=sceneBox.h/380;
+  const fieldScale=Math.max(0.4,Math.min(1.8,widthScale,heightScale));
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4153,14 +4157,17 @@ export default function BattleTrackerPage(){
       {weather.name!=="Clear"&&<div style={{background:"#F8F8E8",borderBottom:"2px solid #181818",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:9,flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#181818"}}>{weather.name.toUpperCase()}</span><span style={{color:"#484830",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:8}}>{weather.description}</span>{terrain!=="None"&&<span style={{color:"#2858C0",fontSize:8}}>· {terrain}</span>}</div>}
 
       <div style={{flex:1,display:"flex",overflow:"hidden",position:"relative"}}>
-        {/* Left sidebar — FireRed style. On a narrow viewport with the
-            sidebar expanded, float it over the scene instead of taking flex
-            width from it, so the scene keeps the room it needs. */}
+        {/* Left sidebar — FireRed style. On a narrow viewport, float it over
+            the scene (collapsed or expanded) instead of taking flex width
+            from it — even the collapsed 56px icon strip was a meaningful
+            bite out of a ~375px phone, and it's what was actually pinning
+            the stage narrow enough to force sprites small regardless of how
+            much vertical room they had to spare. */}
         {isNarrow&&!sidebarCollapsed&&(
           <div onClick={()=>setSidebarCollapsed(true)} style={{position:"absolute",inset:0,zIndex:29,background:"rgba(24,16,8,0.5)"}}/>
         )}
         <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms",
-          ...(isNarrow&&!sidebarCollapsed?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
+          ...(isNarrow?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
