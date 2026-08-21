@@ -315,11 +315,21 @@ export default function Home() {
           {/* Landscape has a whole browser-half to fill, so the party gets the
               FRLG list. Portrait's lower half is a short strip under the menu —
               six stacked plates would either overflow it or squeeze the menu
-              off the screen, so it gets the compact six-across instead. */}
+              off the screen, so it gets the compact six-across instead.
+
+              Landscape also keeps the compact strip pinned above that list —
+              the six-slot glance is what "who's in my party" actually needs,
+              and losing it whenever the expanded list took over meant it was
+              only ever available in one of the two layouts. */}
           <div style={{flex:portrait?"0 0 auto":"1",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
             background:C.bezel,padding:narrow?8:10,display:"flex",flexDirection:"column",
-            justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
+            gap:portrait?0:10,justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
+            {!portrait && (
+              <div style={{flexShrink:0,paddingBottom:10,borderBottom:`2px solid ${C.outline}30`}}>
+                <PartyBar compact onPanel/>
+              </div>
+            )}
             <PartyBar compact={portrait} onPanel/>
           </div>
 
