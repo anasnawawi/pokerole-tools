@@ -4283,8 +4283,8 @@ export default function BattleTrackerPage(){
               {/* BOTTOM BAR — text box + menu */}
               <div style={{flexShrink:0,height:176,display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
-                <div style={{flex:1,padding:6,background:"#3058B0",borderRight:"3px solid #181818"}}>
-                  <div className="frw-blue" style={{height:"100%",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                <div style={{flex:1,padding:6,background:"#F0E4B0",borderRight:"3px solid #181818"}}>
+                  <div className="frw-cream" style={{height:"100%",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
                         (sceneMsg||(onFieldPlayer?`What will ${(nameOf(onFieldPlayer,entries)).toUpperCase()} do?`
@@ -4294,8 +4294,8 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
                 {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#F8F8E8",padding:6,display:"flex"}}>
-                  <div className="frw" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#F0E4B0",padding:6,display:"flex"}}>
+                  <div className="frw-cream" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -4308,7 +4308,7 @@ export default function BattleTrackerPage(){
                                  each being its own bordered, drop-shadowed box. */
                               <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
                                 style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:3,padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
-                                onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#D8E8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#2858C0";}}
+                                onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D890";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#D02828";}}
                                 onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
                                 <span style={{display:"flex",alignItems:"flex-start",gap:3,minWidth:0}}>
                                   {/* Cursor keeps its width when hidden so names never shift */}
@@ -4364,7 +4364,7 @@ export default function BattleTrackerPage(){
                     {menuMode!=="root"&&(
                       <button onClick={()=>setMenuMode("root")} className="fr-ink"
                         style={{alignSelf:"flex-start",flexShrink:0,fontSize:7,fontFamily:"'Press Start 2P',monospace",
-                          background:"transparent",border:"2px solid var(--fr-win-edge)",borderRadius:4,
+                          background:"transparent",border:"2px solid #603018",borderRadius:4,
                           padding:"3px 7px",cursor:"pointer"}}
                         onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="var(--fr-row-sel)";}}
                         onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>◀ BACK</button>
