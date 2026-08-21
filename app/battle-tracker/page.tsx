@@ -1216,6 +1216,19 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const [accResult,setAccResult]=useState<{rolls:number[];successes:number}|null>(null);
   const [dmgResults,setDmgResults]=useState<Record<string,{rolls:number[];successes:number}>>({});
   const [applied,setApplied]=useState<Set<string>>(new Set());
+  // Each step (pick a target, roll accuracy, roll damage) reveals the next
+  // section below the fold in the inline (mobile) layout, where the panel's
+  // own scroll area is short — nothing scrolled there automatically, so the
+  // next button to press was routinely out of view. Follow the newest
+  // content down instead of leaving that to be discovered.
+  const bodyRef=useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    // Scoped to inline — the floating (desktop) popup has room to show
+    // everything at once and shouldn't yank the view around on its own.
+    if(!inline)return;
+    const el=bodyRef.current;if(!el)return;
+    el.scrollTo({top:el.scrollHeight,behavior:"smooth"});
+  },[inline,targets,accResult,dmgResults]);
   // Defender reactions: each target can choose Clash or Evasion as their reaction
   const [defReactions,setDefReactions]=useState<Record<string,{type:"clash"|"evasion";move?:Move;roll?:{rolls:number[];successes:number};atkRoll?:{rolls:number[];successes:number};resolved?:boolean;clashOutcome?:"attackerWins"|"defenderWins"|"tie";clashDmgRoll?:{rolls:number[];successes:number}}>>({});
   const isPriority=fromPriorityPhase===true;
@@ -1432,7 +1445,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
           <span style={{fontSize:11,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{move.name}</span>
           <button onClick={onClose} title="Close" style={{background:"#E8E8D0",border:"2px solid #181818",color:"#181818",cursor:"pointer",fontSize:10,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 #787878",flexShrink:0}}>×</button>
         </div>
-        <div style={{padding:12,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,flex:1,background:"#F8F8E8"}}>
+        <div ref={bodyRef} style={{padding:12,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,flex:1,background:"#F8F8E8"}}>
           <p style={{fontSize:9,color:"#484830",lineHeight:1.6,margin:0,fontFamily:"inherit"}}>{move.description}</p>
           <div style={{background:"#E8E8D0",border:"1px solid #C8C8A8",padding:"6px 8px",fontSize:9,color:"#181818",lineHeight:1.5}}><strong style={{color:"#484830"}}>Effect: </strong>{move.effect}</div>
 
@@ -4231,8 +4244,15 @@ export default function BattleTrackerPage(){
             </div>
           ):(
             <>
-              {/* STAGE */}
-              <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:260}}>
+              {/* STAGE — minHeight normally keeps the field from collapsing
+                  to nothing, but competed against the move panel's own
+                  maxHeight:80vh for space that doesn't exist: toolbar +
+                  260px floor + up to 80vh could add up to more than the
+                  actual viewport, so the panel's height was correctly
+                  capped while its position still ended up pushed off the
+                  bottom of the screen. Let the stage yield most of that
+                  floor while the panel is open. */}
+              <div style={{flex:1,position:"relative",overflow:"hidden",minHeight:battleStarted&&scenePopup&&onFieldPlayer?80:260}}>
                 <StageBackdrop/>
                 {/* Weather + terrain FX — scoped to the stage */}
                 <TerrainFX terrain={terrain}/>
@@ -4435,7 +4455,16 @@ export default function BattleTrackerPage(){
                    scene) since target-select/accuracy/damage/effects often
                    don't fit in the usual strip; content scrolls internally
                    once it hits that cap. */
-                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31}}>
+                /* maxHeight as a percentage was resolving against an
+                   ancestor whose own height didn't actually reflect what was
+                   left after the toolbar/weather banner/status strip above
+                   it, so the panel could render taller than the real
+                   viewport regardless of how complete its internal scroll
+                   was -- the Roll Damage button ended up below the physical
+                   screen edge with nothing able to reach it. vh is relative
+                   to the true viewport, not a layout ancestor, so it can't
+                   drift out from under it the same way. */
+                <div style={{flexShrink:0,maxHeight:"68vh",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31}}>
                   <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
                     onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
                     onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
