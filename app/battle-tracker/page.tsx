@@ -3777,13 +3777,14 @@ export default function BattleTrackerPage(){
   const playerSpriteLeftPct=5-narrowness*5; // 5% → 0%
   const enemySpriteRightPct=7-narrowness*7; // 7% → 0%
   // Height still shrinks the sprite for the one case position alone can't
-  // fix: the inline move panel eating most of the stage's height. Width
-  // keeps only a loose last-resort floor now that positioning does the real
-  // work of avoiding the nameplate. Both stay locked at the original size
-  // (1) outside a mobile/tablet viewport, same reasoning as narrowness above.
+  // fix: the inline move panel eating most of the stage's height. On a
+  // compact viewport there's no reason for it to ever grow past the
+  // original size the way desktop's does — a /260 width floor let scale
+  // climb above 1 on an ordinary ~320-375px phone stage (since 320/260 >
+  // 1), which oversized both sprites enough that they overflowed the stage
+  // on both sides and visually crossed over each other. Capped at 1 here.
   const heightScale=sceneBox.h/380;
-  const widthFloorScale=sceneBox.w/260;
-  const fieldScale=isCompactViewport?Math.max(0.55,Math.min(1.8,heightScale,widthFloorScale)):1;
+  const fieldScale=isCompactViewport?Math.max(0.55,Math.min(1,heightScale)):1;
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
