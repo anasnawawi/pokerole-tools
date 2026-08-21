@@ -4117,14 +4117,17 @@ export default function BattleTrackerPage(){
       {weather.name!=="Clear"&&<div style={{background:"#F8F8E8",borderBottom:"2px solid #181818",padding:"3px 14px",display:"flex",gap:8,alignItems:"center",fontSize:9,flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}><span>{weather.emoji?.split(" ")[0]}</span><span style={{fontWeight:700,color:"#181818"}}>{weather.name.toUpperCase()}</span><span style={{color:"#484830",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:8}}>{weather.description}</span>{terrain!=="None"&&<span style={{color:"#2858C0",fontSize:8}}>· {terrain}</span>}</div>}
 
       <div style={{flex:1,display:"flex",overflow:"hidden",position:"relative"}}>
-        {/* Left sidebar — FireRed style. On a narrow viewport, float it over
-            the scene (collapsed or expanded) instead of taking flex width
-            from it, so the scene keeps the room it needs. */}
+        {/* Left sidebar — FireRed style. On a narrow viewport with the
+            sidebar expanded, float it over the scene instead of taking flex
+            width from it, so the scene keeps the room it needs. Collapsed,
+            it stays in normal flex flow (reserving its real 56px instead of
+            overlaying) — as an overlay it permanently covered the enemy
+            nameplate's health bar, which is worse than the width it costs. */}
         {isNarrow&&!sidebarCollapsed&&(
           <div onClick={()=>setSidebarCollapsed(true)} style={{position:"absolute",inset:0,zIndex:29,background:"rgba(24,16,8,0.5)"}}/>
         )}
         <div style={{width:sidebarCollapsed?56:220,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms",
-          ...(isNarrow?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
+          ...(isNarrow&&!sidebarCollapsed?{position:"absolute",top:0,bottom:0,left:0,zIndex:30,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
@@ -4435,7 +4438,7 @@ export default function BattleTrackerPage(){
               ) : battleStarted ? (
               <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31}}>
                 {/* Text box */}
-                <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
+                <div style={{flex:1,minWidth:0,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
@@ -4445,9 +4448,14 @@ export default function BattleTrackerPage(){
                     </span>
                   </div>
                 </div>
-                {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
-                  <div className="frw-menu" style={{flex:1,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                {/* Menu / move list — minWidth used to be a hard 280px floor,
+                    which on a narrow phone forced this box wider than the
+                    space actually available and clipped BAG/RUN off the
+                    right edge instead of letting the 1fr/1fr grid inside it
+                    shrink to fit. A much lower floor still keeps the labels
+                    readable but lets it actually shrink with the container. */}
+                <div style={{width:"44%",maxWidth:420,minWidth:150,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
+                  <div className="frw-menu" style={{flex:1,minWidth:0,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -4487,17 +4495,23 @@ export default function BattleTrackerPage(){
                         </div>
                       )
                     ):(
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:4,height:"100%"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:4,height:"100%",minWidth:0}}>
                         {[
                           {l:"FIGHT",fn:()=>setMenuMode("fight")},
                           {l:"BAG",fn:()=>setMenuMode("bag")},
                           {l:"POKéMON",fn:()=>setMenuMode("pokemon")},
                           {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
-                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700}}
+                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:isNarrow?8:"clamp(11px,1.7vw,16px)",fontWeight:700,minWidth:0,overflow:"hidden"}}
                             onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E8D8F8";}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
-                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
+                            {/* Single-word labels (POKéMON) can't wrap on
+                                their own — overflowWrap lets them break
+                                instead of forcing the whole grid column
+                                wider than the available space, which is
+                                what was pushing BAG/RUN off the right edge
+                                on a narrow phone. */}
+                            <span style={{display:"flex",alignItems:"center",gap:5,minWidth:0,overflowWrap:"anywhere"}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
                             {/* Extra actions this round roll at a rising penalty (needs
                                 2+, then 3+...), so a player about to hit FIGHT again
                                 should see that coming before they commit to it. */}
