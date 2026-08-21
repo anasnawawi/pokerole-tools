@@ -3698,6 +3698,17 @@ export default function BattleTrackerPage(){
   const allTrainersForSprites=useMemo(()=>loadFromStorage<TrainerData[]>("trainers",[]),[]);
   const trainerSpriteFor=useCallback((entry:BattleEntry)=>entry.linkedTrainerId?allTrainersForSprites.find(t=>t.id===entry.linkedTrainerId)?.spriteId||undefined:undefined,[allTrainersForSprites]);
   const trainerNameFor=useCallback((entry:BattleEntry)=>entry.linkedTrainerId?allTrainersForSprites.find(t=>t.id===entry.linkedTrainerId)?.name||undefined:undefined,[allTrainersForSprites]);
+  // Before any player-side Pokémon is actually on the field (mid-setup, or
+  // between sends), stand the trainer there instead of leaving the platform
+  // empty — this is decoration only, not a roster entry, so it never needs
+  // a fake "+ ADD TRAINER" combatant just to have someone standing there.
+  // Prefers whichever trainer already has a Pokémon linked on the player
+  // side; falls back to the first known trainer so setup never looks bare.
+  const setupTrainerSpriteId=useMemo(()=>{
+    const linkedId=entries.find(e=>e.side==="player"&&e.linkedTrainerId)?.linkedTrainerId;
+    const t=linkedId?allTrainersForSprites.find(x=>x.id===linkedId):allTrainersForSprites[0];
+    return t?.spriteId;
+  },[entries,allTrainersForSprites]);
   // The GM asked to tell ownership apart by the prompt's wording: a trainer's
   // own Pokémon is named after them, an opposing/enemy-side Pokémon with no
   // trainer link reads as "wild", and a "neutral" entry (bystander, not
@@ -3951,38 +3962,47 @@ export default function BattleTrackerPage(){
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
+  const rollInitiatives=(list:BattleEntry[]):BattleEntry[]=>list.map(e=>({
+    ...e,
+    initiative:Math.floor(Math.random()*6)+1+(e.attrs?.dexterity??1),
+    // Restore HP/WP
+    currentHp:e.maxHp,currentWill:e.maxWill,
+    // Clear statuses and stat mods
+    statuses:["Healthy"],statusTurnsLeft:0,statMods:[],
+    // Clear battle-turn state
+    actionCount:0,reactionUsed:false,hasTakenTurn:false,
+    // Clear round effects
+    isProtected:false,hasSubstitute:false,substituteHp:0,
+    // Clear mega/dynamax/tera forms
+    isMegaEvolved:false,megaOriginalAttrs:undefined,
+    isDynamaxed:false,dynamaxRoundsLeft:0,dynamaxExtraHpCur:0,isGigamax:false,
+    isTerastallized:false,teraFirstMoveBonusUsed:false,
+    // Clear transform
+    morphedTo:undefined,originalAttrs:undefined,originalMoves:undefined,
+    // Clear notes
+    notes:"",
+    // Clear support move effects
+    abilityOverride:undefined,abilitySuppressed:false,
+    typeOverride:undefined,heldItem:undefined,itemEmbargoed:false,
+    isFollowMeTarget:false,chargeActive:false,
+  }));
   const rollAllIni=()=>{
-    setEntries(prev=>prev.map(e=>({
-      ...e,
-      initiative:Math.floor(Math.random()*6)+1+(e.attrs?.dexterity??1),
-      // Restore HP/WP
-      currentHp:e.maxHp,currentWill:e.maxWill,
-      // Clear statuses and stat mods
-      statuses:["Healthy"],statusTurnsLeft:0,statMods:[],
-      // Clear battle-turn state
-      actionCount:0,reactionUsed:false,hasTakenTurn:false,
-      // Clear round effects
-      isProtected:false,hasSubstitute:false,substituteHp:0,
-      // Clear mega/dynamax/tera forms
-      isMegaEvolved:false,megaOriginalAttrs:undefined,
-      isDynamaxed:false,dynamaxRoundsLeft:0,dynamaxExtraHpCur:0,isGigamax:false,
-      isTerastallized:false,teraFirstMoveBonusUsed:false,
-      // Clear transform
-      morphedTo:undefined,originalAttrs:undefined,originalMoves:undefined,
-      // Clear notes
-      notes:"",
-      // Clear support move effects
-      abilityOverride:undefined,abilitySuppressed:false,
-      typeOverride:undefined,heldItem:undefined,itemEmbargoed:false,
-      isFollowMeTarget:false,chargeActive:false,
-    })));
+    setEntries(prev=>rollInitiatives(prev));
     setTurn(0);setRound(1);
   };
   // Leaves setup: rolls initiative for the roster as populated so far,
   // tucks the sidebar away, and swaps the bottom bar over to the FIGHT/
-  // BAG/POKéMON/RUN command box.
+  // BAG/POKéMON/RUN command box. Also drops a message in the text box
+  // naming who won initiative — rollAllIni alone gave no feedback that
+  // anything happened, since the sidebar collapses over the roster in
+  // the same click and the "What will ... do?" prompt looks the same
+  // whether or not the roll actually ran.
   const beginBattle=()=>{
-    rollAllIni();
+    const rolled=rollInitiatives(entries);
+    setEntries(rolled);
+    setTurn(0);setRound(1);
+    const first=[...rolled].sort((a,b)=>b.initiative-a.initiative)[0];
+    setSceneMsg(first?`Initiative rolled! ${nameOf(first,rolled).toUpperCase()} goes first (${first.initiative}).`:"");
     setSidebarCollapsed(true);
     setBattleStarted(true);
   };
@@ -4204,8 +4224,12 @@ export default function BattleTrackerPage(){
                     <HazardMarkers hazards={hazards.enemy}/>
                   </div>
                 </div>}
-                {/* Player mon — lower-left (back sprite) */}
-                {mounted&&onFieldPlayer&&(
+                {/* Player mon — lower-left (back sprite). Turn-driven, so it
+                    only makes sense once the battle has actually begun and
+                    there's a real turn order; before that, nothing's been
+                    "sent out" yet regardless of what's first in the roster,
+                    so the trainer placeholder below takes this spot instead. */}
+                {mounted&&battleStarted&&onFieldPlayer&&(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
                     <div style={{position:"relative"}}>
                       <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
@@ -4214,8 +4238,16 @@ export default function BattleTrackerPage(){
                     </div>
                   </div>
                 )}
+                {/* Trainer placeholder — stands on the player platform during
+                    setup, same spot the real back sprite takes over once the
+                    battle begins. Purely visual, not a roster entry. */}
+                {mounted&&!battleStarted&&setupTrainerSpriteId&&(
+                  <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
+                  </div>
+                )}
                 {/* Player nameplate — lower-right, with that side's field hazards above it */}
-                {mounted&&onFieldPlayer&&(
+                {mounted&&battleStarted&&onFieldPlayer&&(
                   <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                     <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                     <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
