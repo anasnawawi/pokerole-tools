@@ -3733,10 +3733,12 @@ export default function BattleTrackerPage(){
   // or once the inline move panel eats vertical room from it, which is what
   // actually caused sprites to overlap the opposite corner's nameplate (not
   // just a font-size problem the cqw conversion above already covers).
-  // Measure the stage's real rendered box and derive a shrink factor from
-  // whichever dimension is tighter, so the back sprite (340x232, the larger
-  // of the two) never exceeds roughly half the stage's width or most of its
-  // height.
+  // Measure the stage's real rendered box and derive a scale from whichever
+  // dimension is tighter, referenced against the box size the original
+  // fixed-340px design actually fit comfortably in (~480x380) — so normal
+  // and larger windows render at full size or a bit bigger instead of being
+  // held at a permanent ceiling of 1, and only genuinely cramped stages
+  // (a phone, or the move panel eating most of the height) shrink it.
   const sceneRef=useRef<HTMLDivElement>(null);
   const [sceneBox,setSceneBox]=useState({w:900,h:600});
   useEffect(()=>{
@@ -3751,7 +3753,7 @@ export default function BattleTrackerPage(){
     ro.observe(el);
     return()=>ro.disconnect();
   },[mounted]);
-  const fieldScale=Math.max(0.4,Math.min(1,(sceneBox.w*0.55)/340,(sceneBox.h*0.85)/232));
+  const fieldScale=Math.max(0.4,Math.min(1.6,sceneBox.w/480,sceneBox.h/380));
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
