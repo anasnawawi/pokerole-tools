@@ -1191,8 +1191,12 @@ function useDraggablePopup():{pos:{x:number;y:number};handlers:{onMouseDown:(e:R
 }
 
 // ── Move Popup ────────────────────────────────────────────────────────────────
-function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial,onEndTurn,fromPriorityPhase,onTargetsChange,onSetHazard}:{
+function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyEffect,onIncrementAction,onSpendWP,onApplySpecial,onEndTurn,fromPriorityPhase,onTargetsChange,onSetHazard,inline}:{
   move:Move;attacker:BattleEntry;allEntries:BattleEntry[];weather:WeatherData;
+  // Embedded in the bottom command bar instead of floating as a draggable
+  // modal over the whole screen — same content, just laid out to grow the
+  // bar upward in place rather than popping up elsewhere.
+  inline?:boolean;
   onClose:()=>void;onApplyDmg:(id:string,dmg:number)=>void;
   onApplyEffect:(id:string,attr:string,amount:number,src:string,appliedBy?:string)=>void;
   onIncrementAction:(id:string,isReaction?:boolean)=>void;
@@ -1412,11 +1416,13 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   // Status inflict
   const statusToInflict=statusEffect;
 
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(24,24,24,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
-      <div {...popupHandlers} style={{background:"#F8F8E8",border:"3px solid #181818",width:520,maxWidth:"95vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"6px 6px 0 #787878",transform:`translate(${popupPos.x}px,${popupPos.y}px)`,cursor:"default",userSelect:"none"}}>
+  const panelStyle:React.CSSProperties=inline
+    ?{background:"#F8F8E8",border:"3px solid #181818",width:"100%",maxHeight:"100%",display:"flex",flexDirection:"column",boxShadow:"none",cursor:"default",userSelect:"none"}
+    :{background:"#F8F8E8",border:"3px solid #181818",width:520,maxWidth:"95vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"6px 6px 0 #787878",transform:`translate(${popupPos.x}px,${popupPos.y}px)`,cursor:"default",userSelect:"none"};
+  const panel=(
+      <div {...(inline?{}:popupHandlers)} style={panelStyle}>
         {/* Header — FireRed dialogue box style */}
-        <div style={{padding:"8px 12px",background:"#E8E8D0",borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:6,flexShrink:0,cursor:"move"}}>
+        <div style={{padding:"8px 12px",background:"#E8E8D0",borderBottom:"2px solid #181818",display:"flex",alignItems:"center",gap:6,flexShrink:0,cursor:inline?"default":"move"}}>
           <TypeBadge type={move.type as PokemonType}/>
           <span style={{fontSize:7,fontWeight:700,color:move.category==="Physical"?"#B85808":move.category==="Special"?"#2848A8":"#187028",background:move.category==="Physical"?"#F8D8B8":move.category==="Special"?"#C8D8F8":"#C8F0C8",border:"1px solid #181818",padding:"1px 5px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>{move.category.slice(0,4).toUpperCase()}</span>
           {stab&&<span style={{fontSize:7,color:"#807008",background:"#F8F0B8",border:"1px solid #181818",padding:"1px 4px",fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>STAB</span>}
@@ -2419,6 +2425,11 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
           )}
         </div>
       </div>
+  );
+  if(inline)return panel;
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(24,24,24,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px 0"}}>
+      {panel}
     </div>
   );
 }
@@ -4389,7 +4400,23 @@ export default function BattleTrackerPage(){
                   the same proportion of the box on a small or large screen
                   instead of a fixed pixel strip that's oversized on mobile
                   and undersized on a big monitor. */}
-              {battleStarted ? (
+              {battleStarted&&scenePopup&&onFieldPlayer ? (
+                /* Move resolution takes over the whole bottom bar in place of
+                   the FIGHT/BAG/POKéMON/RUN command box, instead of popping
+                   up a separate floating window — closer to how the actual
+                   games never leave that dialogue area for this. It's allowed
+                   to grow taller than the normal bar (up to most of the
+                   scene) since target-select/accuracy/damage/effects often
+                   don't fit in the usual strip; content scrolls internally
+                   once it hits that cap. */
+                <div style={{flexShrink:0,maxHeight:"78%",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden"}}>
+                  <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
+                    onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
+                    onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
+                    onTargetsChange={setSceneTargetIds}
+                    onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
+                </div>
+              ) : battleStarted ? (
               <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
@@ -4527,14 +4554,6 @@ export default function BattleTrackerPage(){
               onCaptured={id=>{remove(id);setShowSceneCapture(false);}}/>
           )}
 
-          {/* Move detail popup (from FIGHT) */}
-          {mounted&&scenePopup&&onFieldPlayer&&(
-            <MovePopup move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
-              onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
-              onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
-              onTargetsChange={setSceneTargetIds}
-              onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
-          )}
         </div>
       </div>
     </div>
