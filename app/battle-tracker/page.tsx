@@ -4295,7 +4295,7 @@ export default function BattleTrackerPage(){
                 </div>
                 {/* Menu / move list */}
                 <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#0C2040",padding:6,display:"flex"}}>
-                  <div className="frw-battle" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                  <div className="frw-menu" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -4308,7 +4308,7 @@ export default function BattleTrackerPage(){
                                  each being its own bordered, drop-shadowed box. */
                               <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
                                 style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:3,padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
-                                onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#3878C8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#F8F8F8";}}
+                                onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#8058A8";}}
                                 onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
                                 <span style={{display:"flex",alignItems:"flex-start",gap:3,minWidth:0}}>
                                   {/* Cursor keeps its width when hidden so names never shift */}
@@ -4322,16 +4322,16 @@ export default function BattleTrackerPage(){
                         </div>
                       ):onFieldPlayer?(
                         <div style={{height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6}}>
-                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#B0C8E8",textAlign:"center"}}>{onFieldPlayer.moves.length===0?"No moves.":"Out of WP."}</span>
+                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#585858",textAlign:"center"}}>{onFieldPlayer.moves.length===0?"No moves.":"Out of WP."}</span>
                           <button onClick={()=>{const s=getStruggleMove();setScenePopup(s);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used STRUGGLE!`);setMenuMode("root");}}
-                            style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"transparent",border:"2px solid #E8A838",borderRadius:4,cursor:"pointer"}}>
-                            <span style={{fontSize:8,color:"#FFFFFF",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>STRUGGLE</span>
-                            <span style={{fontSize:6,color:"#B0C8E8",fontFamily:"'Press Start 2P',monospace"}}>No WP cost</span>
+                            style={{display:"flex",alignItems:"center",gap:4,padding:"6px 10px",background:"transparent",border:"2px solid #8058A8",borderRadius:4,cursor:"pointer"}}>
+                            <span style={{fontSize:8,color:"#202020",fontFamily:"'Press Start 2P',monospace",fontWeight:700}}>STRUGGLE</span>
+                            <span style={{fontSize:6,color:"#585858",fontFamily:"'Press Start 2P',monospace"}}>No WP cost</span>
                           </button>
                         </div>
                       ):(
                         <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#B0C8E8"}}>No moves.</span>
+                          <span style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#585858"}}>No moves.</span>
                         </div>
                       )
                     ):(
@@ -4343,14 +4343,14 @@ export default function BattleTrackerPage(){
                           {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
                           <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,fontWeight:700}}
-                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#3878C8";}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E8D8F8";}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
-                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{textShadow:"none"}}>▶</span>{b.l}</span>
+                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
                             {/* Extra actions this round roll at a rising penalty (needs
                                 2+, then 3+...), so a player about to hit FIGHT again
                                 should see that coming before they commit to it. */}
                             {b.l==="FIGHT"&&onFieldPlayer&&onFieldPlayer.actionCount>0&&(
-                              <span style={{fontSize:6,color:"#F8D888",paddingLeft:14,fontWeight:700}}>
+                              <span style={{fontSize:6,color:"#A03020",paddingLeft:14,fontWeight:700}}>
                                 Action #{onFieldPlayer.actionCount+1} — needs {Math.min(onFieldPlayer.actionCount+1,5)}+
                               </span>
                             )}
@@ -4364,9 +4364,9 @@ export default function BattleTrackerPage(){
                     {menuMode!=="root"&&(
                       <button onClick={()=>setMenuMode("root")}
                         style={{alignSelf:"flex-start",flexShrink:0,fontSize:7,fontFamily:"'Press Start 2P',monospace",
-                          background:"transparent",border:"2px solid #E8A838",borderRadius:4,color:"#FFFFFF",
+                          background:"transparent",border:"2px solid #8058A8",borderRadius:4,color:"#202020",
                           padding:"3px 7px",cursor:"pointer"}}
-                        onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#3878C8";}}
+                        onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E8D8F8";}}
                         onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>◀ BACK</button>
                     )}
                   </div>
