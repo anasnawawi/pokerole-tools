@@ -4280,12 +4280,17 @@ export default function BattleTrackerPage(){
                 )}
               </div>
 
-              {/* BOTTOM BAR — text box + menu */}
-              <div style={{flexShrink:0,height:176,display:"flex",gap:0,borderTop:"3px solid #181818"}}>
+              {/* BOTTOM BAR — text box + menu. Height and type scale with the
+                  scene's own width (vw, not vh — the scene's displayed size
+                  tracks the window's width, not its height) so the bar reads
+                  the same proportion of the box on a small or large screen
+                  instead of a fixed pixel strip that's oversized on mobile
+                  and undersized on a big monitor. */}
+              <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818"}}>
                 {/* Text box */}
-                <div style={{flex:1,padding:6,background:"#0C2040",borderRight:"3px solid #181818"}}>
-                  <div className="frw-battle" style={{height:"100%",padding:"12px 14px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                    <span style={{fontSize:11,lineHeight:1.7,fontFamily:"'Press Start 2P',monospace"}}>
+                <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#0C2040",borderRight:"3px solid #181818"}}>
+                  <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {menuMode==="fight"?"Choose a move.":menuMode==="pokemon"?"Choose a Pokémon.":menuMode==="bag"?"Choose an item.":
                         (sceneMsg||(onFieldPlayer?`What will ${(nameOf(onFieldPlayer,entries)).toUpperCase()} do?`
                           :onFieldEnemy?`${(nameOf(onFieldEnemy,entries)).toUpperCase()} appeared!`
@@ -4294,8 +4299,8 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
                 {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#0C2040",padding:6,display:"flex"}}>
-                  <div className="frw-menu" style={{flex:1,padding:8,display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
+                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#0C2040",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
+                  <div className="frw-menu" style={{flex:1,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
@@ -4342,7 +4347,7 @@ export default function BattleTrackerPage(){
                           {l:"POKéMON",fn:()=>setMenuMode("pokemon")},
                           {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
-                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:11,fontWeight:700}}
+                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700}}
                             onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E8D8F8";}}
                             onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
                             <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
