@@ -290,6 +290,19 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Landscape has room for the full party list on the right (below),
+              but that means the always-there six-slot glance loses its home —
+              this keeps it pinned to the bottom of the menu screen instead,
+              same spot every time, regardless of what the right side is
+              showing. Portrait doesn't need it here: the lower screen there
+              *is* the compact strip already. */}
+          {!portrait && (
+            <div style={{flexShrink:0,borderRadius:6,border:`3px solid ${C.outline}`,
+              background:C.bezel,padding:narrow?6:8}}>
+              <PartyBar compact onPanel/>
+            </div>
+          )}
+
           <div style={{height:narrow?14:18,borderRadius:4,background:C.yellow,
             border:`3px solid ${C.outline}`,flexShrink:0}}/>
         </div>
@@ -312,15 +325,16 @@ export default function Home() {
             </span>
           </div>
 
-          {/* The compact six-across strip is the party display now, in both
-              orientations — it used to swap for the full FRLG list in
-              landscape, which meant the six-slot glance disappeared the
-              moment there was room to spare. Same look either way. */}
-          <div style={{flex:"0 0 auto",minHeight:0,
+          {/* Landscape has a whole browser-half to fill, so this half gets the
+              full FRLG list — the compact glance lives on the menu screen's
+              bottom now (see above), so this side is free to always be the
+              expanded view. Portrait's lower half is a short strip under the
+              menu, so it still gets the compact six-across itself. */}
+          <div style={{flex:portrait?"0 0 auto":"1",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
             background:C.bezel,padding:narrow?8:10,display:"flex",flexDirection:"column",
-            justifyContent:"center",overflowY:"auto"}}>
-            <PartyBar compact onPanel/>
+            justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
+            <PartyBar compact={portrait} onPanel/>
           </div>
 
           <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:narrow?6:9,flexWrap:"wrap"}}>
