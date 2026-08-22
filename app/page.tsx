@@ -335,14 +335,15 @@ export default function Home() {
               menu, so it still gets the compact six-across itself. */}
           <div style={{flex:portrait?"0 0 auto":"1",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
-            /* This panel's own dark teal + scanline treatment, not the
-               shared pale C.bezel token every other panel on this screen
-               still uses — a one-off look shouldn't change the shared
-               color other panels rely on. */
-            background:"repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 2px,#226B64 2px,#226B64 11px)",
+            /* The dark teal + scanline treatment is landscape-only — this
+               is the expanded FRLG list's own look, and portrait doesn't
+               show that view (it's the compact strip instead), so it stays
+               on the shared pale C.bezel token like every other panel. */
+            background:portrait ? C.bezel
+              : "repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 2px,#226B64 2px,#226B64 11px)",
             padding:narrow?8:10,display:"flex",flexDirection:"column",
             justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
-            <PartyBar compact={portrait} onPanel dark/>
+            <PartyBar compact={portrait} onPanel dark={!portrait}/>
           </div>
 
           <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:narrow?6:9,flexWrap:"wrap"}}>
