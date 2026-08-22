@@ -30,7 +30,7 @@ const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Sta
 // overlapping no matter how far their own floors shrink. `expandedNarrow` is
 // what "expanded" actually renders as once isNarrow is true, so a manual
 // re-expand of the collapsed icon strip doesn't reopen that gap.
-const SIDEBAR_W = { collapsed: 56, expanded: 220, expandedNarrow: 110 } as const;
+const SIDEBAR_W = { collapsed: 56, expanded: 220, expandedNarrow: 150 } as const;
 type AttrSet={strength:number;dexterity:number;vitality:number;special:number;insight:number};
 interface StatMod{source:string;attr:string;amount:number;appliedBy?:string;}
 interface AbilityState{name:string;active:boolean;}
@@ -81,18 +81,18 @@ interface BattleEntry{
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-/* A percent-of-container width, clamped — the numeric-JS twin of a CSS
-   `clamp(minPx, Xcqw, maxPx)`. Everything in the battle scene that's a plain
-   CSS dimension (discs, nameplate min-width, row gaps) uses a real
-   clamp(cqw) string and needs no JS at all. PokeSprite is the one exception:
-   it does real pixel arithmetic (scale = boxW/naturalWidth) to align a
-   sprite's actual non-transparent feet to its box's bottom edge, so it needs
-   a real number, not a CSS string — this computes that number from the
-   stage's own measured width using the exact same "percent of container"
-   idea, so it shrinks in lockstep with everything else instead of on its
-   own schedule. */
-function clampPx(minPx:number,pctOfContainer:number,maxPx:number,containerW:number):number{
-  return Math.max(minPx,Math.min(maxPx,containerW*pctOfContainer/100));
+/* Sprites render at their full default size until the room actually
+   available would clip or overlap something — not a percentage of the
+   stage that keeps shrinking them even when there's slack. `valuePx` is the
+   real available width; this just floors/ceilings it. Everything else in
+   the battle scene that's a plain CSS dimension (discs, nameplate width,
+   row gaps) uses a real CSS `clamp(px, Xcqw, px)` and needs no JS at all.
+   PokeSprite is the one exception: it does real pixel arithmetic
+   (scale = boxW/naturalWidth) to align a sprite's actual non-transparent
+   feet to its box's bottom edge, so it needs a real number, not a CSS
+   string — this computes that number from the stage's own measured width. */
+function clampPx(minPx:number,valuePx:number,maxPx:number):number{
+  return Math.max(minPx,Math.min(maxPx,valuePx));
 }
 
 /* Relative luminance (WCAG) of a #rrggbb colour, used to pick readable label ink. */
@@ -362,15 +362,32 @@ function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enem
 //
 // The sprite box and the disc are sized independently on purpose: the sprite
 // box is this component's actual footprint (what a flex row reserves space
-// for), sized from the stage's own measured width via clampPx so it's always
-// fully reserved and never clipped. The disc is a plain decorative shape —
-// position:absolute, so it isn't constrained by the wrapper — sized a little
-// more generously via its own CSS clamp(cqw); at a tight squeeze it's free to
-// render wider than the sprite box and quietly get cut by the stage's own
-// overflow:hidden, rather than shrinking the sprite to make room for it.
-function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW:number}){
-  const spriteBoxW=Math.round(clampPx(back?85:70,back?42.9:35.7,back?300:250,stageW));
-  const spriteBoxH=Math.round(clampPx(back?66:56,back?33.1:28.6,back?232:200,stageW));
+// for). It renders at its full default size — the same size it's always
+// been — unless the room actually available is less than that, in which
+// case it shrinks only as far as needed to fit, down to a floor. It never
+// grows past the default just because there's extra room; only shrinks on
+// genuine pressure. "Room available" is checked in both dimensions —
+// stageW (the row's real content width) and maxRowH (the sprite row's own
+// share of the stage's height, since it's a flex:1 row splitting whatever's
+// left after the compact nameplate rows) — and whichever comes out smaller
+// wins, so a sprite with plenty of horizontal room can't still end up
+// spilling out of its row vertically. The disc is a plain decorative
+// shape — position:absolute, so it isn't constrained by the wrapper —
+// sized a little more generously via its own CSS clamp(cqw); at a tight
+// squeeze it's free to render wider than the sprite box and quietly get
+// cut by the stage's own overflow:hidden, rather than shrinking the sprite
+// to make room for it.
+function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW:number;maxRowH:number}){
+  const defaultW=back?300:250, defaultH=back?232:200;
+  const widthCappedW=clampPx(back?85:70,stageW,defaultW);
+  // The row's height budget also has to cover the platform disc beneath the
+  // sprite's feet, not just the sprite itself — dividing by 1.3 leaves
+  // roughly the same disc-to-sprite proportion the default sizes already
+  // have, so the whole FieldMon box (sprite + disc) fits the row.
+  const heightCappedH=Math.max(back?66:56,maxRowH/1.3);
+  const heightCappedW=heightCappedH*(defaultW/defaultH);
+  const spriteBoxW=Math.round(Math.min(widthCappedW,heightCappedW));
+  const spriteBoxH=Math.round(spriteBoxW*(defaultH/defaultW));
   const discW=back?"clamp(130px, 48.6cqw, 340px)":"clamp(85px, 42.9cqw, 300px)";
   const plat=back?"clamp(24px, 10.6cqw, 74px)":"clamp(20px, 8.9cqw, 62px)";
   return(
@@ -3880,6 +3897,7 @@ export default function BattleTrackerPage(){
   // added/cleared, and a plain effect with an empty dep array would only
   // ever observe whichever one happened to exist on first mount.
   const [stageW,setStageW]=useState(900);
+  const [stageH,setStageH]=useState(500);
   const stageObsRef=useRef<ResizeObserver|null>(null);
   const stageRef=useCallback((el:HTMLDivElement|null)=>{
     stageObsRef.current?.disconnect();
@@ -3889,11 +3907,13 @@ export default function BattleTrackerPage(){
     // lag a frame (or, on a backgrounded/throttled tab, longer), and the
     // fallback default is a desktop-sized guess that would render an
     // oversized, overflowing sprite on a phone until it corrects itself.
-    const w0=el.getBoundingClientRect().width;
-    if(w0)setStageW(w0);
+    const r0=el.getBoundingClientRect();
+    if(r0.width)setStageW(r0.width);
+    if(r0.height)setStageH(r0.height);
     const ro=new ResizeObserver(entries=>{
-      const w=entries[0]?.contentRect.width;
-      if(w)setStageW(w);
+      const r=entries[0]?.contentRect;
+      if(r?.width)setStageW(r.width);
+      if(r?.height)setStageH(r.height);
     });
     ro.observe(el);
     stageObsRef.current=ro;
@@ -3911,6 +3931,16 @@ export default function BattleTrackerPage(){
   // get a box sized for the whole stage and overflow past the actual
   // remaining room by however much the padding took.
   const stageContentW=Math.max(0,stageW-sidebarPad-16);
+  // Each sprite row is flex:1 — it gets whatever height is left over after
+  // the two compact nameplate rows, split evenly between the two sprite
+  // rows. Sizing FieldMon off width alone let a sprite that had plenty of
+  // horizontal room (rendering at or near its default size) end up taller
+  // than its own row's actual share of the stage's height and spill into
+  // the nameplate row above/below it — a real vertical overlap, not just a
+  // horizontal one. ~150px covers a nameplate + hazard row + row padding on
+  // either side; not exact, but errs toward shrinking the sprite a bit more
+  // than strictly necessary rather than risking it overflowing its row.
+  const spriteRowH=Math.max(60,(stageH-150)/2);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4418,7 +4448,7 @@ export default function BattleTrackerPage(){
                   every other left-anchored element gets, not a full row. */}
               {mounted&&setupTrainerSpriteId&&(
                 <div style={{position:"absolute",bottom:"3%",left:sidebarPad,zIndex:2}}>
-                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW}/>
+                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
                 </div>
               )}
               <div style={{position:"relative",zIndex:6,background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
@@ -4522,7 +4552,7 @@ export default function BattleTrackerPage(){
                     {mounted&&onFieldEnemy&&(
                       <div style={{flexShrink:0,pointerEvents:"auto"}}>
                         <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                          <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW}/>
+                          <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH}/>
                           <StatusFX statuses={onFieldEnemy.statuses}/>
                           <HazardMarkers hazards={hazards.enemy}/>
                         </div>
@@ -4557,7 +4587,7 @@ export default function BattleTrackerPage(){
                     {mounted&&battleStarted&&onFieldPlayer?(
                       <div style={{flexShrink:0,pointerEvents:"auto"}}>
                         <div style={{position:"relative"}}>
-                          <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW}/>
+                          <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH}/>
                           <StatusFX statuses={onFieldPlayer.statuses}/>
                           <HazardMarkers hazards={hazards.player}/>
                         </div>
@@ -4568,7 +4598,7 @@ export default function BattleTrackerPage(){
                          over once the battle begins. Purely visual, not a
                          roster entry. */
                       <div style={{flexShrink:0,pointerEvents:"auto"}}>
-                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW}/>
+                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
                       </div>
                     ):<div/>}
 
