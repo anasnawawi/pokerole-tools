@@ -4498,14 +4498,12 @@ export default function BattleTrackerPage(){
   // the sidebar's elevated z-index (below) keeps it visible on top where
   // the two now overlap.
   const sidebarW=sidebarCollapsed?SIDEBAR_W.collapsed:(isNarrow?SIDEBAR_W.expandedNarrow:SIDEBAR_W.expanded);
+  // No padding compensation here on purpose: the sidebar now stops above
+  // the bar's own row (bottomBarH, below) instead of covering it, so there's
+  // nothing left to dodge — the text/menu content should genuinely spread
+  // into the reclaimed width rather than stay pinned behind a padded-out
+  // dead zone the same size as the sidebar.
   const fullWidthBarStyle=isNarrow?{}:{marginLeft:-sidebarW,width:`calc(100% + ${sidebarW}px)`} as const;
-  // paddingLeft compensates the negative margin above so the box's own
-  // background stretches under the sidebar while its actual text/buttons
-  // stay where they read correctly, instead of sliding left and
-  // disappearing behind it. Kept as its own longhand value (not merged into
-  // fullWidthBarStyle) since setting it alongside a "padding" shorthand key
-  // in the same style object silently lost the override in testing.
-  const barPadLeft=isNarrow?undefined:sidebarW;
   // What FieldMon's clampPx sizing actually has to fit inside: the stage's
   // raw width minus the row's own left/right padding. Sizing sprites off the
   // raw stage width instead of this ignored how much of it the sidebar's
@@ -5086,7 +5084,14 @@ export default function BattleTrackerPage(){
         </div>
 
         {/* ── FIRERED BATTLE SCENE ─────────────────────────────────────────── */}
-        <div style={{flex:1,position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+        {/* overflow was "hidden" — clipped the bottom bar's negative-margin
+            full-width stretch (see fullWidthBarStyle) right back to this
+            column's own left edge, since overflow:hidden clips a
+            descendant's painted box at its own bounds regardless of that
+            descendant's own margin. STAGE's own overflow:hidden (its own
+            div, right below) still contains the scene/sprites — this outer
+            column no longer needs to double up on that. */}
+        <div style={{flex:1,position:"relative",display:"flex",flexDirection:"column"}}>
           {/* Thin status summary strip */}
           {mounted&&entries.length>0&&(()=>{
             const withStatus=sorted.filter(e=>e.currentHp>0).filter(e=>(e.statuses||[]).some(s=>s!=="Healthy")||(e.statMods||[]).length>0||e.isProtected);
@@ -5552,7 +5557,7 @@ export default function BattleTrackerPage(){
                    screen edge with nothing able to reach it. vh is relative
                    to the true viewport, not a layout ancestor, so it can't
                    drift out from under it the same way. */
-                <div style={{flexShrink:0,maxHeight:"40vh",minHeight:0,display:"flex",borderTop:"3px solid #181818",paddingTop:"clamp(4px,0.8vw,8px)",paddingRight:"clamp(4px,0.8vw,8px)",paddingBottom:"clamp(4px,0.8vw,8px)",paddingLeft:barPadLeft??"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31,...fullWidthBarStyle}}>
+                <div style={{flexShrink:0,maxHeight:"40vh",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31,...fullWidthBarStyle}}>
                   <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
                     onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
                     onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
@@ -5560,7 +5565,7 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31,paddingLeft:barPadLeft,...fullWidthBarStyle}}>
+              <div style={{flexShrink:0,height:isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31,...fullWidthBarStyle}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
@@ -5707,7 +5712,7 @@ export default function BattleTrackerPage(){
                    full-width message box (matching FRLG's textbox when
                    nothing's being chosen) with a way to kick the fight off
                    once the roster's ready. */
-                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",paddingTop:"clamp(4px,0.8vw,8px)",paddingRight:"clamp(4px,0.8vw,8px)",paddingBottom:"clamp(4px,0.8vw,8px)",paddingLeft:barPadLeft??"clamp(4px,0.8vw,8px)",background:"#283030",position:"relative",zIndex:31,...fullWidthBarStyle}}>
+                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",position:"relative",zIndex:31,...fullWidthBarStyle}}>
                   <div className="frw-battle" style={{flex:1,padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
                     <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {entries.length===0?"Add Pokémon to begin the battle.":`${entries.length} combatant${entries.length===1?"":"s"} ready.`}
