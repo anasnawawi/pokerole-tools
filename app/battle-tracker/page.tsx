@@ -3844,6 +3844,7 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
   const [mode,setMode]=useState<"search"|"random">("search");
   const [randRank,setRandRank]=useState<Rank|null>(null);
   const [randHabitat,setRandHabitat]=useState<HabitatData|null>(null);
+  const [randDifficulty,setRandDifficulty]=useState<EncounterDifficulty|"Boosted"|null>(null);
   const filtered=useMemo(()=>{
     const ql=q.toLowerCase();
     if(!ql)return POKEMON;
@@ -3949,7 +3950,7 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
               <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>1. RANK</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
                 {RANK_ORDER.map(r=>(
-                  <button key={r} onClick={()=>setRandRank(r)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
+                  <button key={r} onClick={()=>{setRandRank(r);setRandDifficulty(null);}} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
                     border:`2px solid ${randRank===r?"#0C2024":RANK_COLORS[r]}`,background:randRank===r?RANK_COLORS[r]:"rgba(248,248,232,0.85)",
                     color:randRank===r?"#0C2024":RANK_COLORS[r],fontWeight:700}}>{r}</button>
                 ))}
@@ -3961,35 +3962,46 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
                 <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>2. ENVIRONMENT</div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
                   {HABITATS.map(h=>(
-                    <button key={h.name} onClick={()=>setRandHabitat(h)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
+                    <button key={h.name} onClick={()=>{setRandHabitat(h);setRandDifficulty(null);}} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
                       border:`2px solid ${randHabitat?.name===h.name?"#0C2024":"#585858"}`,background:randHabitat?.name===h.name?"#F8D030":"rgba(248,248,232,0.85)",
                       color:randHabitat?.name===h.name?"#0C2024":"#383838",fontWeight:700}}>{h.emoji} {h.name}</button>
                   ))}
                 </div>
               </div>
             )}
-            {/* Step 3 — computed Easy/Average/Hard difficulty, grouping the
-                matching species; a trainer with no linked Pokémon yet in
-                this battle gets a neutral (Standard-rank, no typing) read. */}
+            {/* Step 3 — computed Easy/Average/Hard/Boosted difficulty, as
+                filter chips rather than four stacked groups — pick one to
+                cut straight to that bucket instead of scrolling past the
+                others. A trainer with no linked Pokémon yet in this battle
+                gets a neutral (Standard-rank, no typing) read. */}
             {randRank&&randHabitat&&randGroups&&(
               <>
                 <div style={{fontSize:6,color:"#C8E8E0",textAlign:"center"}}>
                   {randRoster.length?`Difficulty vs. ${randRoster.length} trainer Pokémon on the field.`:"No trainer Pokémon in this battle yet — difficulty assumes a Standard-rank team."}
                 </div>
+                <div>
+                  <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>3. DIFFICULTY</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                    {([["Easy",randGroups.easy.length],["Average",randGroups.average.length],["Hard",randGroups.hard.length],["Boosted",randGroups.boosted.length]] as const).map(([label,count])=>{
+                      const active=randDifficulty===label;
+                      const c=label==="Boosted"?"#F8D030":ENCOUNTER_DIFFICULTY_COLORS[label];
+                      return(
+                        <button key={label} disabled={count===0} onClick={()=>setRandDifficulty(active?null:label)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",
+                          cursor:count===0?"default":"pointer",opacity:count===0?0.4:1,
+                          border:`2px solid ${active?"#0C2024":c}`,background:active?c:"rgba(248,248,232,0.85)",
+                          color:active?"#0C2024":c,fontWeight:700}}>{label==="Boosted"?"⚡ BOOSTED":label.toUpperCase()} ({count})</button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
-                  {([["Easy",randGroups.easy],["Average",randGroups.average],["Hard",randGroups.hard]] as const).map(([label,list])=>list.length>0&&(
-                    <div key={label}>
-                      <div style={{padding:"4px 8px",background:ENCOUNTER_DIFFICULTY_COLORS[label]+"30",borderBottom:"1px solid #C8C8A8",fontSize:7,fontWeight:700,color:"#383838"}}>{label.toUpperCase()} ({list.length})</div>
-                      {list.map(({p})=><ResultRow key={`${label}-${p.number}-${p.name}`} p={p}/>)}
-                    </div>
-                  ))}
-                  {randGroups.boosted.length>0&&(
-                    <div>
-                      <div style={{padding:"4px 8px",background:"rgba(248,208,48,0.3)",borderBottom:"1px solid #C8C8A8",fontSize:7,fontWeight:700,color:"#383838"}}>⚡ BOOSTED FOR A HARDER FIGHT ({randGroups.boosted.length})</div>
-                      {randGroups.boosted.map(({p})=><ResultRow key={`boost-${p.number}-${p.name}`} p={p} boost={2}/>)}
-                    </div>
+                  {randDifficulty?(
+                    (randDifficulty==="Boosted"?randGroups.boosted:randGroups[randDifficulty==="Easy"?"easy":randDifficulty==="Average"?"average":"hard"]).map(({p})=>
+                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p} boost={randDifficulty==="Boosted"?2:undefined}/>
+                    )
+                  ):(
+                    <div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>Pick a difficulty above to see matching Pokémon.</div>
                   )}
-                  {randGroups.easy.length+randGroups.average.length+randGroups.hard.length===0&&<div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>No {randRank} Pokémon match this environment&apos;s types.</div>}
                 </div>
               </>
             )}
