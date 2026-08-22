@@ -3368,7 +3368,8 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
                     <button onClick={()=>upd({gender:cycleGender(entry.gender)})}
                       title={`Gender: ${entry.gender} (click to change)`}
                       style={{background:"none",border:"none",cursor:"pointer",padding:"0 2px",flexShrink:0,
-                        fontSize:10,color:entry.gender==="Male"?"#6890F0":entry.gender==="Female"?"#F85888":"#B0C0E8"}}>
+                        fontSize:10,fontWeight:700,textShadow:"0 0 2px rgba(0,0,0,0.75), 1px 1px 0 rgba(0,0,0,0.55)",
+                        color:entry.gender==="Male"?"#42CBFF":entry.gender==="Female"?"#FF9A94":"#B0C0E8"}}>
                       {entry.gender==="Male"?"♂":entry.gender==="Female"?"♀":entry.gender==="Genderless"?"⦸":"?"}
                     </button>
                   </>
@@ -4554,12 +4555,12 @@ export default function BattleTrackerPage(){
                                 style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:3,padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
                                 onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#8058A8";}}
                                 onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
-                                <span style={{display:"flex",alignItems:"flex-start",gap:3,minWidth:0}}>
+                                <span style={{display:"flex",alignItems:"flex-start",gap:4,minWidth:0}}>
                                   {/* Cursor keeps its width when hidden so names never shift */}
-                                  <span aria-hidden data-cursor style={{fontSize:7,color:"transparent",fontFamily:"'Press Start 2P',monospace",flexShrink:0,lineHeight:1.35}}>▶</span>
-                                  <span style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35}}>{m.name}</span>
+                                  <span aria-hidden data-cursor style={{fontSize:"clamp(9px,1.3vw,12px)",color:"transparent",fontFamily:"'Press Start 2P',monospace",flexShrink:0,lineHeight:1.35}}>▶</span>
+                                  <span style={{fontSize:"clamp(9px,1.3vw,12px)",fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35}}>{m.name}</span>
                                 </span>
-                                <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0,paddingLeft:10}}><TypeBadge type={m.type as PokemonType} small/>{stab&&<span style={{fontSize:6,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:6,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
+                                <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0,paddingLeft:13}}><TypeBadge type={m.type as PokemonType}/>{stab&&<span style={{fontSize:8,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:8,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
                               </button>
                             );
                           })}
@@ -4587,9 +4588,11 @@ export default function BattleTrackerPage(){
                           {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
                           <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700}}
-                            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background="#E8D8F8";}}
-                            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background="transparent";}}>
-                            <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#8058A8"}}>▶</span>{b.l}</span>
+                            onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#8058A8";}}
+                            onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
+                            {/* Cursor keeps its width when hidden, same as the move
+                                list's ▶, so the label never shifts on hover. */}
+                            <span style={{display:"flex",alignItems:"center",gap:5}}><span aria-hidden data-cursor style={{color:"transparent"}}>▶</span>{b.l}</span>
                             {/* Extra actions this round roll at a rising penalty (needs
                                 2+, then 3+...), so a player about to hit FIGHT again
                                 should see that coming before they commit to it. */}
