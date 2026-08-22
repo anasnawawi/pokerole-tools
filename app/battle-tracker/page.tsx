@@ -5588,9 +5588,18 @@ export default function BattleTrackerPage(){
                             nextTurn();
                             setSceneMsg(`${name} tried to flee! It's harder to hit and catch now.`);
                           }},
-                        ].map(b=>(
-                          <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700}}
-                            onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#8058A8";}}
+                        ].map(b=>{
+                          // 5 actions is the real ceiling — actReq's own
+                          // table only goes up to "needs 5+" (index 4), so
+                          // a 6th action would need exactly the same 5+ as
+                          // the 5th with nothing left to escalate to. FIGHT
+                          // locks out once that ceiling's hit instead of
+                          // pretending there's a 6th, 7th... action still on
+                          // offer past it.
+                          const fightMaxed=b.l==="FIGHT"&&!!onFieldPlayer&&onFieldPlayer.actionCount>=5;
+                          return(
+                          <button key={b.l} disabled={fightMaxed} onClick={fightMaxed?undefined:b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:fightMaxed?"not-allowed":"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700,opacity:fightMaxed?0.4:1}}
+                            onMouseEnter={e=>{if(fightMaxed)return;const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#8058A8";}}
                             onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
                             {/* Cursor keeps its width when hidden, same as the move
                                 list's ▶, so the label never shifts on hover. */}
@@ -5600,11 +5609,12 @@ export default function BattleTrackerPage(){
                                 should see that coming before they commit to it. */}
                             {b.l==="FIGHT"&&onFieldPlayer&&onFieldPlayer.actionCount>0&&(
                               <span style={{fontSize:6,color:"#A03020",paddingLeft:14,fontWeight:700}}>
-                                Action #{onFieldPlayer.actionCount+1} — needs {Math.min(onFieldPlayer.actionCount+1,5)}+
+                                {fightMaxed?"No actions left this round":`Action #${onFieldPlayer.actionCount+1} — needs ${Math.min(onFieldPlayer.actionCount+1,5)}+`}
                               </span>
                             )}
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                     </div>
