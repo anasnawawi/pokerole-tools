@@ -1011,12 +1011,55 @@ function pokemonMaxHp(candidate:PokemonEntry,attrs:AttrSet):number{
   return candidate.baseHp+attrs.vitality;
 }
 
+/* Averaging offense/defense/HP into one pool number (pokemonPoolProfile)
+   hides exactly the case that actually broke a real fight: a Rookie
+   Charmander with skills all still at 0 and a Rookie Helioptile with 1
+   defense and 4 HP averaged out to a "close enough" gap and scored
+   Average — but 1 defense against a several-dice attack is a near-certain
+   kill, and 4 HP doesn't survive it twice. Attack-pool numbers (3-5 dice)
+   and defense/HP numbers (1-6) share a flat average despite not being
+   comparable on the same scale; the average papers over a defense/HP
+   value that's catastrophically low relative to what the attack side
+   will actually roll. This estimates hits-to-faint directly instead —
+   `avgMovePower` is a rough dataset-wide average power rating, and
+   `pool/2` approximates a dice pool's expected successes (roughly half
+   the pool succeeds on a d6). */
+function expectedHitsToDefeat(attackerOffensePool:number,defenderDef:number,defenderHp:number):number{
+  const avgMovePower=2;
+  const dmgPerHit=Math.max(1,Math.round(attackerOffensePool/2)+avgMovePower-defenderDef);
+  return defenderHp/dmgPerHit;
+}
+
+/* The bigger of a Pokémon's two attack pools (whichever the trainer would
+   actually swing with), averaged across the roster — a rough stand-in for
+   "how hard does this team actually hit" to pair with expectedHitsToDefeat. */
+function trainerBestOffense(roster:BattleEntry[]):number{
+  if(!roster.length)return 3;
+  const vals=roster.map(e=>{
+    const sk=(k:keyof PokemonSkills)=>e.pokemonSkills?.[k]??1;
+    return Math.max(e.attrs.strength+sk("brawl"),e.attrs.special+sk("channel"));
+  });
+  return vals.reduce((a,b)=>a+b,0)/vals.length;
+}
+
+// A same-tier 1-on-1 that ends in a hit or two doesn't read as "Average" no
+// matter how matched the dice pools looked on paper — this is the number
+// of hits a candidate should be able to take before it's a fair fight.
+const FAIR_HITS_TO_DEFEAT=3;
+
 function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   // Dice-pool gap is the dominant signal now — a candidate rolling notably
   // bigger or smaller pools than the trainer's own team is the real
   // difficulty, regardless of what Rank tier either side is nominally at.
   const rankAttrs=pokemonRankAttrs(candidate);
-  let score=pokemonPoolProfile(rankAttrs,undefined,pokemonMaxHp(candidate,rankAttrs))-trainerAvgPool(roster);
+  const candHp=pokemonMaxHp(candidate,rankAttrs);
+  let score=pokemonPoolProfile(rankAttrs,undefined,candHp)-trainerAvgPool(roster);
+  // Survivability, scored directly rather than folded into the pool
+  // average — see expectedHitsToDefeat's comment for why the average
+  // alone missed this.
+  const candDef=(rankAttrs.vitality+rankAttrs.insight)/2;
+  const hits=expectedHitsToDefeat(trainerBestOffense(roster),candDef,candHp);
+  score+=(hits-FAIR_HITS_TO_DEFEAT)*1.2;
   if(roster.length){
     // Typing still nudges the read — a resisted attacker or an easy target
     // should skew the bucket a little even at an even pool size — but it's
@@ -1050,11 +1093,25 @@ function encounterBucket(score:number):EncounterDifficulty{
    on top of the candidate's already-Rank-appropriate attributes
    (pokemonRankAttrs) that would bring its pool average up to the
    trainer's own — sized to actually be a fair fight, not a fixed +2
-   regardless of how big the real gap is. */
+   regardless of how big the real gap is. Also checked against
+   expectedHitsToDefeat directly: a boost that closes the pool-average gap
+   can still leave a paper-thin Defense/HP behind (the boost raises Vitality
+   the same flat amount as every other attribute, which may not be enough
+   against a real damage roll) — the bigger of the two is used, so whichever
+   check is stricter for this particular matchup wins. */
 function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
   const rankAttrs=pokemonRankAttrs(candidate);
-  const gap=trainerAvgPool(roster)-pokemonPoolProfile(rankAttrs,undefined,pokemonMaxHp(candidate,rankAttrs));
-  return Math.max(1,Math.min(8,Math.ceil(gap)));
+  const poolGap=trainerAvgPool(roster)-pokemonPoolProfile(rankAttrs,undefined,pokemonMaxHp(candidate,rankAttrs));
+  const poolBoost=Math.ceil(poolGap);
+  const offense=trainerBestOffense(roster);
+  let survBoost=0;
+  while(survBoost<8){
+    const boostedDef=((rankAttrs.vitality+survBoost)+(rankAttrs.insight+survBoost))/2;
+    const boostedHp=candidate.baseHp+rankAttrs.vitality+survBoost;
+    if(expectedHitsToDefeat(offense,boostedDef,boostedHp)>=FAIR_HITS_TO_DEFEAT)break;
+    survBoost++;
+  }
+  return Math.max(1,Math.min(8,Math.max(poolBoost,survBoost)));
 }
 
 const ENCOUNTER_DIFFICULTY_COLORS:Record<EncounterDifficulty,string>={Easy:"#00d4aa",Average:"#f8d030",Hard:"#ff4757"};
