@@ -263,9 +263,17 @@ function PipRow({ label, value, max, onChange, locked, base, dot, training, onTr
 const TRAINER_ATTR_HINTS: Record<string, string> = {
   strength:  "Melee force — lifting, grappling, and physical damage.",
   dexterity: "Speed and precision — initiative, dodging, and accuracy.",
-  vitality:  "Toughness — your Max HP is 4 + Vitality.",
-  insight:   "Awareness and willpower — your Will is Insight + 3.",
+  vitality:  "Toughness.",
+  insight:   "Awareness and willpower.",
 };
+/* Vitality and Insight quietly set a second number nowhere near their own
+   row (Max HP, Will) — that's exactly the kind of link a hover-only hint
+   is easy to miss, so it gets a footnote instead, same as skills below. */
+function trainerAttrFootnote(attr: string): string | undefined {
+  if (attr === "vitality") return "Also sets your Max HP (4 + Vitality)";
+  if (attr === "insight") return "Also sets your Will (Insight + 3)";
+  return undefined;
+}
 const TRAINER_SOCIAL_HINTS: Record<string, string> = {
   tough:  "Projecting grit and resilience in social situations.",
   cool:   "Composure and style — staying unfazed and impressive.",
@@ -318,6 +326,20 @@ function trainerSkillFootnote(skill: string): string | undefined {
   if (skill === "channel") parts.push("Also rolls the Poké Ball throw when catching");
   const trains = Object.values(TRAINING_ROLLS).filter(cfg => cfg.trainerSkill === skill).map(cfg => cfg.label);
   if (trains.length) parts.push(`Also rolls ${trains.join("/")} training`);
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
+/* Same idea as trainerSkillFootnote above, but for the Pokémon's own
+   attributes — Vitality and Insight each quietly set a second number
+   nowhere near their own row (Max HP/Defense, Will/Sp.Defense/how many
+   moves this Pokémon can know), and every attribute's training roll uses a
+   specific trainer skill (TRAINING_ROLLS) rather than a generic one. */
+function pokemonAttrFootnote(attr: "strength" | "dexterity" | "vitality" | "special" | "insight"): string | undefined {
+  const parts: string[] = [];
+  if (attr === "vitality") parts.push("Also sets Max HP and Defense");
+  if (attr === "insight") parts.push("Also sets Will, Sp. Defense, and how many moves this Pokémon can know");
+  const cfg = TRAINING_ROLLS[attr];
+  if (cfg) parts.push(`Training rolls the trainer's ${cfg.trainerSkill.charAt(0).toUpperCase() + cfg.trainerSkill.slice(1)} skill`);
   return parts.length ? parts.join(" · ") : undefined;
 }
 
@@ -523,6 +545,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
             const limit = attrLimits[attr];
             return (
               <PipRow key={attr} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sheet.attributes[attr]} max={limit}
+                footnote={pokemonAttrFootnote(attr)}
                 base={base} dot
                 training={ta[attr]}
                 onTrainingChange={trainingMode ? v => {
@@ -900,11 +923,16 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
       {(() => {
         const skillInfo = TRAINER_RANK_POINTS[sheet.rank];
         const usedPts = Object.values(sheet.skills).reduce((a, b) => a + b, 0);
-        const POKEMON_SKILLS: { key: keyof typeof sheet.skills; label: string; desc: string }[] = [
-          { key: "brawl",      label: "Brawl",      desc: "Physical contact moves" },
-          { key: "channel",    label: "Channel",    desc: "Special & ranged moves" },
-          { key: "clash",      label: "Clash",      desc: "Clash reaction (counter-attack)" },
-          { key: "evasion",    label: "Evasion",    desc: "Evasion reaction (dodge)" },
+        /* `desc` is a plain flavor tooltip. `footnote`, when set, means this
+           skill is actually rolled for something specific elsewhere (a move
+           category, a battle reaction) — that's exactly the kind of link a
+           hover-only tooltip is easy to miss, so it prints under the label
+           instead, same treatment as the trainer's own skills. */
+        const POKEMON_SKILLS: { key: keyof typeof sheet.skills; label: string; desc: string; footnote?: string }[] = [
+          { key: "brawl",      label: "Brawl",      desc: "Physical contact moves",      footnote: "Rolled for Physical-category moves" },
+          { key: "channel",    label: "Channel",    desc: "Special & ranged moves",       footnote: "Rolled for Special-category moves" },
+          { key: "clash",      label: "Clash",      desc: "Clash reaction (counter-attack)", footnote: "Rolled for the Clash reaction" },
+          { key: "evasion",    label: "Evasion",    desc: "Evasion reaction (dodge)",     footnote: "Rolled for the Evasion reaction" },
           { key: "alert",      label: "Alert",      desc: "Perception & surprise" },
           { key: "athletic",   label: "Athletic",   desc: "Speed, jumping, physical feats" },
           { key: "nature",     label: "Nature",     desc: "Wilderness, tracking" },
@@ -921,15 +949,21 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
               <span style={{ fontSize: 9, color: usedPts > skillInfo.skillPoints ? "#C02820" : "#585858" }}>{usedPts}/{skillInfo.skillPoints} pts · max {skillInfo.skillLimit}/skill</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 8px" }}>
-              {POKEMON_SKILLS.map(({ key, label, desc }) => {
+              {POKEMON_SKILLS.map(({ key, label, desc, footnote }) => {
                 const val = sheet.skills[key] ?? 0;
                 return (
                   /* The tooltip belongs on the name, not the whole row — on the
                      row it fired over the pip boxes you actually click, which
-                     reads as the boxes having descriptions. */
+                     reads as the boxes having descriptions. A skill with a real
+                     mechanical link (footnote set) shows that link outright
+                     instead of hiding it behind hover. */
                   <div key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <span title={desc} style={{ fontSize: 10, color: "#383838", width: 68, flexShrink: 0, cursor: "help",
-                      textDecoration: "underline dotted rgba(56,56,56,0.4)", textUnderlineOffset: 2 }}>{label}</span>
+                    <span style={{ display: "block", width: 68, flexShrink: 0 }}>
+                      <span title={footnote ? undefined : desc} style={{ display: "block", fontSize: 10, color: "#383838",
+                        cursor: footnote ? undefined : "help",
+                        textDecoration: footnote ? undefined : "underline dotted rgba(56,56,56,0.4)", textUnderlineOffset: 2 }}>{label}</span>
+                      {footnote && <span style={{ display: "block", fontSize: 8, color: "#A07000", lineHeight: 1.2 }}>↳ {footnote}</span>}
+                    </span>
                     <div style={{ display: "flex", gap: 2 }}>
                       {Array.from({ length: skillInfo.skillLimit }).map((_, i) => (
                         <button key={i} onClick={() => {
@@ -1529,7 +1563,7 @@ function CharactersPageInner() {
                     {sel.age} + {sel.rank}: +{ageInfo.attrPoints} + {rankInfo.attrPoints} = {totalAttrPoints} distributable points (base 1 per attribute)
                   </div>
                   {(["strength", "dexterity", "vitality", "insight"] as const).map(attr => (
-                    <PipRow key={attr} dot hint={TRAINER_ATTR_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={TRAINER_ATTR_MAX}
+                    <PipRow key={attr} dot hint={TRAINER_ATTR_HINTS[attr]} footnote={trainerAttrFootnote(attr)} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={TRAINER_ATTR_MAX}
                       onChange={v => {
                         const cost = v - sel.attributes[attr];
                         if (cost > 0 && attrBudgetLeft <= 0) return;
