@@ -1084,11 +1084,14 @@ function trainerAvgDurability(roster:BattleEntry[]):{def:number;hp:number}{
   return{def:defs.reduce((a,b)=>a+b,0)/defs.length,hp:hps.reduce((a,b)=>a+b,0)/hps.length};
 }
 
-function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
+/* Split out of encounterScore so the "Boosted" picker can score a candidate
+   at attributes other than its bare Rank-appropriate baseline — same
+   formula, just fed a different AttrSet (see boostedRankAttrs/
+   boostToReachBucket below). */
+function encounterScoreForAttrs(candidate:PokemonEntry,roster:BattleEntry[],rankAttrs:AttrSet):number{
   // Dice-pool gap is the dominant signal now — a candidate rolling notably
   // bigger or smaller pools than the trainer's own team is the real
   // difficulty, regardless of what Rank tier either side is nominally at.
-  const rankAttrs=pokemonRankAttrs(candidate);
   const candHp=pokemonMaxHp(candidate,rankAttrs);
   let score=pokemonPoolProfile(rankAttrs,undefined,candHp)-trainerAvgPool(roster);
   const trainerAcc=trainerBestOffense(roster);
@@ -1136,49 +1139,47 @@ function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   return score;
 }
 
+function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
+  return encounterScoreForAttrs(candidate,roster,pokemonRankAttrs(candidate));
+}
+
 function encounterBucket(score:number):EncounterDifficulty{
   return score<=-1.5?"Easy":score>=1.5?"Hard":"Average";
 }
 
-/* Flat attribute boost (same mechanism the "boosted" add already applies)
-   on top of the candidate's already-Rank-appropriate attributes
-   (pokemonRankAttrs) that would bring its pool average up to the
-   trainer's own — sized to actually be a fair fight, not a fixed +2
-   regardless of how big the real gap is. Checked three ways — pool
-   average, expectedHitsToDefeat, and evasionEdge — since a boost sized
-   for one can still leave another short (it raises every attribute by
-   the same flat amount, so closing the accuracy gap doesn't guarantee
-   Defense/HP or Evasion came along for the ride); the largest of the
-   three wins, whichever check is strictest for this particular matchup. */
-function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
-  const rankAttrs=pokemonRankAttrs(candidate);
-  const poolGap=trainerAvgPool(roster)-pokemonPoolProfile(rankAttrs,undefined,pokemonMaxHp(candidate,rankAttrs));
-  const poolBoost=Math.ceil(poolGap);
-  const offense=trainerBestOffense(roster);
-  let survBoost=0;
-  while(survBoost<8){
-    const boostedDef=((rankAttrs.vitality+survBoost)+(rankAttrs.insight+survBoost))/2;
-    const boostedHp=candidate.baseHp+rankAttrs.vitality+survBoost;
-    if(expectedHitsToDefeat(offense,boostedDef,boostedHp)>=FAIR_HITS_TO_DEFEAT)break;
-    survBoost++;
-  }
-  let evasionBoost=0;
-  while(evasionBoost<8){
-    if(evasionEdge(offense,rankAttrs.dexterity+evasionBoost+1)>=0)break;
-    evasionBoost++;
-  }
-  // A boost sized only to help the candidate survive/dodge can still leave
-  // it toothless — see trainerAvgDurability's comment. Boost until it can
-  // threaten the trainer's own team within FAIR_HITS_TO_DEFEAT hits too.
-  const trainerDur=trainerAvgDurability(roster);
-  let threatBoost=0;
-  while(threatBoost<8){
-    const boostedOffense=Math.max(rankAttrs.strength+threatBoost+1,rankAttrs.special+threatBoost+1);
-    if(expectedHitsToDefeat(boostedOffense,trainerDur.def,trainerDur.hp)<=FAIR_HITS_TO_DEFEAT)break;
-    threatBoost++;
-  }
-  return Math.max(1,Math.min(8,Math.max(poolBoost,survBoost,evasionBoost,threatBoost)));
+/* A candidate's Rank-appropriate attributes with a flat boost layered on
+   top, capped the same way addPokemon itself caps a boosted add — used to
+   score what a candidate would read as at a given boost level (see
+   boostToReachBucket) without duplicating that cap logic. */
+function boostedRankAttrs(candidate:PokemonEntry,boost:number):AttrSet{
+  const base=pokemonRankAttrs(candidate);
+  if(!boost)return base;
+  const clamp=(v:number,limit?:number)=>Math.min(limit??10,v);
+  return{
+    strength:clamp(base.strength+boost,candidate.attributeLimits?.strength),
+    dexterity:clamp(base.dexterity+boost,candidate.attributeLimits?.dexterity),
+    vitality:clamp(base.vitality+boost,candidate.attributeLimits?.vitality),
+    special:clamp(base.special+boost,candidate.attributeLimits?.special),
+    insight:clamp(base.insight+boost,candidate.attributeLimits?.insight),
+  };
 }
+
+/* The smallest flat boost (0-8) that lands a candidate's score in a
+   specific target bucket — used by the "Boosted" filter to pull in
+   lower-Rank species and raise them to whatever difficulty the GM picked,
+   rather than boostToMatch's one fixed "fair fight" bar. Boost only ever
+   raises the score, so it moves monotonically Easy → Average → Hard as it
+   climbs; the first boost level (starting from 0, i.e. no boost needed at
+   all) that lands in the target bucket is the smallest one that works.
+   Returns null if even the max boost still doesn't reach it (a Starter
+   asked to read as Hard, say). */
+function boostToReachBucket(candidate:PokemonEntry,roster:BattleEntry[],target:EncounterDifficulty):number|null{
+  for(let b=0;b<=8;b++){
+    if(encounterBucket(encounterScoreForAttrs(candidate,roster,boostedRankAttrs(candidate,b)))===target)return b;
+  }
+  return null;
+}
+
 
 const ENCOUNTER_DIFFICULTY_COLORS:Record<EncounterDifficulty,string>={Easy:"#00d4aa",Average:"#f8d030",Hard:"#ff4757"};
 
@@ -4192,34 +4193,77 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
   const [side,setSide]=useState<"player"|"enemy"|"neutral">("enemy");
   const [justAdded,setJustAdded]=useState<number|null>(null);
   const [mode,setMode]=useState<"search"|"random">("search");
-  const [randRank,setRandRank]=useState<Rank|null>(null);
+  // Difficulty comes first now — the GM picks how hard the fight should
+  // feel before narrowing by species Rank/Habitat, instead of the other
+  // way around. Rank is a multi-select filter over the results (every Rank
+  // on by default) rather than a single required step; Habitat is optional
+  // (no selection = every type); Boosted is a toggle that pads the list
+  // with lower-Rank species boosted up to the chosen difficulty, rather
+  // than its own separate exclusive bucket.
+  const [randDifficulty,setRandDifficulty]=useState<EncounterDifficulty|null>(null);
+  const [randRanks,setRandRanks]=useState<Set<Rank>>(()=>new Set(RANK_ORDER));
   const [randHabitat,setRandHabitat]=useState<HabitatData|null>(null);
-  const [randDifficulty,setRandDifficulty]=useState<EncounterDifficulty|"Boosted"|null>(null);
+  const [randBoosted,setRandBoosted]=useState(false);
+  const toggleRandRank=(r:Rank)=>setRandRanks(prev=>{
+    const next=new Set(prev);
+    if(next.has(r))next.delete(r);else next.add(r);
+    return next;
+  });
   const filtered=useMemo(()=>{
     const ql=q.toLowerCase();
     if(!ql)return POKEMON;
     return POKEMON.filter(p=>p.name.toLowerCase().includes(ql)||String(p.number).includes(q));
   },[q]);
-  // The random-encounter picker's three difficulty buckets, plus a fourth
-  // "boosted" group offering the Easy/Average finds again with a stat bump —
-  // extra options to fill out a Hard fight when few species in this Rank +
-  // Habitat naturally qualify as one.
   const randRoster=useMemo(()=>trainerRoster(entries),[entries]);
-  const randGroups=useMemo(()=>{
-    if(!randRank||!randHabitat)return null;
-    const allHabTypes=[...randHabitat.commonTypes,...randHabitat.uncommonTypes,...randHabitat.rareTypes];
-    const candidates=POKEMON.filter(p=>p.suggestedRank===randRank&&p.types.some(t=>allHabTypes.includes(t)));
-    const scored=candidates.map(p=>({p,score:encounterScore(p,randRoster)}));
-    const easy=scored.filter(s=>encounterBucket(s.score)==="Easy").sort((a,b)=>a.score-b.score);
-    const average=scored.filter(s=>encounterBucket(s.score)==="Average").sort((a,b)=>a.score-b.score);
-    const hard=scored.filter(s=>encounterBucket(s.score)==="Hard").sort((a,b)=>b.score-a.score);
-    // Boost amount is sized per-candidate to actually close the gap to the
-    // trainer's own dice pools, not a flat +2 — a species that's only
-    // slightly behind needs a lot less help than one that's way behind.
-    const boosted=[...easy,...average].sort((a,b)=>b.score-a.score).slice(0,8)
-      .map(s=>({...s,boost:boostToMatch(s.p,randRoster)}));
-    return{easy,average,hard,boosted};
-  },[randRank,randHabitat,randRoster]);
+  // Rough per-bucket totals across the whole dex (no Rank/Habitat filter
+  // yet applied) — just enough to tell the GM up front whether a bucket is
+  // worth picking before they've narrowed anything else.
+  const difficultyCounts=useMemo(()=>{
+    const counts:Record<EncounterDifficulty,number>={Easy:0,Average:0,Hard:0};
+    POKEMON.forEach(p=>{counts[encounterBucket(encounterScore(p,randRoster))]++;});
+    return counts;
+  },[randRoster]);
+  const randResults=useMemo(()=>{
+    if(!randDifficulty)return null;
+    const habTypes=randHabitat?[...randHabitat.commonTypes,...randHabitat.uncommonTypes,...randHabitat.rareTypes]:null;
+    const matchesHabitat=(p:PokemonEntry)=>!habTypes||p.types.some(t=>habTypes.includes(t));
+    const natural=POKEMON.filter(p=>randRanks.has(p.suggestedRank)&&matchesHabitat(p))
+      .map(p=>({p,score:encounterScore(p,randRoster)}))
+      .filter(s=>encounterBucket(s.score)===randDifficulty)
+      .sort((a,b)=>randDifficulty==="Hard"?b.score-a.score:a.score-b.score);
+    // Boosted candidates only come from Ranks strictly below the lowest
+    // one currently selected — with every Rank on (the default), there's
+    // nothing lower to pull from, which is the right behavior: the toggle
+    // is for padding out a narrowed Rank selection, not for duplicating
+    // results already shown.
+    let boosted:{p:PokemonEntry;score:number;boost:number}[]=[];
+    if(randBoosted){
+      const selectedIdxs=RANK_ORDER.map((r,i)=>randRanks.has(r)?i:-1).filter(i=>i>=0);
+      const lowestIdx=selectedIdxs.length?Math.min(...selectedIdxs):RANK_ORDER.length;
+      const lowerRanks=RANK_ORDER.slice(0,lowestIdx);
+      if(lowerRanks.length){
+        // The candidate is standing in for the lowest Rank the GM actually
+        // selected — its boost needs a floor at roughly what that Rank's
+        // own attribute-upgrade pool would spend (spread evenly, same as
+        // pokemonRankAttrs), not just whatever's needed to graze the chosen
+        // difficulty. Without this a Rookie boosted to read as "Ace" could
+        // end up only +1 over its own baseline if the trainer's roster
+        // happened to be weak enough — technically in the right bucket,
+        // but nowhere near what an actually Ace-built Pokémon looks like.
+        const targetPool=POKEMON_RANK_ATTR_UPGRADES[RANK_ORDER[lowestIdx]];
+        boosted=POKEMON.filter(p=>lowerRanks.includes(p.suggestedRank)&&matchesHabitat(p))
+          .map(p=>{
+            const rankGapBoost=Math.max(0,Math.round((targetPool-POKEMON_RANK_ATTR_UPGRADES[p.suggestedRank])/5));
+            const diffBoost=boostToReachBucket(p,randRoster,randDifficulty)??0;
+            const boost=Math.min(8,Math.max(rankGapBoost,diffBoost));
+            return boost>0?{p,score:encounterScoreForAttrs(p,randRoster,boostedRankAttrs(p,boost)),boost}:null;
+          })
+          .filter((x):x is{p:PokemonEntry;score:number;boost:number}=>x!=null)
+          .sort((a,b)=>a.boost-b.boost);
+      }
+    }
+    return{natural,boosted};
+  },[randDifficulty,randRanks,randHabitat,randBoosted,randRoster]);
   const sideColor={player:"#2858C0",enemy:"#D82808",neutral:"#686858"}[side];
   /* Piling on several Easy adds one at a time can quietly turn "an easy
      fight" into an even one — once the enemy side's combined dice pool
@@ -4281,7 +4325,7 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
           })}
         </div>
         {/* Mode tabs — SEARCH is the plain species list, RANDOM is the
-            Rank > Habitat > Difficulty wizard below. */}
+            Difficulty-first picker below. */}
         <div style={{display:"flex",gap:5}}>
           {(["search","random"] as const).map(m=>{
             const active=mode===m;
@@ -4313,69 +4357,84 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
           </>
         ):(
           <>
-            {/* Step 1 — Rank */}
+            {/* Step 1 — Difficulty, picked first now. A trainer with no
+                linked Pokémon yet in this battle gets a neutral
+                (Standard-rank, no typing) read — see trainerAvgPool. */}
             <div>
-              <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>1. RANK</div>
+              <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>1. DIFFICULTY</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                {RANK_ORDER.map(r=>(
-                  <button key={r} onClick={()=>{setRandRank(r);setRandDifficulty(null);}} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
-                    border:`2px solid ${randRank===r?"#0C2024":RANK_COLORS[r]}`,background:randRank===r?RANK_COLORS[r]:"rgba(248,248,232,0.85)",
-                    color:randRank===r?"#0C2024":RANK_COLORS[r],fontWeight:700}}>{r}</button>
-                ))}
+                {(["Easy","Average","Hard"] as const).map(d=>{
+                  const active=randDifficulty===d;
+                  const c=ENCOUNTER_DIFFICULTY_COLORS[d];
+                  const count=difficultyCounts[d];
+                  return(
+                    <button key={d} disabled={count===0} onClick={()=>setRandDifficulty(active?null:d)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",
+                      cursor:count===0?"default":"pointer",opacity:count===0?0.4:1,
+                      border:`2px solid ${active?"#0C2024":c}`,background:active?c:"rgba(248,248,232,0.85)",
+                      color:active?"#0C2024":c,fontWeight:700}}>{d.toUpperCase()} ({count})</button>
+                  );
+                })}
               </div>
             </div>
-            {/* Step 2 — Habitat, only once a Rank is picked */}
-            {randRank&&(
-              <div>
-                <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>2. ENVIRONMENT</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                  {HABITATS.map(h=>(
-                    <button key={h.name} onClick={()=>{setRandHabitat(h);setRandDifficulty(null);}} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
-                      border:`2px solid ${randHabitat?.name===h.name?"#0C2024":"#585858"}`,background:randHabitat?.name===h.name?"#F8D030":"rgba(248,248,232,0.85)",
-                      color:randHabitat?.name===h.name?"#0C2024":"#383838",fontWeight:700}}>{h.emoji} {h.name}</button>
-                  ))}
-                </div>
+            <div style={{fontSize:6,color:"#C8E8E0",textAlign:"center"}}>
+              {randRoster.length?`Difficulty vs. ${randRoster.length} trainer Pokémon on the field.`:"No trainer Pokémon in this battle yet — difficulty assumes a Standard-rank team."}
+            </div>
+            {/* Matched dice pools alone don't make a fair fight — a
+                single trainer Pokémon can take several actions in one
+                round (extra actions cost rising WP, up to ~5), while
+                each separate wild Pokémon only gets ONE reaction before
+                it's spent. A same-pool 1-on-1 duel is fair; three
+                same-pool singles against one many-action attacker isn't,
+                since only the first hit on each of them can be
+                contested. Add enough bodies (or enough HP on fewer of
+                them) to outlast that, not just enough to match dice. */}
+            {randRoster.length>0&&(
+              <div style={{fontSize:6,color:"#F8D030",textAlign:"center",lineHeight:1.4}}>
+                ⚠ Matched dice pools ≠ a fair fight — a trainer mon can take several actions per round, but each wild add only gets one reaction. Add several, or make sure HP can outlast more than one hit.
               </div>
             )}
-            {/* Step 3 — computed Easy/Average/Hard/Boosted difficulty, as
-                filter chips rather than four stacked groups — pick one to
-                cut straight to that bucket instead of scrolling past the
-                others. A trainer with no linked Pokémon yet in this battle
-                gets a neutral (Standard-rank, no typing) read. */}
-            {randRank&&randHabitat&&randGroups&&(
+            {randDifficulty&&(
               <>
-                <div style={{fontSize:6,color:"#C8E8E0",textAlign:"center"}}>
-                  {randRoster.length?`Difficulty vs. ${randRoster.length} trainer Pokémon on the field.`:"No trainer Pokémon in this battle yet — difficulty assumes a Standard-rank team."}
-                </div>
-                {/* Matched dice pools alone don't make a fair fight — a
-                    single trainer Pokémon can take several actions in one
-                    round (extra actions cost rising WP, up to ~5), while
-                    each separate wild Pokémon only gets ONE reaction before
-                    it's spent. A same-pool 1-on-1 duel is fair; three
-                    same-pool singles against one many-action attacker isn't,
-                    since only the first hit on each of them can be
-                    contested. Add enough bodies (or enough HP on fewer of
-                    them) to outlast that, not just enough to match dice. */}
-                {randRoster.length>0&&(
-                  <div style={{fontSize:6,color:"#F8D030",textAlign:"center",lineHeight:1.4}}>
-                    ⚠ Matched dice pools ≠ a fair fight — a trainer mon can take several actions per round, but each wild add only gets one reaction. Add several, or make sure HP can outlast more than one hit.
-                  </div>
-                )}
+                {/* Step 2 — result filters: Rank (multi-select, every Rank
+                    on by default), Environment (optional — no selection
+                    means every type), Boosted (padding lower-Rank species
+                    up to this difficulty, see randResults). */}
                 <div>
-                  <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>3. DIFFICULTY</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:7,color:"#E0F0F0",textShadow:"1px 1px 0 #0C2024"}}>2. RANK</span>
+                    <div style={{display:"flex",gap:4}}>
+                      <button onClick={()=>setRandRanks(new Set(RANK_ORDER))} style={{fontSize:6,color:"#C8E8E0",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>ALL</button>
+                      <button onClick={()=>setRandRanks(new Set())} style={{fontSize:6,color:"#C8E8E0",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>NONE</button>
+                    </div>
+                  </div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
-                    {([["Easy",randGroups.easy.length],["Average",randGroups.average.length],["Hard",randGroups.hard.length],["Boosted",randGroups.boosted.length]] as const).map(([label,count])=>{
-                      const active=randDifficulty===label;
-                      const c=label==="Boosted"?"#F8D030":ENCOUNTER_DIFFICULTY_COLORS[label];
+                    {RANK_ORDER.map(r=>{
+                      const active=randRanks.has(r);
                       return(
-                        <button key={label} disabled={count===0} onClick={()=>setRandDifficulty(active?null:label)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",
-                          cursor:count===0?"default":"pointer",opacity:count===0?0.4:1,
-                          border:`2px solid ${active?"#0C2024":c}`,background:active?c:"rgba(248,248,232,0.85)",
-                          color:active?"#0C2024":c,fontWeight:700}}>{label==="Boosted"?"⚡ BOOSTED":label.toUpperCase()} ({count})</button>
+                        <button key={r} onClick={()=>toggleRandRank(r)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
+                          border:`2px solid ${active?"#0C2024":RANK_COLORS[r]}`,background:active?RANK_COLORS[r]:"rgba(248,248,232,0.85)",
+                          color:active?"#0C2024":RANK_COLORS[r],fontWeight:700,opacity:active?1:0.55}}>{r}</button>
                       );
                     })}
                   </div>
                 </div>
+                <div>
+                  <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>3. ENVIRONMENT (optional)</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                    {HABITATS.map(h=>{
+                      const active=randHabitat?.name===h.name;
+                      return(
+                        <button key={h.name} onClick={()=>setRandHabitat(active?null:h)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
+                          border:`2px solid ${active?"#0C2024":"#585858"}`,background:active?"#F8D030":"rgba(248,248,232,0.85)",
+                          color:active?"#0C2024":"#383838",fontWeight:700}}>{h.emoji} {h.name}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
+                  <input type="checkbox" checked={randBoosted} onChange={e=>setRandBoosted(e.target.checked)} style={{width:14,height:14,cursor:"pointer"}}/>
+                  <span style={{fontSize:7,color:"#F8D030",fontWeight:700}}>⚡ BOOSTED — pad with lower-Rank picks, stat-boosted to match</span>
+                </label>
                 {/* Stacking several Easy adds one at a time can quietly turn
                     "an easy fight" into an even one — once the enemy side's
                     combined pool has caught up to the trainer's own, the
@@ -4386,14 +4445,19 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
                   </div>
                 )}
                 <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
-                  {randDifficulty?(
-                    randDifficulty==="Boosted"?
-                      randGroups.boosted.map(({p,boost})=><ResultRow key={`Boosted-${p.number}-${p.name}`} p={p} boost={boost} rankAttrs/>)
-                    :randGroups[randDifficulty==="Easy"?"easy":randDifficulty==="Average"?"average":"hard"].map(({p})=>
-                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p} rankAttrs muted={randDifficulty==="Easy"&&encounterEven}/>
-                    )
+                  {randResults&&(randResults.natural.length>0||randResults.boosted.length>0)?(
+                    <>
+                      {randResults.natural.map(({p})=>
+                        <ResultRow key={`nat-${p.number}-${p.name}`} p={p} rankAttrs muted={randDifficulty==="Easy"&&encounterEven}/>
+                      )}
+                      {randBoosted&&randResults.boosted.map(({p,boost})=>
+                        <ResultRow key={`boost-${p.number}-${p.name}`} p={p} boost={boost} rankAttrs/>
+                      )}
+                    </>
                   ):(
-                    <div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>Pick a difficulty above to see matching Pokémon.</div>
+                    <div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>
+                      {randRanks.size===0?"Pick at least one Rank above.":"No matching Pokémon — try widening Rank/Environment, or turn on Boosted."}
+                    </div>
                   )}
                 </div>
               </>
