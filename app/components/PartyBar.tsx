@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { C } from "./PokedexFrame";
 import { PokemonSheetData } from "../lib/trainer";
 import { BattleLite, Session, partyOf, useSession } from "../lib/session";
+import { GenderIcon } from "./GenderIcon";
 
 /* Species name and base HP for the party display. The Pokémon dataset is
    ~2MB, so it's imported lazily and only once a party actually exists —
@@ -299,9 +300,13 @@ function Slot({ sheetKey, sheet, dex, battle, compact, sprite, onClick }: {
               : null}
       </span>
 
-      <span style={{width:"100%",minWidth:0,fontFamily:PIXEL,fontSize:compact?6:7,
-        color:C.navy,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",
-        whiteSpace:"nowrap"}}>{v.name}</span>
+      <span style={{width:"100%",minWidth:0,display:"flex",alignItems:"center",
+        justifyContent:"center",gap:2}}>
+        <span style={{minWidth:0,fontFamily:PIXEL,fontSize:compact?6:7,
+          color:C.navy,overflow:"hidden",textOverflow:"ellipsis",
+          whiteSpace:"nowrap"}}>{v.name}</span>
+        <GenderIcon gender={sheet.gender} size={compact?7:8}/>
+      </span>
 
       <span style={{width:"100%",height:compact?5:6,borderRadius:3,overflow:"hidden",
         background:"#20304A",border:"1px solid rgba(24,32,60,0.6)"}}>
@@ -393,8 +398,11 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
           conventional full-bleed border-bottom. */}
       <span style={{position:"relative",flex:"0 0 36%",minWidth:0,display:"flex",
         flexDirection:"column",justifyContent:"center",gap:5,padding:"0 6px 0 2px"}}>
-        <span style={{fontFamily:PIXEL,fontSize:10,overflow:"hidden",
-          textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
+        <span style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
+          <span style={{fontFamily:PIXEL,fontSize:10,minWidth:0,overflow:"hidden",
+            textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
+          <GenderIcon gender={sheet.gender} size={11}/>
+        </span>
         <span style={{height:2,background:palette.stripe,opacity:0.85}}/>
         <span style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
           <span style={{fontFamily:PIXEL,fontSize:8,color:"#E3E1BC",flexShrink:0}}>{sheet.rank}</span>

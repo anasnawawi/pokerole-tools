@@ -6,9 +6,17 @@
 import { Rank, TrainerAge } from "../data/game-rules";
 import { loadFromStorage, saveToStorage } from "./storage";
 
+/* Pokémon can be Genderless (no data set here carries per-species gender
+   ratios to roll against), so "Unknown" exists as a distinct fourth state
+   from an intentional "Genderless" choice — it's what every sheet starts
+   as until a player actually picks one. Trainers are always people, so
+   there's no Genderless state for them, just an unset "Unspecified". */
+export type PokemonGender = "Male" | "Female" | "Genderless" | "Unknown";
+export type TrainerGender = "Male" | "Female" | "Unspecified";
+
 export interface TrainerData {
   id: string; name: string; playerName: string; concept: string; nature: string;
-  age: TrainerAge; rank: Rank; money: number;
+  age: TrainerAge; rank: Rank; money: number; gender: TrainerGender;
   attributes: { strength: number; dexterity: number; vitality: number; insight: number };
   socialAttributes: { tough: number; cool: number; beauty: number; cute: number; clever: number };
   skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; empathy: number; etiquette: number; intimidate: number; perform: number; crafts: number; lore: number; medicine: number; science: number };
@@ -34,6 +42,7 @@ export const TRAINER_SPRITES: { id: string; label: string }[] = [
 export interface PokemonSheetData {
   number: number;
   nickname: string;
+  gender: PokemonGender;
   rank: Rank;
   loyalty: number;  // 0-5
   happiness: number; // 0-5
@@ -56,7 +65,7 @@ export interface PokemonSheetData {
 export function makeBlankTrainer(): TrainerData {
   return {
     id: Date.now().toString(), name: "", playerName: "", concept: "", nature: "Hardy",
-    age: "Teen", rank: "Rookie", money: 2000,
+    age: "Teen", rank: "Rookie", money: 2000, gender: "Unspecified",
     attributes: { strength: 1, dexterity: 1, vitality: 1, insight: 1 },
     socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
     skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, empathy: 0, etiquette: 0, intimidate: 0, perform: 0, crafts: 0, lore: 0, medicine: 0, science: 0 },
@@ -101,6 +110,7 @@ export function normalizeTrainer(t: TrainerData): TrainerData {
     ...t,
     socialAttributes: t.socialAttributes ?? BLANK_SOCIAL,
     skills: skills as TrainerData["skills"],
+    gender: t.gender ?? "Unspecified",
   };
 }
 
@@ -109,6 +119,7 @@ export function normalizePokemonSheet(s: PokemonSheetData): PokemonSheetData {
     ...s,
     socialAttributes: s.socialAttributes ?? BLANK_SOCIAL,
     skills: { ...BLANK_POKEMON_SKILLS, ...s.skills },
+    gender: s.gender ?? "Unknown",
   };
 }
 

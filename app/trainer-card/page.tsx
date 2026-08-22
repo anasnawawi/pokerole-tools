@@ -1,11 +1,12 @@
 "use client";
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PokedexFrame from "../components/PokedexFrame";
 import { POKEMON, TYPE_COLORS, PokemonType } from "../data/pokerole-data";
 import { TRAINER_ATTR_MAX, TRAINER_RANK_POINTS } from "../data/game-rules";
 import { TrainerData, PokemonSheetData } from "../lib/trainer";
 import { BattleLite, partyOf, useSession } from "../lib/session";
+import { GenderIcon } from "../components/GenderIcon";
 
 /* ── The card as the games draw it ───────────────────────────────────────────
    FRLG upgrades the trainer card's colour as you earn stars, so the card
@@ -99,7 +100,7 @@ function TrainerCard({ trainer, owned }: { trainer: TrainerData; owned: number }
               </div>
             )}
             <div style={{display:"flex",flexDirection:"column",gap:7,flex:1,minWidth:0}}>
-              <CardLine label="NAME" value={name.toUpperCase()}/>
+              <CardLine label="NAME" value={name.toUpperCase()} icon={<GenderIcon gender={trainer.gender} size={12}/>}/>
               <CardLine label="MONEY" value={`₽${trainer.money.toLocaleString()}`}/>
               <CardLine label="POKéDEX" value={String(owned)}/>
               <CardLine label="RANK" value={trainer.rank}/>
@@ -147,12 +148,14 @@ function TrainerCard({ trainer, owned }: { trainer: TrainerData; owned: number }
   );
 }
 
-function CardLine({ label, value }: { label: string; value: string }) {
+function CardLine({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
   return (
     <div style={{display:"flex",alignItems:"baseline",gap:8}}>
       <span style={{fontFamily:PIXEL,fontSize:7,opacity:0.9,width:64,flexShrink:0}}>{label}</span>
-      <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:700,
-        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{value}</span>
+      <span style={{flex:1,minWidth:0,fontSize:13,fontWeight:700,display:"flex",
+        alignItems:"baseline",gap:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+        {value}{icon}
+      </span>
     </div>
   );
 }
@@ -246,6 +249,7 @@ function PokemonCard({ sheetKey, sheet, battle }: {
           <div style={{display:"flex",alignItems:"baseline",gap:6}}>
             <span style={{fontFamily:PIXEL,fontSize:11,overflow:"hidden",
               textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+            <GenderIcon gender={sheet.gender} size={12}/>
             {sheet.isPartner&&<span title="Partner Pokémon" style={{fontSize:11}}>⭐</span>}
           </div>
           <div style={{fontSize:11,opacity:0.9,marginTop:2}}>

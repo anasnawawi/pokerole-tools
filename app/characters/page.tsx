@@ -17,14 +17,17 @@ import { saveToStorage } from "../lib/storage";
 import {
   TrainerData, PokemonSheetData, makeBlankTrainer as makeBlank,
   setActiveTrainer, getActiveTrainer, TRAINER_SPRITES,
-  loadTrainers, loadPokemonSheets,
+  loadTrainers, loadPokemonSheets, PokemonGender, TrainerGender,
 } from "../lib/trainer";
+import { GenderIcon } from "../components/GenderIcon";
 import { MOVES_DATA } from "../data/moves-data";
 import { POKEMON_EGG_GROUPS } from "../data/egg-groups-data";
 import PokedexFrame from "../components/PokedexFrame";
 
 const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Standard:"#f8d030",Advanced:"#f08030",Expert:"#a040a0",Ace:"#e04040",Master:"#705898",Champion:"#ffd700"};
 const RANKS: Rank[] = ["Starter","Rookie","Standard","Advanced","Expert","Ace","Master","Champion"];
+const POKEMON_GENDERS: PokemonGender[] = ["Unknown","Male","Female","Genderless"];
+const TRAINER_GENDERS: TrainerGender[] = ["Unspecified","Male","Female"];
 const AGES: TrainerAge[] = ["Child","Teen","Adult","Senior"];
 
 const NATURE_FLAVORS: Record<string, { liked: string; disliked: string }> = {
@@ -98,7 +101,7 @@ function getFeedDelta(item: FeedItem, nature: string): number {
 function makeBlankPokemonSheet(number: number, trainerRank: Rank): PokemonSheetData {
   const pokemon = POKEMON.find(p => p.number === number);
   return {
-    number, nickname: "", rank: pokemon?.suggestedRank ?? "Starter",
+    number, nickname: "", gender: "Unknown", rank: pokemon?.suggestedRank ?? "Starter",
     loyalty: 1, happiness: 1,
     attributes: pokemon ? { ...pokemon.attributes } : { strength: 1, dexterity: 1, vitality: 1, special: 1, insight: 1 },
     trainingAttributes: { strength: 0, dexterity: 0, vitality: 0, special: 0, insight: 0 },
@@ -409,6 +412,12 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
           style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 15, color: "#202020", background: "transparent", border: "none", outline: "none", flex: 1 }} />
         <span style={{ fontSize: 11, color: "#585858" }}>({pokemon.name})</span>
         {pokemon.types.map(t => <TypeBadge key={t} type={t} />)}
+        <GenderIcon gender={sheet.gender} size={13}/>
+        <select value={sheet.gender} onChange={e => upd({ gender: e.target.value as PokemonGender })}
+          title="Gender"
+          style={{ background: "#F8F4D0", border: "none", color: "#585858", fontSize: 11, fontWeight: 700, borderRadius: 3, padding: "2px 6px" }}>
+          {POKEMON_GENDERS.map(g => <option key={g} value={g}>{g === "Unknown" ? "— Gender —" : g}</option>)}
+        </select>
         <select value={sheet.rank} onChange={e => upd({ rank: e.target.value as Rank })}
           style={{ background: "#F8F4D0", border: "none", color: RANK_COLORS[sheet.rank], fontSize: 11, fontWeight: 700, borderRadius: 3, padding: "2px 6px" }}>
           {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
@@ -1427,6 +1436,16 @@ function CharactersPageInner() {
                       </select>
                     </div>
                     <div>
+                      <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>Gender</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <select value={sel.gender ?? "Unspecified"} onChange={e => upd(sel.id, { gender: e.target.value as TrainerGender })}
+                          style={{ flex: 1, background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13 }}>
+                          {TRAINER_GENDERS.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <GenderIcon gender={sel.gender ?? "Unspecified"} size={14}/>
+                      </div>
+                    </div>
+                    <div>
                       <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>Nature</div>
                       <select value={sel.nature} onChange={e => upd(sel.id, { nature: e.target.value })}
                         style={{ width: "100%", background: "#F8F4D0", border: "1px solid #2850A0", borderRadius: 4, padding: "6px 8px", color: "#202020", fontSize: 13 }}>
@@ -1824,6 +1843,7 @@ function CharactersPageInner() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6890f0", flexShrink: 0 }} />
                           <span style={{ fontWeight: 700, fontSize: 13, color: "#202020", flex: 1 }}>{sheet.nickname || p.name}</span>
+                          <GenderIcon gender={sheet.gender}/>
                           <span style={{ fontSize: 10, color: RANK_COLORS[sheet.rank] }}>{sheet.rank}</span>
                         </div>
                         <div style={{ display: "flex", gap: 6, marginBottom: 8, fontSize: 10, color: "#585858" }}>

@@ -11,6 +11,7 @@ import {
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage } from "../lib/storage";
 import PokedexFrame from "../components/PokedexFrame";
+import { GenderIcon } from "../components/GenderIcon";
 
 /* ─── Colour constants ──────────────────────────────────────────────────────── */
 const RANK_COLORS: Record<Rank,string> = {
@@ -879,7 +880,7 @@ function CharactersPanel({onAddToTracker}:{onAddToTracker:(p:PokemonEntry)=>void
             </div>
             {/* Trainer themselves */}
             <div style={{background:"rgba(61,139,255,0.1)",border:"1px solid #2850A030",borderRadius:5,padding:"8px 10px",marginBottom:8}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#2850A0",marginBottom:4}}>👤 Trainer: {sel.name}</div>
+              <div style={{fontSize:11,fontWeight:700,color:"#2850A0",marginBottom:4,display:"flex",alignItems:"center",gap:5}}>👤 Trainer: {sel.name} <GenderIcon gender={sel.gender}/></div>
               <div style={{fontSize:10,color:"#383838",marginBottom:6}}>STR {sel.attributes?.strength} DEX {sel.attributes?.dexterity} VIT {sel.attributes?.vitality} INS {sel.attributes?.insight}</div>
               <button onClick={()=>{
                 // Add trainer as a special entry
@@ -903,6 +904,7 @@ function CharactersPanel({onAddToTracker}:{onAddToTracker:(p:PokemonEntry)=>void
                 <div key={key} style={{background:"#FBF8E4",border:`1px solid ${TYPE_COLORS[p.types[0]]}30`,borderRadius:5,padding:"8px 10px",marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                     <span style={{fontSize:12,fontWeight:700,color:"#202020"}}>{sheet.nickname||p.name}</span>
+                    <GenderIcon gender={sheet.gender}/>
                     {sheet.nickname&&<span style={{fontSize:9,color:"#585858"}}>({p.name})</span>}
                     <span style={{display:"inline-flex",padding:"1px 5px",borderRadius:2,fontSize:8,fontWeight:700,color:"#fff",background:TYPE_COLORS[p.types[0]]}}>{p.types[0]}</span>
                     <span style={{marginLeft:"auto",fontSize:9,color:"#585858"}}>HP {p.baseHp+sheet.attributes?.vitality}</span>

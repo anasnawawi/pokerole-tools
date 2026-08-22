@@ -13,8 +13,9 @@ import {
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage, STORAGE_PREFIX } from "../lib/storage";
 import { notifySession } from "../lib/session";
-import type { TrainerData, PokemonSheetData } from "../lib/trainer";
+import type { TrainerData, PokemonSheetData, PokemonGender } from "../lib/trainer";
 import PokedexFrame from "../components/PokedexFrame";
+import { GenderIcon } from "../components/GenderIcon";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Standard:"#f8d030",Advanced:"#f08030",Expert:"#a040a0",Ace:"#e04040",Master:"#705898",Champion:"#ffd700"};
@@ -25,7 +26,7 @@ interface AbilityState{name:string;active:boolean;}
 interface HazardSide{spikes:number;toxicSpikes:number;stealthRock:boolean;stickyWeb:boolean;}
 const EMPTY_HAZARDS:HazardSide={spikes:0,toxicSpikes:0,stealthRock:false,stickyWeb:false};
 interface BattleEntry{
-  id:string; pokemon:PokemonEntry; nickname:string;
+  id:string; pokemon:PokemonEntry; nickname:string; gender:PokemonGender;
   initiative:number; currentHp:number; maxHp:number; currentWill:number; maxWill:number;
   loyalty:number; happiness:number;
   statuses:string[];   // array of active status conditions (no duplicates)
@@ -82,6 +83,26 @@ const contrast=(a:string,b:string)=>{
   const [hi,lo]=[luminance(a),luminance(b)].sort((x,y)=>y-x);
   return (hi+0.05)/(lo+0.05);
 };
+// Wild/manually-added entries have no linked sheet to pull a gender from —
+// this lets the roster header cycle through the four states by clicking,
+// same as flipping any other one-shot field on an unlinked combatant.
+const GENDER_CYCLE:PokemonGender[]=["Unknown","Male","Female","Genderless"];
+function cycleGender(g:PokemonGender):PokemonGender{
+  return GENDER_CYCLE[(GENDER_CYCLE.indexOf(g)+1)%GENDER_CYCLE.length];
+}
+// Attract (and canonically Cute Charm) only takes on the opposite gender;
+// Genderless Pokémon are always immune, and an unset gender can't be
+// evaluated at all, so both count as "doesn't apply" rather than "does".
+function attractApplies(userGender:PokemonGender,targetGender:PokemonGender):boolean{
+  if(userGender!=="Male"&&userGender!=="Female")return false;
+  if(targetGender!=="Male"&&targetGender!=="Female")return false;
+  return userGender!==targetGender;
+}
+function attractBlockReason(userGender:PokemonGender,targetGender:PokemonGender):string{
+  if(userGender==="Genderless"||targetGender==="Genderless")return"Genderless — immune";
+  if(userGender==="Unknown"||targetGender==="Unknown")return"Gender not set";
+  return"Same gender — immune";
+}
 
 function TypeBadge({type,small}:{type:PokemonType;small?:boolean}){
   const bg = TYPE_COLORS[type]||"#888870";
@@ -278,6 +299,7 @@ function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enem
     <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"5px 9px 6px",minWidth:enemy?188:210,cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
         <span style={{fontSize:9,fontWeight:700,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+        <GenderIcon gender={entry.gender} size={10}/>
         <span style={{fontSize:7,color:entry.side==="player"?"#2858C0":"#D82808"}}>{rank}</span>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -767,11 +789,21 @@ function getTypeMult(mt:PokemonType,dts:PokemonType[]):{label:string;color:strin
   return{label:"Normal",color:"#8b90a8",mod:0};
 }
 
-function calcAbilityBonus(entry:BattleEntry,move:Move,weather:WeatherData):{bonus:number;reasons:string[]}{
+function calcAbilityBonus(entry:BattleEntry,move:Move,weather:WeatherData,target?:BattleEntry):{bonus:number;reasons:string[]}{
   const res={bonus:0,reasons:[] as string[]};
   const mt=move.type as PokemonType;const atHalf=entry.currentHp<=entry.maxHp/2;const isP=move.category==="Physical";
   entry.abilities.filter(a=>a.active).forEach(ab=>{const n=ab.name;
-    if((n==="Blaze"&&mt==="Fire")||(n==="Overgrow"&&mt==="Grass")||(n==="Torrent"&&mt==="Water")||(n==="Swarm"&&mt==="Bug")){if(atHalf){res.bonus+=2;res.reasons.push(`${n} +2 (HP≤50%)`);}}
+    // Rivalry needs a target's gender to resolve, unlike every other ability
+    // here — with real gender data on both sides this can be a computed
+    // fact instead of a "apply manually" reminder like Intimidate/Download.
+    if(n==="Rivalry"){
+      if(!target)res.reasons.push("Rivalry: +1 STR vs same gender, −1 STR vs opposite (pick a target to resolve)");
+      else if(entry.gender!=="Male"&&entry.gender!=="Female")res.reasons.push("Rivalry: user's gender isn't set — can't resolve");
+      else if(target.gender!=="Male"&&target.gender!=="Female")res.reasons.push(`Rivalry: ${nameOf(target,[entry,target])}'s gender isn't set — can't resolve`);
+      else if(entry.gender===target.gender)res.reasons.push(`Rivalry +1 STR (same gender as ${nameOf(target,[entry,target])})`);
+      else res.reasons.push(`Rivalry −1 STR (opposite gender to ${nameOf(target,[entry,target])})`);
+    }
+    else if((n==="Blaze"&&mt==="Fire")||(n==="Overgrow"&&mt==="Grass")||(n==="Torrent"&&mt==="Water")||(n==="Swarm"&&mt==="Bug")){if(atHalf){res.bonus+=2;res.reasons.push(`${n} +2 (HP≤50%)`);}}
     else if(n==="Technician"&&move.power!=="-"&&parseInt(move.power)<=2){res.bonus+=2;res.reasons.push("Technician +2");}
     else if((n==="Huge Power"||n==="Pure Power")&&isP){res.bonus+=2;res.reasons.push(`${n} +2`);}
     else if(n==="Tough Claws"&&isP){res.bonus+=2;res.reasons.push("Tough Claws +2");}
@@ -1290,7 +1322,8 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const attackerPain=getPainPenalty(attacker.currentHp,attacker.maxHp);
   const stab=attacker.pokemon.types.includes(move.type as PokemonType);
   const actReq=[1,2,3,4,5][Math.min(attacker.actionCount,4)];
-  const abilMods=calcAbilityBonus(attacker,move,weather);
+  const primaryTarget=allEntries.find(e=>e.id===targets[0]);
+  const abilMods=calcAbilityBonus(attacker,move,weather,primaryTarget);
   const accAttrChoicesForMove=accAttrChoices(move);
   const resolvedAccAttr=resolveAccAttr(move,attrs,accAttrOverride??undefined);
   const accSkillChoicesForMove=accSkillChoices(move);
@@ -2367,8 +2400,19 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isAttract&&targets.filter(t=>t!==attacker.id).length>0&&onApplySpecial&&(
                 <div style={{background:"rgba(240,128,48,0.08)",border:"1px solid #f0803040",borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#f08030",marginBottom:6}}>💕 Attract — Inflict Infatuated</div>
-                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Requires opposite gender. Infatuated target must pass WP check (2 succ) to act each turn.</div>
-                  {targets.filter(t=>t!==attacker.id).map(tid=>{const t=allEntries.find(e=>e.id===tid);if(!t)return null;return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||["Healthy"],"Infatuated")});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",color:"#f08030",marginBottom:3}}>💕 Infatuate {nameOf(t,allEntries)}</button>;})}
+                  <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>Only works on the opposite gender — Genderless/unset Pokémon are immune. Infatuated target must pass WP check (2 succ) to act each turn.</div>
+                  {targets.filter(t=>t!==attacker.id).map(tid=>{
+                    const t=allEntries.find(e=>e.id===tid);if(!t)return null;
+                    const canAttract=attractApplies(attacker.gender,t.gender);
+                    if(!canAttract)return(
+                      <div key={tid} title={attractBlockReason(attacker.gender,t.gender)}
+                        style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,
+                          background:"rgba(139,144,168,0.1)",border:"1px solid rgba(139,144,168,0.25)",
+                          color:"#8b90a8",marginBottom:3,cursor:"default"}}>
+                        🚫 {nameOf(t,allEntries)} — {attractBlockReason(attacker.gender,t.gender)}
+                      </div>
+                    );
+                    return<button key={tid} onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||["Healthy"],"Infatuated")});onIncrementAction(attacker.id,false);onClose();}} style={{width:"100%",padding:"5px",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",background:"rgba(240,128,48,0.15)",border:"1px solid #f0803040",color:"#f08030",marginBottom:3}}>💕 Infatuate {nameOf(t,allEntries)}</button>;})}
                 </div>
               )}
 
@@ -2526,6 +2570,7 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
       const sheets=loadFromStorage<Record<string,PokemonSheetData>>("pokemon_sheets",{});
       sheets[key]={
         number:target.pokemon.number,nickname:target.nickname||"",
+        gender:target.gender??"Unknown",
         rank:target.pokemon.suggestedRank,loyalty:1,happiness:1,
         attributes:{...target.attrs},
         trainingAttributes:{strength:0,dexterity:0,vitality:0,special:0,insight:0},
@@ -3319,7 +3364,14 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
                 ? <><span style={{fontFamily:"'Press Start 2P',monospace",fontSize:9,color:"#F8F8E8",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,textShadow:"1px 1px 0 #181818"}}>{displayName.toUpperCase()}</span>
                   {linkedTrainer?.rank&&<span style={{fontSize:6,color:sideAccent,border:`1px solid ${sideAccent}80`,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{linkedTrainer.rank}</span>}
                   <span style={{flex:1}}/></>
-                : <input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={displayPlaceholder} style={{flex:1,background:"transparent",border:"none",color:"#F8F8E8",fontFamily:"'Press Start 2P',monospace",fontSize:9,outline:"none",minWidth:0,textTransform:"uppercase",textShadow:"1px 1px 0 #181818"}}/>
+                : <><input value={entry.nickname} onChange={e=>upd({nickname:e.target.value})} placeholder={displayPlaceholder} style={{flex:1,background:"transparent",border:"none",color:"#F8F8E8",fontFamily:"'Press Start 2P',monospace",fontSize:9,outline:"none",minWidth:0,textTransform:"uppercase",textShadow:"1px 1px 0 #181818"}}/>
+                    <button onClick={()=>upd({gender:cycleGender(entry.gender)})}
+                      title={`Gender: ${entry.gender} (click to change)`}
+                      style={{background:"none",border:"none",cursor:"pointer",padding:"0 2px",flexShrink:0,
+                        fontSize:10,color:entry.gender==="Male"?"#6890F0":entry.gender==="Female"?"#F85888":"#B0C0E8"}}>
+                      {entry.gender==="Male"?"♂":entry.gender==="Female"?"♀":entry.gender==="Genderless"?"⦸":"?"}
+                    </button>
+                  </>
               }
               {entry.currentHp<=0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:"#705898",border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>FNT</span>}
               {isActive&&entry.currentHp>0&&<span style={{fontSize:7,fontWeight:700,color:"#181818",background:sideAccent,border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>▶</span>}
@@ -3891,6 +3943,7 @@ export default function BattleTrackerPage(){
     }
     setEntries(prev=>[...prev,{
       id:`${pokemon.number}-${Date.now()}`,pokemon,nickname:nickname||"",
+      gender:(sheet?.gender as PokemonGender)??"Unknown",
       initiative:ini,currentHp:hp,maxHp:hp,currentWill:will,maxWill:will,
       loyalty,happiness,
       statuses:["Healthy"],statusTurnsLeft:0,notes:"",isExpanded:false,hasTakenTurn:false,

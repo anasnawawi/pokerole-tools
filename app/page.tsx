@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { C } from "./components/PokedexFrame";
 import PartyBar from "./components/PartyBar";
 import { loadFromStorage, saveToStorage } from "./lib/storage";
-import { TrainerData, makeBlankTrainer, setActiveTrainer, TRAINERS_KEY } from "./lib/trainer";
+import { TrainerData, TrainerGender, makeBlankTrainer, setActiveTrainer, TRAINERS_KEY } from "./lib/trainer";
 import { notifySession, partyOf, useSession } from "./lib/session";
 import { Rank, TrainerAge } from "./data/game-rules";
 
@@ -107,8 +107,8 @@ export default function Home() {
   /* Registering writes a real trainer through the same keys the Characters
      page uses, so the sheet the player lands on afterwards is already theirs
      to fill in. */
-  const register = useCallback((name: string, rank: Rank, age: TrainerAge) => {
-    const t = { ...makeBlankTrainer(), name: name.trim(), rank, age };
+  const register = useCallback((name: string, rank: Rank, age: TrainerAge, gender: TrainerGender) => {
+    const t = { ...makeBlankTrainer(), name: name.trim(), rank, age, gender };
     const all = loadFromStorage<TrainerData[]>(TRAINERS_KEY, []) ?? [];
     saveToStorage(TRAINERS_KEY, [...all, t]);
     setActiveTrainer(t.id);
@@ -431,13 +431,15 @@ function HallOfFame({ onClose }: { onClose: () => void }) {
    them; everything else is left for the sheet itself. */
 const RANKS: Rank[] = ["Starter","Rookie","Standard","Advanced","Expert","Ace","Master","Champion"];
 const AGES: TrainerAge[] = ["Child","Teen","Adult","Senior"];
+const TRAINER_GENDERS: TrainerGender[] = ["Unspecified","Male","Female"];
 
 function NewGame({ narrow, name, setName, onBegin }: {
   narrow: boolean; name: string; setName: (s: string) => void;
-  onBegin: (name: string, rank: Rank, age: TrainerAge) => void;
+  onBegin: (name: string, rank: Rank, age: TrainerAge, gender: TrainerGender) => void;
 }) {
   const [rank, setRank] = useState<Rank>("Rookie");
   const [age, setAge] = useState<TrainerAge>("Teen");
+  const [gender, setGender] = useState<TrainerGender>("Unspecified");
   const pixel = "'Press Start 2P',monospace";
   const ok = name.trim().length > 0;
 
@@ -449,7 +451,7 @@ function NewGame({ narrow, name, setName, onBegin }: {
 
   return (
     <div style={{position:"relative",zIndex:1,height:"100%",overflowY:"auto",padding:narrow?8:12}}>
-      <form onSubmit={e=>{e.preventDefault(); if(ok) onBegin(name,rank,age);}}
+      <form onSubmit={e=>{e.preventDefault(); if(ok) onBegin(name,rank,age,gender);}}
         style={{background:"#F8F8F0",border:`3px solid ${C.navy}`,borderRadius:4,
           boxShadow:`inset 0 0 0 2px #FFFFFF, 3px 3px 0 rgba(24,32,60,0.35)`,
           padding:narrow?10:14,display:"flex",flexDirection:"column",gap:narrow?9:12}}>
@@ -480,6 +482,13 @@ function NewGame({ narrow, name, setName, onBegin }: {
             </select>
           </label>
         </div>
+
+        <label style={{display:"flex",flexDirection:"column",gap:5}}>
+          <span style={{fontSize:narrow?10:11,color:"#4A5470"}}>Gender</span>
+          <select value={gender} onChange={e=>setGender(e.target.value as TrainerGender)} style={field}>
+            {TRAINER_GENDERS.map(g=><option key={g} value={g}>{g}</option>)}
+          </select>
+        </label>
 
         <button type="submit" disabled={!ok}
           style={{padding:narrow?"9px 10px":"11px 12px",borderRadius:3,
