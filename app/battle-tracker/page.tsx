@@ -1531,11 +1531,20 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   // next button to press was routinely out of view. Follow the newest
   // content down instead of leaving that to be discovered.
   const bodyRef=useRef<HTMLDivElement>(null);
+  // This effect's dependency array (targets/accResult/dmgResults) already
+  // has values the moment the popup first mounts, so it used to fire on
+  // that very first render too — jumping straight to the bottom of a fresh
+  // popup before anything had actually happened, forcing a scroll back up
+  // just to see the move/target picker. Skip that one run; every open
+  // starts at the top instead, only following new content down once the
+  // GM actually picks a target or rolls something.
+  const everOpenedRef=useRef(false);
   useEffect(()=>{
     // Scoped to inline — the floating (desktop) popup has room to show
     // everything at once and shouldn't yank the view around on its own.
     if(!inline)return;
     const el=bodyRef.current;if(!el)return;
+    if(!everOpenedRef.current){everOpenedRef.current=true;el.scrollTo({top:0});return;}
     el.scrollTo({top:el.scrollHeight,behavior:"smooth"});
   },[inline,targets,accResult,dmgResults]);
   // Defender reactions: each target can choose Clash or Evasion as their reaction
