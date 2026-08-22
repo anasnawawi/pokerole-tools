@@ -4498,10 +4498,14 @@ export default function BattleTrackerPage(){
   // the sidebar's elevated z-index (below) keeps it visible on top where
   // the two now overlap.
   const sidebarW=sidebarCollapsed?SIDEBAR_W.collapsed:(isNarrow?SIDEBAR_W.expandedNarrow:SIDEBAR_W.expanded);
-  // paddingLeft compensates the negative margin so the box's own background
-  // stretches under the sidebar while its actual text/buttons stay where
-  // they read correctly, instead of sliding left and disappearing behind it.
-  const fullWidthBarStyle=isNarrow?{}:{marginLeft:-sidebarW,width:`calc(100% + ${sidebarW}px)`,paddingLeft:sidebarW} as const;
+  const fullWidthBarStyle=isNarrow?{}:{marginLeft:-sidebarW,width:`calc(100% + ${sidebarW}px)`} as const;
+  // paddingLeft compensates the negative margin above so the box's own
+  // background stretches under the sidebar while its actual text/buttons
+  // stay where they read correctly, instead of sliding left and
+  // disappearing behind it. Kept as its own longhand value (not merged into
+  // fullWidthBarStyle) since setting it alongside a "padding" shorthand key
+  // in the same style object silently lost the override in testing.
+  const barPadLeft=isNarrow?undefined:sidebarW;
   // What FieldMon's clampPx sizing actually has to fit inside: the stage's
   // raw width minus the row's own left/right padding. Sizing sprites off the
   // raw stage width instead of this ignored how much of it the sidebar's
@@ -4920,6 +4924,18 @@ export default function BattleTrackerPage(){
 
   const sideColor=activeEntry?{player:"#00d4aa",enemy:"#ff4757",neutral:"#8b90a8"}[activeEntry.side]:"#5a6080";
 
+  // The sidebar (and its collapsed roster-icon form) used to span the full
+  // scene height, which meant it sat on top of the bottom command bar's row
+  // too once that bar was stretched full-width underneath it — eating into
+  // space the bar/menu are supposed to own. Mirrors the same three-way
+  // height the bar itself uses below so the sidebar's box stops exactly
+  // where the bar begins, leaving that whole row to the bar alone. No bar
+  // is rendered at all until there's at least one combatant, hence "0px".
+  const bottomBarH=(!mounted||entries.length===0)?"0px"
+    :battleStarted&&scenePopup&&onFieldPlayer?"40vh"
+    :battleStarted?(isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)")
+    :"clamp(130px, 20vw, 210px)";
+
   return(
     <PokedexFrame active="battle-tracker" hideParty>
     <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#181818",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
@@ -5005,14 +5021,17 @@ export default function BattleTrackerPage(){
             nameplate pads itself clear of the collapsed icon strip's width
             (see below) instead of the sidebar giving up the overlay. */}
         {isNarrow&&!sidebarCollapsed&&(
-          <div onClick={()=>setSidebarCollapsed(true)} style={{position:"absolute",inset:0,zIndex:29,background:"rgba(24,16,8,0.5)"}}/>
+          <div onClick={()=>setSidebarCollapsed(true)} style={{position:"absolute",top:0,left:0,right:0,bottom:bottomBarH,zIndex:29,background:"rgba(24,16,8,0.5)"}}/>
         )}
         <div style={{width:sidebarCollapsed?SIDEBAR_W.collapsed:isNarrow?SIDEBAR_W.expandedNarrow:SIDEBAR_W.expanded,background:"#F0EFD8",borderRight:"3px solid #181818",display:"flex",flexDirection:"column",flexShrink:0,transition:"width 150ms",
           // Elevated (and given a stacking context) even off narrow now, so
           // it stays visibly on top where the bottom command bar stretches
-          // underneath it — see fullWidthBarStyle above.
+          // underneath it — see fullWidthBarStyle above. Stops short of the
+          // bar's own row (bottomBarH) on both narrow and desktop instead of
+          // spanning the full scene height, so the roster/collapsed-icon
+          // strip never eats into the bar's row — only the stage above it.
           position:isNarrow?"absolute":"relative",zIndex:32,
-          ...(isNarrow?{top:0,bottom:0,left:0,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{})}}>
+          ...(isNarrow?{top:0,bottom:bottomBarH,left:0,boxShadow:"5px 0 16px rgba(0,0,0,0.5)"}:{height:`calc(100% - ${bottomBarH})`})}}>
           {sidebarCollapsed ? (
             <CollapsedRoster sorted={mounted?sorted:[]} activeId={activeEntry?.id}
               entries={entries} onExpand={()=>setSidebarCollapsed(false)}
@@ -5533,7 +5552,7 @@ export default function BattleTrackerPage(){
                    screen edge with nothing able to reach it. vh is relative
                    to the true viewport, not a layout ancestor, so it can't
                    drift out from under it the same way. */
-                <div style={{flexShrink:0,maxHeight:"40vh",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31,...fullWidthBarStyle}}>
+                <div style={{flexShrink:0,maxHeight:"40vh",minHeight:0,display:"flex",borderTop:"3px solid #181818",paddingTop:"clamp(4px,0.8vw,8px)",paddingRight:"clamp(4px,0.8vw,8px)",paddingBottom:"clamp(4px,0.8vw,8px)",paddingLeft:barPadLeft??"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31,...fullWidthBarStyle}}>
                   <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
                     onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
                     onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
@@ -5541,7 +5560,7 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31,...fullWidthBarStyle}}>
+              <div style={{flexShrink:0,height:isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31,paddingLeft:barPadLeft,...fullWidthBarStyle}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
@@ -5688,7 +5707,7 @@ export default function BattleTrackerPage(){
                    full-width message box (matching FRLG's textbox when
                    nothing's being chosen) with a way to kick the fight off
                    once the roster's ready. */
-                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",position:"relative",zIndex:31,...fullWidthBarStyle}}>
+                <div style={{flexShrink:0,height:"clamp(130px, 20vw, 210px)",display:"flex",borderTop:"3px solid #181818",paddingTop:"clamp(4px,0.8vw,8px)",paddingRight:"clamp(4px,0.8vw,8px)",paddingBottom:"clamp(4px,0.8vw,8px)",paddingLeft:barPadLeft??"clamp(4px,0.8vw,8px)",background:"#283030",position:"relative",zIndex:31,...fullWidthBarStyle}}>
                   <div className="frw-battle" style={{flex:1,padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
                     <span style={{fontSize:"clamp(11px,1.7vw,16px)",lineHeight:1.4,fontWeight:700,fontFamily:"'Press Start 2P',monospace"}}>
                       {entries.length===0?"Add Pokémon to begin the battle.":`${entries.length} combatant${entries.length===1?"":"s"} ready.`}
