@@ -79,6 +79,7 @@ interface BattleEntry{
   itemEmbargoed?:boolean;         // Embargo: cannot use items
   isFollowMeTarget?:boolean;      // Follow Me / Spotlight: all moves redirect here
   chargeActive?:boolean;          // Charge: +2 to next Electric move
+  catchPenalty?:number;           // RUN command: stacks, added to catch difficulty
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2948,7 +2949,9 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
 
   // Catch requirements
   const CATCH_REQ:Record<Rank,number>={Starter:3,Rookie:4,Standard:6,Advanced:8,Expert:9,Ace:10,Master:12,Champion:14};
-  const required=target?CATCH_REQ[target.pokemon.suggestedRank]??6:6;
+  // A target that's used RUN to flee this fight is deliberately harder to
+  // pin down with a ball too, not just harder to hit — stacks per flee.
+  const required=(target?CATCH_REQ[target.pokemon.suggestedRank]??6:6)+(target?.catchPenalty||0);
   const atHalf=target&&target.currentHp<=target.maxHp/2&&target.currentHp>1;
   const atOne=target&&target.currentHp===1;
   const hpBonus=atOne?2:atHalf?1:0;
@@ -5523,7 +5526,26 @@ export default function BattleTrackerPage(){
                              up on a trainer-linked Pokémon's turn. */
                           ...(onFieldPlayer?.linkedTrainerId?[{l:"BAG",fn:()=>setMenuMode("bag")}]:[]),
                           {l:"POKéMON",fn:()=>setMenuMode("pokemon")},
-                          {l:"RUN",fn:()=>endBattle()},
+                          /* RUN used to end the whole battle — but this
+                             command box drives whoever's turn it currently
+                             is, wild/enemy included, and one combatant
+                             bolting shouldn't nuke the fight for everyone
+                             else still in it. It now just skips that one's
+                             turn and makes it harder to pin down: +2
+                             Dexterity (harder to hit/land moves on) and a
+                             stacking catch penalty (harder to Poké Ball),
+                             both via the existing statMods/catchPenalty
+                             mechanisms rather than a new one-off system. */
+                          {l:"RUN",fn:()=>{
+                            if(!onFieldPlayer)return;
+                            const name=nameOf(onFieldPlayer,entries).toUpperCase();
+                            upd(onFieldPlayer.id,{
+                              statMods:[...onFieldPlayer.statMods,{source:"Fled",attr:"dexterity",amount:2}],
+                              catchPenalty:(onFieldPlayer.catchPenalty||0)+2,
+                            });
+                            nextTurn();
+                            setSceneMsg(`${name} tried to flee! It's harder to hit and catch now.`);
+                          }},
                         ].map(b=>(
                           <button key={b.l} onClick={b.fn} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:1,padding:"6px 8px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",fontFamily:"'Press Start 2P',monospace",fontSize:"clamp(11px,1.7vw,16px)",fontWeight:700}}
                             onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#8058A8";}}
