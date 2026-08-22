@@ -962,8 +962,15 @@ function pokemonRankAttrs(pokemon:PokemonEntry):AttrSet{
 /* A species that isn't in the battle yet has no assigned skill ranks — a
    fresh wild add's skills default to 1 across the board (see addPokemon's
    own fallback), so that default is baked in here rather than guessed, to
-   keep a candidate's profile matching what actually lands in the roster. */
-function pokemonPoolProfile(attrs:AttrSet,skills?:Partial<PokemonSkills>):number{
+   keep a candidate's profile matching what actually lands in the roster.
+
+   `hp` is folded in as a 7th term alongside the six dice-pool numbers —
+   without it, a candidate could read as "matched" purely on accuracy/
+   defense while still going down in one hit, since Defense only shaves a
+   few successes off incoming damage and doesn't reflect how much HP is
+   actually behind it. Optional (omit for a pure accuracy/defense read)
+   but every real caller below supplies it. */
+function pokemonPoolProfile(attrs:AttrSet,skills?:Partial<PokemonSkills>,hp?:number):number{
   const sk=(k:keyof PokemonSkills)=>skills?.[k]??1;
   const physAtk=attrs.strength+sk("brawl");
   const specAtk=attrs.special+sk("channel");
@@ -971,7 +978,9 @@ function pokemonPoolProfile(attrs:AttrSet,skills?:Partial<PokemonSkills>):number
   const clash=attrs.strength+sk("clash");
   const physDef=attrs.vitality;
   const specDef=attrs.insight;
-  return (physAtk+specAtk+evasion+clash+physDef+specDef)/6;
+  const terms=[physAtk,specAtk,evasion,clash,physDef,specDef];
+  if(hp!==undefined)terms.push(hp);
+  return terms.reduce((a,b)=>a+b,0)/terms.length;
 }
 
 function trainerRoster(entries:BattleEntry[]):BattleEntry[]{
@@ -979,11 +988,11 @@ function trainerRoster(entries:BattleEntry[]):BattleEntry[]{
 }
 
 /* No trainer Pokémon on the field yet to compare against — falls back to a
-   plain Rookie-ish baseline (2 in every attribute, skill 1) rather than
-   refusing to score at all. */
+   plain Rookie-ish baseline (2 in every attribute, skill 1, 6 HP) rather
+   than refusing to score at all. */
 function trainerAvgPool(roster:BattleEntry[]):number{
-  if(!roster.length)return pokemonPoolProfile({strength:2,dexterity:2,vitality:2,special:2,insight:2});
-  const totals=roster.map(e=>pokemonPoolProfile(e.attrs,e.pokemonSkills));
+  if(!roster.length)return pokemonPoolProfile({strength:2,dexterity:2,vitality:2,special:2,insight:2},undefined,6);
+  const totals=roster.map(e=>pokemonPoolProfile(e.attrs,e.pokemonSkills,e.maxHp));
   return totals.reduce((a,b)=>a+b,0)/totals.length;
 }
 
@@ -992,14 +1001,22 @@ function trainerAvgPool(roster:BattleEntry[]):number{
    pools is what actually adds up to a fair fight, not any one of them
    alone. */
 function totalPool(roster:BattleEntry[]):number{
-  return roster.reduce((sum,e)=>sum+pokemonPoolProfile(e.attrs,e.pokemonSkills),0);
+  return roster.reduce((sum,e)=>sum+pokemonPoolProfile(e.attrs,e.pokemonSkills,e.maxHp),0);
+}
+
+/* A candidate's HP before any boost — species base HP plus whatever
+   Vitality it's carrying (post-Rank-upgrade or post-boost), matching the
+   exact formula addPokemon itself uses. */
+function pokemonMaxHp(candidate:PokemonEntry,attrs:AttrSet):number{
+  return candidate.baseHp+attrs.vitality;
 }
 
 function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   // Dice-pool gap is the dominant signal now — a candidate rolling notably
   // bigger or smaller pools than the trainer's own team is the real
   // difficulty, regardless of what Rank tier either side is nominally at.
-  let score=pokemonPoolProfile(pokemonRankAttrs(candidate))-trainerAvgPool(roster);
+  const rankAttrs=pokemonRankAttrs(candidate);
+  let score=pokemonPoolProfile(rankAttrs,undefined,pokemonMaxHp(candidate,rankAttrs))-trainerAvgPool(roster);
   if(roster.length){
     // Typing still nudges the read — a resisted attacker or an easy target
     // should skew the bucket a little even at an even pool size — but it's
@@ -1035,7 +1052,8 @@ function encounterBucket(score:number):EncounterDifficulty{
    trainer's own — sized to actually be a fair fight, not a fixed +2
    regardless of how big the real gap is. */
 function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
-  const gap=trainerAvgPool(roster)-pokemonPoolProfile(pokemonRankAttrs(candidate));
+  const rankAttrs=pokemonRankAttrs(candidate);
+  const gap=trainerAvgPool(roster)-pokemonPoolProfile(rankAttrs,undefined,pokemonMaxHp(candidate,rankAttrs));
   return Math.max(1,Math.min(8,Math.ceil(gap)));
 }
 
@@ -4109,6 +4127,20 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
                 <div style={{fontSize:6,color:"#C8E8E0",textAlign:"center"}}>
                   {randRoster.length?`Difficulty vs. ${randRoster.length} trainer Pokémon on the field.`:"No trainer Pokémon in this battle yet — difficulty assumes a Standard-rank team."}
                 </div>
+                {/* Matched dice pools alone don't make a fair fight — a
+                    single trainer Pokémon can take several actions in one
+                    round (extra actions cost rising WP, up to ~5), while
+                    each separate wild Pokémon only gets ONE reaction before
+                    it's spent. A same-pool 1-on-1 duel is fair; three
+                    same-pool singles against one many-action attacker isn't,
+                    since only the first hit on each of them can be
+                    contested. Add enough bodies (or enough HP on fewer of
+                    them) to outlast that, not just enough to match dice. */}
+                {randRoster.length>0&&(
+                  <div style={{fontSize:6,color:"#F8D030",textAlign:"center",lineHeight:1.4}}>
+                    ⚠ Matched dice pools ≠ a fair fight — a trainer mon can take several actions per round, but each wild add only gets one reaction. Add several, or make sure HP can outlast more than one hit.
+                  </div>
+                )}
                 <div>
                   <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>3. DIFFICULTY</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
