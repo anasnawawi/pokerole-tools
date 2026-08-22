@@ -98,18 +98,20 @@ function PixelCardFrame({ w, h, palette }: { w: number; h: number; palette: { ed
   );
 }
 
-/* HP bar: dark frame / white inner frame / grey empty track / colored fill —
+/* HP bar: dark outline / pale inner rim / dark empty track / colored fill —
    four flat layers, no rounded modern progress-bar treatment, fill width
-   computed straight from the live percentage. */
+   computed straight from the live percentage. Colors and layer order are the
+   reference spec's exact HP-bar construction, not the card frame's palette —
+   the bar is its own nested component, not a tint of the card it sits on. */
 function PixelHPBar({ pct, color }: { pct: number; color: string }) {
   const W = 110, H = 10;
   const trackX = 2, trackY = 2, trackW = W - 4, trackH = H - 4;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden
       style={{width:"100%",height:11,display:"block",flexShrink:1,minWidth:0}}>
-      <PixelRect x={0} y={0} w={W} h={H} corner={[1]} fill="#3D3C49"/>
-      <PixelRect x={1} y={1} w={W-2} h={H-2} corner={[1]} fill="#FFFFFF"/>
-      <rect x={trackX} y={trackY} width={trackW} height={trackH} fill="#6F7679" shapeRendering="crispEdges"/>
+      <PixelRect x={0} y={0} w={W} h={H} corner={[1]} fill="#45475F"/>
+      <PixelRect x={1} y={1} w={W-2} h={H-2} corner={[1]} fill="#C8D0C5"/>
+      <rect x={trackX} y={trackY} width={trackW} height={trackH} fill="#62656D" shapeRendering="crispEdges"/>
       <rect x={trackX} y={trackY} width={trackW*Math.max(0,Math.min(1,pct))} height={trackH} fill={color} shapeRendering="crispEdges"/>
     </svg>
   );
@@ -342,9 +344,10 @@ function EmptyRow({ dim }: { dim: boolean }) {
    so the down state stays inside the same system rather than introducing an
    unlisted color). */
 const CARD_PALETTE = {
-  // fill/stripe are the exact hex the reference screenshot was sampled at.
-  healthy:  { edge:"#3B5666", band:"#317E9C", fill:"#3993DF", highlight:"#7CE0DE", stripe:"#84C6DE" },
-  fainted:  { edge:"#3B5666", band:"#C16921", fill:"#DCAE56", highlight:"#E3E1BC", stripe:"#E3E1BC" },
+  // fill/stripe are the exact hex the reference screenshot was sampled at;
+  // edge/band/highlight are the reference spec's outer-frame layer stack.
+  healthy:  { edge:"#404861", band:"#40728A", fill:"#3993DF", highlight:"#83C6DE", stripe:"#84C6DE" },
+  fainted:  { edge:"#404861", band:"#C16921", fill:"#DCAE56", highlight:"#E3E1BC", stripe:"#E3E1BC" },
 };
 
 /* One plate per Pokémon, built as a pixel-grid panel rather than a CSS
@@ -368,45 +371,57 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
       title={`${v.name} — ${sheet.rank}${v.known?` — ${v.curHp}/${v.maxHp} HP`:""}`}
       aria-label={`${v.name}, ${sheet.rank}${v.known?`, ${v.curHp} of ${v.maxHp} HP`:""}${
         fainted?", fainted":v.statuses.length?`, ${v.statuses.join(", ")}`:""}`}
-      style={{position:"relative",display:"flex",alignItems:"center",gap:10,width:"100%",
-        textAlign:"left",padding:"8px 14px 8px 8px",cursor:"pointer",touchAction:"manipulation",
-        border:"none",borderRadius:0,color:"#FFFFFF",textShadow:"1px 1px 0 #14295C"}}>
+      style={{position:"relative",display:"flex",alignItems:"stretch",width:"100%",height:64,
+        textAlign:"left",padding:"0 10px 0 6px",cursor:"pointer",touchAction:"manipulation",
+        border:"none",borderRadius:0,color:"#FFFFFF",textShadow:"2px 2px 0 #59647A"}}>
 
-      <PixelCardFrame w={200} h={32} palette={palette}/>
+      <PixelCardFrame w={380} h={64} palette={palette}/>
 
-      {/* No backing circle — the game's own sprite floats directly on the
-          plate, slightly larger than the compact strip's tile. */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- local pixel
-          art at a fixed tiny size; next/image would resample and blur it. */}
-      <img src={`/sprites/pokemon/${sheet.number}.png`} alt="" width={44} height={44}
-        draggable={false} style={{position:"relative",flexShrink:0,imageRendering:"pixelated",
-          objectFit:"contain",filter:fainted?"grayscale(1) brightness(1.15)":undefined}}
-        onError={e=>{(e.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
+      {/* Sprite zone — the sprite floats directly on the plate rather than
+          sitting in its own bordered sub-card; it's allowed to overlap the
+          frame's edge slightly, the way the reference does. */}
+      <span style={{position:"relative",flex:"0 0 17%",display:"flex",
+        alignItems:"center",justifyContent:"center",minWidth:0}}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- local pixel
+            art at a fixed tiny size; next/image would resample and blur it. */}
+        <img src={`/sprites/pokemon/${sheet.number}.png`} alt="" width={52} height={52}
+          draggable={false} style={{imageRendering:"pixelated",objectFit:"contain",
+            filter:fainted?"grayscale(1) brightness(1.15)":undefined}}
+          onError={e=>{(e.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
+      </span>
 
-      <span style={{position:"relative",flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:5}}>
-        <span style={{display:"flex",alignItems:"baseline",gap:7}}>
-          <span style={{fontFamily:PIXEL,fontSize:11,flex:1,minWidth:0,
-            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
-          {sheet.isPartner&&<span title="Partner Pokémon" style={{fontSize:11,lineHeight:1}}>⭐</span>}
+      {/* Identity zone — name over a thin separator over the rank/status
+          row. The separator belongs to this zone only, not the full card
+          width, matching the reference's frame-as-divider rather than a
+          conventional full-bleed border-bottom. */}
+      <span style={{position:"relative",flex:"0 0 36%",minWidth:0,display:"flex",
+        flexDirection:"column",justifyContent:"center",gap:4,padding:"0 6px 0 2px"}}>
+        <span style={{fontFamily:PIXEL,fontSize:10,overflow:"hidden",
+          textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
+        <span style={{height:2,background:palette.stripe,opacity:0.85}}/>
+        <span style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+          <span style={{fontFamily:PIXEL,fontSize:8,color:"#E3E1BC",flexShrink:0}}>{sheet.rank}</span>
+          {sheet.isPartner&&<span title="Partner Pokémon" style={{fontSize:9,lineHeight:1}}>⭐</span>}
+          {fainted
+            ? <Chip label="FNT" bg="#8A1010" compact/>
+            : v.statuses.length > 0 &&
+              <Chip label={v.statuses[0].toUpperCase()} bg="#8A3C0A" compact
+                more={v.statuses.length>1?v.statuses.length-1:0}/>}
         </span>
-        <span style={{fontFamily:PIXEL,fontSize:8,color:"#E3E1BC"}}>{sheet.rank}</span>
+      </span>
 
-        <span style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontFamily:PIXEL,fontSize:7,flexShrink:0}}>HP</span>
+      {/* HP zone — label over bar, numbers right-aligned below. Its own
+          nested component (see PixelHPBar), not a tint of the card frame. */}
+      <span style={{position:"relative",flex:"1 1 auto",minWidth:0,display:"flex",
+        flexDirection:"column",justifyContent:"center",gap:3,padding:"0 2px"}}>
+        <span style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+          <span style={{fontFamily:PIXEL,fontSize:9,color:"#FFE04A",flexShrink:0}}>HP</span>
           <PixelHPBar pct={pct} color={hpColor}/>
-          <span style={{fontFamily:PIXEL,fontSize:10,fontWeight:700,
-            fontVariantNumeric:"tabular-nums",flexShrink:0}}>
-            {v.known ? `${v.curHp}/${v.maxHp}` : "—"}
-          </span>
         </span>
-
-        {(fainted || v.statuses.length > 0) && (
-          <span style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-            {fainted
-              ? <Chip label="FNT" bg="#8A1010" compact={false}/>
-              : v.statuses.map(s => <Chip key={s} label={s.toUpperCase()} bg="#8A3C0A" compact={false}/>)}
-          </span>
-        )}
+        <span style={{fontFamily:PIXEL,fontSize:10,fontWeight:700,textAlign:"right",
+          fontVariantNumeric:"tabular-nums"}}>
+          {v.known ? `${v.curHp}/${v.maxHp}` : "—"}
+        </span>
       </span>
     </button>
   );
