@@ -79,11 +79,13 @@ function PixelCardFrame({ w, h, palette }: { w: number; h: number; palette: { ed
         <clipPath id={clipId}>
           {fillBands.map((b,i) => <rect key={i} x={b.x} y={b.y} width={b.width} height={b.height}/>)}
         </clipPath>
-        {/* 1x3 tile: one light row, two base rows, repeating straight down —
-            no horizontal offset between tiles, so the lines stay perfectly
-            horizontal rather than staircasing. */}
-        <pattern id={patId} width={1} height={3} patternUnits="userSpaceOnUse">
-          <rect width={1} height={3} fill={palette.fill}/>
+        {/* One light row every 10 base rows — a handful of sparse scanline
+            bands like the reference, not a continuous scanline texture (a
+            first pass at 1-in-3 rows read as "too many stripes" once real
+            content sat on top of it). No horizontal offset between tiles,
+            so the lines stay perfectly horizontal rather than staircasing. */}
+        <pattern id={patId} width={1} height={10} patternUnits="userSpaceOnUse">
+          <rect width={1} height={10} fill={palette.fill}/>
           <rect x={0} y={0} width={1} height={1} fill={palette.stripe} shapeRendering="crispEdges"/>
         </pattern>
       </defs>
@@ -363,19 +365,20 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
   const pct = v.maxHp > 0 ? Math.max(0, Math.min(1, v.curHp / v.maxHp)) : 1;
   // The spec's exact HP tri-color, not the app's usual green/amber/red.
   const hpColor = pct > 0.5 ? "#62D34A" : pct > 0.25 ? "#F0C52D" : "#E97830";
+  const wpPct = v.maxWill > 0 ? Math.max(0, Math.min(1, v.curWill / v.maxWill)) : 1;
   const fainted = v.known && v.curHp <= 0;
   const palette = fainted ? CARD_PALETTE.fainted : CARD_PALETTE.healthy;
 
   return (
     <button onClick={onClick}
-      title={`${v.name} — ${sheet.rank}${v.known?` — ${v.curHp}/${v.maxHp} HP`:""}`}
-      aria-label={`${v.name}, ${sheet.rank}${v.known?`, ${v.curHp} of ${v.maxHp} HP`:""}${
+      title={`${v.name} — ${sheet.rank}${v.known?` — ${v.curHp}/${v.maxHp} HP, ${v.curWill}/${v.maxWill} WP`:""}`}
+      aria-label={`${v.name}, ${sheet.rank}${v.known?`, ${v.curHp} of ${v.maxHp} HP, ${v.curWill} of ${v.maxWill} WP`:""}${
         fainted?", fainted":v.statuses.length?`, ${v.statuses.join(", ")}`:""}`}
-      style={{position:"relative",display:"flex",alignItems:"stretch",width:"100%",height:64,
+      style={{position:"relative",display:"flex",alignItems:"stretch",width:"100%",height:76,
         textAlign:"left",padding:"0 10px 0 6px",cursor:"pointer",touchAction:"manipulation",
         border:"none",borderRadius:0,color:"#FFFFFF",textShadow:"2px 2px 0 #59647A"}}>
 
-      <PixelCardFrame w={380} h={64} palette={palette}/>
+      <PixelCardFrame w={380} h={76} palette={palette}/>
 
       {/* Sprite zone — the sprite floats directly on the plate rather than
           sitting in its own bordered sub-card; it's allowed to overlap the
@@ -384,7 +387,7 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
         alignItems:"center",justifyContent:"center",minWidth:0}}>
         {/* eslint-disable-next-line @next/next/no-img-element -- local pixel
             art at a fixed tiny size; next/image would resample and blur it. */}
-        <img src={`/sprites/pokemon/${sheet.number}.png`} alt="" width={52} height={52}
+        <img src={`/sprites/pokemon/${sheet.number}.png`} alt="" width={56} height={56}
           draggable={false} style={{imageRendering:"pixelated",objectFit:"contain",
             filter:fainted?"grayscale(1) brightness(1.15)":undefined}}
           onError={e=>{(e.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
@@ -395,7 +398,7 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
           width, matching the reference's frame-as-divider rather than a
           conventional full-bleed border-bottom. */}
       <span style={{position:"relative",flex:"0 0 36%",minWidth:0,display:"flex",
-        flexDirection:"column",justifyContent:"center",gap:4,padding:"0 6px 0 2px"}}>
+        flexDirection:"column",justifyContent:"center",gap:5,padding:"0 6px 0 2px"}}>
         <span style={{fontFamily:PIXEL,fontSize:10,overflow:"hidden",
           textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
         <span style={{height:2,background:palette.stripe,opacity:0.85}}/>
@@ -410,17 +413,28 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
         </span>
       </span>
 
-      {/* HP zone — label over bar, numbers right-aligned below. Its own
-          nested component (see PixelHPBar), not a tint of the card frame. */}
+      {/* HP/WP zone — one stat per line, label + bar + numbers all inline,
+          matching how the battle tracker's own nameplate stacks the two
+          bars (see SceneNameplate in battle-tracker/page.tsx). Each bar is
+          its own nested component (see PixelHPBar), not a tint of the card
+          frame. */}
       <span style={{position:"relative",flex:"1 1 auto",minWidth:0,display:"flex",
-        flexDirection:"column",justifyContent:"center",gap:3,padding:"0 2px"}}>
+        flexDirection:"column",justifyContent:"center",gap:4,padding:"0 2px"}}>
         <span style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
-          <span style={{fontFamily:PIXEL,fontSize:9,color:"#FFE04A",flexShrink:0}}>HP</span>
+          <span style={{fontFamily:PIXEL,fontSize:9,color:"#FFE04A",flexShrink:0,width:16}}>HP</span>
           <PixelHPBar pct={pct} color={hpColor}/>
+          <span style={{fontFamily:PIXEL,fontSize:9,fontWeight:700,flexShrink:0,
+            fontVariantNumeric:"tabular-nums",minWidth:38,textAlign:"right"}}>
+            {v.known ? `${v.curHp}/${v.maxHp}` : "—"}
+          </span>
         </span>
-        <span style={{fontFamily:PIXEL,fontSize:10,fontWeight:700,textAlign:"right",
-          fontVariantNumeric:"tabular-nums"}}>
-          {v.known ? `${v.curHp}/${v.maxHp}` : "—"}
+        <span style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+          <span style={{fontFamily:PIXEL,fontSize:9,color:"#9FE8FF",flexShrink:0,width:16}}>WP</span>
+          <PixelHPBar pct={wpPct} color="#4878F8"/>
+          <span style={{fontFamily:PIXEL,fontSize:9,fontWeight:700,flexShrink:0,
+            fontVariantNumeric:"tabular-nums",minWidth:38,textAlign:"right"}}>
+            {v.known ? `${v.curWill}/${v.maxWill}` : "—"}
+          </span>
         </span>
       </span>
     </button>
