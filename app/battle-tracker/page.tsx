@@ -4126,11 +4126,13 @@ export default function BattleTrackerPage(){
   const onFieldEnemy=focusedOther;
   const focusedTargetIdSet=useMemo(()=>new Set(sceneTargetIds),[sceneTargetIds]);
   /* Everyone in the fight who isn't one of the two mons the turn is about.
-     Split by side so they stand on the right half of the field: your own
-     behind the acting slot, the opposition behind the focused slot. */
+     Split by whether they belong to a trainer's roster, not by the side
+     tag — a wild/unlinked Pokémon stands with the opposition regardless of
+     what side it's tagged, and only an actual trainer's own Pokémon stands
+     on the near (player) side. */
   const benchEnemies=useMemo(()=>otherEntries.filter(e=>e.id!==focusedOther?.id),[otherEntries,focusedOther]);
-  const benchFar=useMemo(()=>benchEnemies.filter(e=>e.side!=="player"),[benchEnemies]);
-  const benchNear=useMemo(()=>benchEnemies.filter(e=>e.side==="player"),[benchEnemies]);
+  const benchFar=useMemo(()=>benchEnemies.filter(e=>!e.linkedTrainerId),[benchEnemies]);
+  const benchNear=useMemo(()=>benchEnemies.filter(e=>!!e.linkedTrainerId),[benchEnemies]);
 
   // MovePopup handlers at the scene level (mirror BattleCard's local versions).
   const sApplyDmg=(tid:string,dmg:number)=>setEntries(prev=>prev.map(e=>e.id===tid?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e));
@@ -4747,8 +4749,13 @@ export default function BattleTrackerPage(){
                        row-reverse renders that first — the enemy up next — at the
                        lane's right edge, nearest the focused enemy sprite, with
                        slower ones trailing off to the left; a plain row would have
-                       put the next-up mon farthest away instead. */
-                    <div style={{position:"absolute",top:118,left:8,width:"46%",zIndex:4,
+                       put the next-up mon farthest away instead.
+
+                       zIndex:1, under the active enemy FieldMon's zIndex:2 — on a
+                       squeezed stage this lane can reach under the sprite's
+                       footprint, and it should tuck behind the active mon there
+                       rather than float on top of it. */
+                    <div style={{position:"absolute",top:118,left:8,width:"46%",zIndex:1,
                       display:"flex",flexDirection:"row-reverse",alignItems:"flex-end",justifyContent:"flex-start",
                       gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
                       {benchFar.map(e=>(
@@ -4758,9 +4765,11 @@ export default function BattleTrackerPage(){
                       ))}
                     </div>
                   )}
-                  {/* Your own side, behind the acting slot */}
+                  {/* Your own side, behind the acting slot. zIndex:1 under the
+                      active player FieldMon's zIndex:2 — same reasoning as
+                      benchFar above. */}
                   {mounted&&benchNear.length>0&&(
-                    <div style={{position:"absolute",bottom:"calc(9% + 116px)",right:8,width:"46%",zIndex:4,
+                    <div style={{position:"absolute",bottom:"calc(9% + 116px)",right:8,width:"46%",zIndex:1,
                       display:"flex",alignItems:"flex-end",justifyContent:"flex-end",
                       gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
                       {benchNear.map(e=>(
