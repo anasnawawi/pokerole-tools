@@ -1046,7 +1046,29 @@ function trainerBestOffense(roster:BattleEntry[]):number{
 // A same-tier 1-on-1 that ends in a hit or two doesn't read as "Average" no
 // matter how matched the dice pools looked on paper — this is the number
 // of hits a candidate should be able to take before it's a fair fight.
-const FAIR_HITS_TO_DEFEAT=3;
+//
+// 3 wasn't enough: real playtesting kept landing the same result even
+// against a "Hard"-rated single opponent — a trainer routinely gets 4-6
+// actions in one round (extra actions cost rising WP, not a hard cap), so
+// "survives 3 generic hits" was never actually surviving one full round
+// against a similarly-built attacker. This targets surviving a realistic
+// round's worth of actions instead of an arbitrary small number of hits.
+const FAIR_HITS_TO_DEFEAT=5;
+
+/* How the trainer's own opening Accuracy Roll (Phase 1, gated by actReq —
+   needs 1+ on action 1, 2+ on action 2, ...) stacks up against the
+   candidate's Evasion pool, the one roll a defender can actually contest
+   (its single reaction for the round). Positive = the candidate plausibly
+   wins that contest and the trainer whiffs early; negative = it goes down
+   swinging on the first real attempt. `pool/2` approximates a dice pool's
+   expected successes (~half a d6 pool succeeds on 4-6), matching the
+   estimate style already used by expectedHitsToDefeat. An Average fight
+   should be landed by the trainer's 3rd action; a Hard one may still be
+   missed on the 2nd — translated here as how much the candidate's evasion
+   is expected to out-roll the trainer's own accuracy pool. */
+function evasionEdge(trainerAccPool:number,candidateEvasionPool:number):number{
+  return Math.round(candidateEvasionPool/2)-Math.round(trainerAccPool/2);
+}
 
 function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   // Dice-pool gap is the dominant signal now — a candidate rolling notably
@@ -1055,12 +1077,16 @@ function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   const rankAttrs=pokemonRankAttrs(candidate);
   const candHp=pokemonMaxHp(candidate,rankAttrs);
   let score=pokemonPoolProfile(rankAttrs,undefined,candHp)-trainerAvgPool(roster);
+  const trainerAcc=trainerBestOffense(roster);
   // Survivability, scored directly rather than folded into the pool
   // average — see expectedHitsToDefeat's comment for why the average
   // alone missed this.
   const candDef=(rankAttrs.vitality+rankAttrs.insight)/2;
-  const hits=expectedHitsToDefeat(trainerBestOffense(roster),candDef,candHp);
+  const hits=expectedHitsToDefeat(trainerAcc,candDef,candHp);
   score+=(hits-FAIR_HITS_TO_DEFEAT)*1.2;
+  // Whether the trainer's own hit even lands at all — see evasionEdge.
+  const candEvasion=rankAttrs.dexterity+1;
+  score+=evasionEdge(trainerAcc,candEvasion)*1.3;
   if(roster.length){
     // Typing still nudges the read — a resisted attacker or an easy target
     // should skew the bucket a little even at an even pool size — but it's
@@ -1094,12 +1120,12 @@ function encounterBucket(score:number):EncounterDifficulty{
    on top of the candidate's already-Rank-appropriate attributes
    (pokemonRankAttrs) that would bring its pool average up to the
    trainer's own — sized to actually be a fair fight, not a fixed +2
-   regardless of how big the real gap is. Also checked against
-   expectedHitsToDefeat directly: a boost that closes the pool-average gap
-   can still leave a paper-thin Defense/HP behind (the boost raises Vitality
-   the same flat amount as every other attribute, which may not be enough
-   against a real damage roll) — the bigger of the two is used, so whichever
-   check is stricter for this particular matchup wins. */
+   regardless of how big the real gap is. Checked three ways — pool
+   average, expectedHitsToDefeat, and evasionEdge — since a boost sized
+   for one can still leave another short (it raises every attribute by
+   the same flat amount, so closing the accuracy gap doesn't guarantee
+   Defense/HP or Evasion came along for the ride); the largest of the
+   three wins, whichever check is strictest for this particular matchup. */
 function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
   const rankAttrs=pokemonRankAttrs(candidate);
   const poolGap=trainerAvgPool(roster)-pokemonPoolProfile(rankAttrs,undefined,pokemonMaxHp(candidate,rankAttrs));
@@ -1112,7 +1138,12 @@ function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
     if(expectedHitsToDefeat(offense,boostedDef,boostedHp)>=FAIR_HITS_TO_DEFEAT)break;
     survBoost++;
   }
-  return Math.max(1,Math.min(8,Math.max(poolBoost,survBoost)));
+  let evasionBoost=0;
+  while(evasionBoost<8){
+    if(evasionEdge(offense,rankAttrs.dexterity+evasionBoost+1)>=0)break;
+    evasionBoost++;
+  }
+  return Math.max(1,Math.min(8,Math.max(poolBoost,survBoost,evasionBoost)));
 }
 
 const ENCOUNTER_DIFFICULTY_COLORS:Record<EncounterDifficulty,string>={Easy:"#00d4aa",Average:"#f8d030",Hard:"#ff4757"};
@@ -3748,7 +3779,13 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
   const incrementAction=(id:string,isReaction?:boolean)=>{
     const t=allEntries.find(e=>e.id===id)||entry;
     if(isReaction){onUpdate(id,{reactionUsed:true});}
-    else{onUpdate(id,{actionCount:Math.min(5,(allEntries.find(e=>e.id===id)||entry).actionCount+1)});}
+    // No cap here — actReq's own Math.min(actionCount,4) already plateaus
+    // the required-hits difficulty at 5+ past the 5th action. Capping the
+    // count itself too meant the "Action #N" label froze at #6 forever
+    // (5+1) no matter how many more actions actually got taken that round,
+    // while nothing ever stopped FIGHT from still being clickable — the
+    // counter looked stuck even though play kept going past it.
+    else{onUpdate(id,{actionCount:t.actionCount+1});}
   };
   const spendWP=(id:string,amt:number)=>{const t=allEntries.find(e=>e.id===id)||entry;onUpdate(id,{currentWill:Math.max(0,t.currentWill-amt)});};
 
@@ -4600,7 +4637,8 @@ export default function BattleTrackerPage(){
   // MovePopup handlers at the scene level (mirror BattleCard's local versions).
   const sApplyDmg=(tid:string,dmg:number)=>setEntries(prev=>prev.map(e=>e.id===tid?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e));
   const sApplyEffect=(tid:string,attr:string,amount:number,src:string,appliedBy?:string)=>setEntries(prev=>prev.map(t=>{if(t.id!==tid)return t;const nm=[...t.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx]={...nm[idx],amount:nm[idx].amount+amount,appliedBy:appliedBy??nm[idx].appliedBy};else nm.push({source:src,attr,amount,appliedBy});return{...t,statMods:nm};}));
-  const sIncrementAction=(id:string,isReaction?:boolean)=>setEntries(prev=>prev.map(e=>e.id===id?(isReaction?{...e,reactionUsed:true}:{...e,actionCount:Math.min(5,e.actionCount+1)}):e));
+  // No cap here — see incrementAction's comment in BattleCard for why.
+  const sIncrementAction=(id:string,isReaction?:boolean)=>setEntries(prev=>prev.map(e=>e.id===id?(isReaction?{...e,reactionUsed:true}:{...e,actionCount:e.actionCount+1}):e));
   const sSpendWP=(id:string,amt:number)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e));
   const sApplySpecial=(id:string,u:Partial<BattleEntry>)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e));
 
@@ -4836,7 +4874,7 @@ export default function BattleTrackerPage(){
     <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#181818",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
       {showAddModal&&<AddPokemonModal onAdd={(p,side,boost,baseAttrs)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side,boost,baseAttrs)} onClose={()=>setShowAddModal(false)} entries={entries}/>}
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
-      {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
+      {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:e.actionCount+1}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
       {/* Battle toolbar — wraps onto extra rows rather than scrolling, so
           every control (INI, EOR, END, GM, ...) stays visible and reachable
