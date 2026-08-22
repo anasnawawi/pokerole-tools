@@ -2951,8 +2951,13 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   silently skip whichever one the GM didn't click. Only
                   hides when there's actually a damage flow to defer to —
                   a support move with a stat effect (no damage section at
-                  all) still needs this as its one and only apply button. */}
-              {!(statFx.length>0&&move.category!=="Support"&&targets.length>0)&&(
+                  all) still needs this as its one and only apply button.
+                  Same logic once Roll Damage has actually been clicked for
+                  any target, even without a stat effect: applyDmg already
+                  increments the action and closes the popup on its own, so
+                  leaving this one up too reads as a second, unnecessary way
+                  to finish the same move. */}
+              {!(statFx.length>0&&move.category!=="Support"&&targets.length>0)&&!targets.some(tid=>!!dmgResults[tid])&&(
                 <button disabled={isChanceStatFx&&statFxChanceRoll==null} onClick={()=>{
                   // Apply all stat effects, unless a required chance die was never rolled/failed
                   if(statFxReady)statFx.forEach(se=>{
