@@ -1490,6 +1490,13 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const resolvedAccSkill=resolveAccSkill(move,attacker.pokemonSkills,accSkillOverride??undefined);
   const accPool=calcAccPool(move,attrs,weather,attacker.pokemonSkills,accAttrOverride??undefined,accSkillOverride??undefined);
   const canAct=preRollDone?.canAct??false;
+  /* A target choosing Evasion rolls the attacker's accuracy itself, inline
+     in its own reaction box, before Phase 1 ever runs — the "① Accuracy
+     Roll" section below used to have no idea that happened and still
+     invited a second, redundant roll even after "Couldn't Dodge" already
+     showed the attacker's result. Falling back to that reaction's roll
+     here lets Phase 1 display what already happened instead of re-asking. */
+  const reactionAtkRoll=Object.values(defReactions).find(r=>r.type==="evasion"&&r.atkRoll)?.atkRoll??null;
 
   // Disobedience: ONLY for player side, and never blocks rolls — just a warning
   const isPlayer=attacker.side==="player";
@@ -1984,7 +1991,17 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {accPool<=0&&<div style={{background:"rgba(255,71,87,0.12)",border:"1px solid #ff475740",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Dice pool is 0 — cannot roll. Action is impossible.</div>}
               {accPool>0&&accPool<actReq&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Pool ({accPool}d) is less than required hits ({actReq}) — success is very unlikely.</div>}
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <button onClick={()=>setAccResult(rollDice(accPool))} disabled={accPool<=0} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:accPool<=0?"#5a6080":"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:accPool<=0?"default":"pointer"}}>🎲 Roll Accuracy ({accPool}d)</button>
+                {/* A target's Evasion reaction already rolled this exact
+                    accuracy check for itself — show that result instead of
+                    a second live "Roll Accuracy" button asking to redo it.
+                    No HIT/MISS label here: against an evading target, the
+                    "✓ DODGED"/"✗ Couldn't Dodge" banner above is what
+                    actually decided the outcome, not this roll vs actReq. */}
+                {!accResult&&reactionAtkRoll?(
+                  <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>[{reactionAtkRoll.rolls.join(",")}]={reactionAtkRoll.successes} <span style={{fontSize:9,color:"#5a6080",fontWeight:400}}>(already rolled — see Evasion Check above)</span></span>
+                ):(
+                  <button onClick={()=>setAccResult(rollDice(accPool))} disabled={accPool<=0} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:accPool<=0?"#5a6080":"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:accPool<=0?"default":"pointer"}}>🎲 Roll Accuracy ({accPool}d)</button>
+                )}
                 {accResult&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:accResult.successes>=actReq?"#00d4aa":"#ff4757"}}>[{accResult.rolls.join(",")}]={accResult.successes} {accResult.successes>=actReq?"✓ HIT":"✗ MISS"}</span>}
               </div>
               {targets.filter(tid=>{const t=allEntries.find(e=>e.id===tid);return t&&t.reactionUsed;}).map(tid=>{const t=allEntries.find(e=>e.id===tid)!;return<div key={tid} style={{marginTop:5,background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:10,color:"#ff4757"}}>⚠ {nameOf(t,allEntries)} has already used their reaction — Clash &amp; Evasion unavailable.</div>;})}
