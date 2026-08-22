@@ -208,7 +208,11 @@ function PipRow({ label, value, max, onChange, locked, base, dot, training, onTr
   const total = value + (training ?? 0);
   const totalMax = max;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+    // flexWrap so a Partner's stretched-to-10 pip row (attrLimits maxes out
+    // at 10 once isPartner, vs. the usual species cap) wraps onto its own
+    // line instead of pushing the +/- buttons and training controls out
+    // past the column's edge and over whatever sits beside it.
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7, flexWrap: "wrap", rowGap: 4 }}>
       <span style={{ width: 76, flexShrink: 0 }}>
         <span title={hint} style={{ display: "block", fontSize: 11, color: "#383838",
           cursor: hint ? "help" : undefined,
