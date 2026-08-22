@@ -4565,23 +4565,32 @@ export default function BattleTrackerPage(){
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
                       onFieldPlayer&&onFieldPlayer.moves.length>0&&onFieldPlayer.currentWill>0?(
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"1fr 1fr",gap:5,height:"100%"}}>
+                        <div style={{display:"grid",
+                          gridTemplateColumns:isNarrow?"1fr":"1fr 1fr",
+                          gridTemplateRows:isNarrow?"repeat(4,1fr)":"1fr 1fr",gap:5,height:"100%"}}>
                           {onFieldPlayer.moves.slice(0,4).map((m,i)=>{
                             const stab=onFieldPlayer.pokemon.types.includes(m.type as PokemonType);
                             return(
                               /* Gen 3 move select: entries sit bare inside the one
                                  window and are marked by a ▶ cursor, rather than
-                                 each being its own bordered, drop-shadowed box. */
+                                 each being its own bordered, drop-shadowed box.
+                                 Narrow is a single column, so each move reads as
+                                 one list row (name left, type/star/priority
+                                 right) instead of the 2x2 grid's stacked cell. */
                               <button key={i} onClick={()=>{setScenePopup(m);setSceneTargetIds([]);setSceneMsg(`${(nameOf(onFieldPlayer,entries)).toUpperCase()} used ${m.name.toUpperCase()}!`);setMenuMode("root");}}
-                                style={{display:"flex",flexDirection:"column",justifyContent:"space-between",gap:3,padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
+                                style={{display:"flex",
+                                  flexDirection:isNarrow?"row":"column",
+                                  alignItems:isNarrow?"flex-start":"stretch",
+                                  justifyContent:"space-between",gap:isNarrow?6:3,
+                                  padding:"4px 4px 4px 2px",background:"transparent",border:"none",borderRadius:3,cursor:"pointer",textAlign:"left",minHeight:0,overflow:"hidden"}}
                                 onMouseEnter={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="#E8D8F8";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="#8058A8";}}
                                 onMouseLeave={e=>{const t=e.currentTarget as HTMLButtonElement;t.style.background="transparent";t.querySelector<HTMLElement>("[data-cursor]")!.style.color="transparent";}}>
-                                <span style={{display:"flex",alignItems:"flex-start",gap:4,minWidth:0}}>
+                                <span style={{display:"flex",alignItems:"flex-start",gap:4,minWidth:0,flex:isNarrow?1:undefined}}>
                                   {/* Cursor keeps its width when hidden so names never shift */}
                                   <span aria-hidden data-cursor style={{fontSize:"clamp(9px,1.3vw,12px)",color:"transparent",fontFamily:"'Press Start 2P',monospace",flexShrink:0,lineHeight:1.35}}>▶</span>
-                                  <span style={{fontSize:"clamp(9px,1.3vw,12px)",fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35}}>{m.name}</span>
+                                  <span style={{fontSize:"clamp(9px,1.3vw,12px)",fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35,minWidth:0}}>{m.name}</span>
                                 </span>
-                                <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0,alignSelf:"flex-end"}}><TypeBadge type={m.type as PokemonType}/>{stab&&<span style={{fontSize:8,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:8,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
+                                <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0,alignSelf:isNarrow?"flex-start":"flex-end"}}><TypeBadge type={m.type as PokemonType}/>{stab&&<span style={{fontSize:8,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:8,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
                               </button>
                             );
                           })}
