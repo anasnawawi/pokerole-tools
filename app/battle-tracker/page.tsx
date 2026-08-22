@@ -898,30 +898,52 @@ function getTypeMult(mt:PokemonType,dts:PokemonType[]):{label:string;color:strin
 }
 
 // ── Random encounter difficulty ─────────────────────────────────────────────
-/* Approximates "how tough is this species for the trainer's own team right
-   now" — there's no formal CR system in PokeRole, so this leans on the two
-   signals that actually exist in the data: Rank tier (a real proxy for
-   overall power — see RANK_BONUSES) and type matchups against every
-   Pokémon the trainer currently has linked in this battle. Not meant to be
-   exact, just a useful sort into three buckets for the random-encounter
-   picker. */
+/* Rank tier alone was a bad proxy for "how tough is this fight" — a heavily
+   trained/boosted Pokémon can have dice pools far above its Rank's usual
+   range, and a same-Rank wild species with untouched base stats is no real
+   match for it even though the old Rank-distance score treated them as
+   evenly matched. This instead compares the actual dice pools both sides
+   roll in combat: Physical/Special attack, Evasion, Clash, and both
+   defenses, averaged into one "how big are this thing's dice" number. */
 type EncounterDifficulty="Easy"|"Average"|"Hard";
+
+/* A species that isn't in the battle yet has no assigned skill ranks — a
+   fresh wild add's skills default to 1 across the board (see addPokemon's
+   own fallback), so that default is baked in here rather than guessed, to
+   keep a candidate's profile matching what actually lands in the roster. */
+function pokemonPoolProfile(attrs:AttrSet,skills?:Partial<PokemonSkills>):number{
+  const sk=(k:keyof PokemonSkills)=>skills?.[k]??1;
+  const physAtk=attrs.strength+sk("brawl");
+  const specAtk=attrs.special+sk("channel");
+  const evasion=attrs.dexterity+sk("evasion");
+  const clash=attrs.strength+sk("clash");
+  const physDef=attrs.vitality;
+  const specDef=attrs.insight;
+  return (physAtk+specAtk+evasion+clash+physDef+specDef)/6;
+}
 
 function trainerRoster(entries:BattleEntry[]):BattleEntry[]{
   return entries.filter(e=>e.linkedTrainerId);
 }
 
-function trainerAvgRankIdx(roster:BattleEntry[]):number{
-  if(!roster.length)return RANK_ORDER.indexOf("Standard");
-  const idxs=roster.map(e=>Math.max(0,RANK_ORDER.indexOf(e.pokemon.suggestedRank)));
-  return idxs.reduce((a,b)=>a+b,0)/idxs.length;
+/* No trainer Pokémon on the field yet to compare against — falls back to a
+   plain Rookie-ish baseline (2 in every attribute, skill 1) rather than
+   refusing to score at all. */
+function trainerAvgPool(roster:BattleEntry[]):number{
+  if(!roster.length)return pokemonPoolProfile({strength:2,dexterity:2,vitality:2,special:2,insight:2});
+  const totals=roster.map(e=>pokemonPoolProfile(e.attrs,e.pokemonSkills));
+  return totals.reduce((a,b)=>a+b,0)/totals.length;
 }
 
-function encounterScore(candidate:PokemonEntry,targetRankIdx:number,roster:BattleEntry[]):number{
-  // Rank gap dominates — two tiers above the trainer's own average is a
-  // real fight regardless of typing.
-  let score=(targetRankIdx-trainerAvgRankIdx(roster))*2;
+function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
+  // Dice-pool gap is the dominant signal now — a candidate rolling notably
+  // bigger or smaller pools than the trainer's own team is the real
+  // difficulty, regardless of what Rank tier either side is nominally at.
+  let score=pokemonPoolProfile(candidate.attributes)-trainerAvgPool(roster);
   if(roster.length){
+    // Typing still nudges the read — a resisted attacker or an easy target
+    // should skew the bucket a little even at an even pool size — but it's
+    // a minor adjustment on top of the pool comparison, not the main driver.
     let typeSum=0,typeCount=0;
     roster.forEach(e=>{
       e.pokemon.types.forEach(trainerType=>{
@@ -938,13 +960,22 @@ function encounterScore(candidate:PokemonEntry,targetRankIdx:number,roster:Battl
         });
       });
     });
-    if(typeCount)score+=(typeSum/typeCount)*4;
+    if(typeCount)score+=(typeSum/typeCount)*1.5;
   }
   return score;
 }
 
 function encounterBucket(score:number):EncounterDifficulty{
-  return score<=-1.25?"Easy":score>=1.25?"Hard":"Average";
+  return score<=-1.5?"Easy":score>=1.5?"Hard":"Average";
+}
+
+/* Flat attribute boost (same mechanism the "boosted" add already applies)
+   that would bring this candidate's pool average up to the trainer's own —
+   sized to actually be a fair fight, not a fixed +2 regardless of how big
+   the real gap is. */
+function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
+  const gap=trainerAvgPool(roster)-pokemonPoolProfile(candidate.attributes);
+  return Math.max(1,Math.min(8,Math.ceil(gap)));
 }
 
 const ENCOUNTER_DIFFICULTY_COLORS:Record<EncounterDifficulty,string>={Easy:"#00d4aa",Average:"#f8d030",Hard:"#ff4757"};
@@ -3876,12 +3907,15 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
     if(!randRank||!randHabitat)return null;
     const allHabTypes=[...randHabitat.commonTypes,...randHabitat.uncommonTypes,...randHabitat.rareTypes];
     const candidates=POKEMON.filter(p=>p.suggestedRank===randRank&&p.types.some(t=>allHabTypes.includes(t)));
-    const targetIdx=RANK_ORDER.indexOf(randRank);
-    const scored=candidates.map(p=>({p,score:encounterScore(p,targetIdx,randRoster)}));
+    const scored=candidates.map(p=>({p,score:encounterScore(p,randRoster)}));
     const easy=scored.filter(s=>encounterBucket(s.score)==="Easy").sort((a,b)=>a.score-b.score);
     const average=scored.filter(s=>encounterBucket(s.score)==="Average").sort((a,b)=>a.score-b.score);
     const hard=scored.filter(s=>encounterBucket(s.score)==="Hard").sort((a,b)=>b.score-a.score);
-    const boosted=[...easy,...average].sort((a,b)=>b.score-a.score).slice(0,8);
+    // Boost amount is sized per-candidate to actually close the gap to the
+    // trainer's own dice pools, not a flat +2 — a species that's only
+    // slightly behind needs a lot less help than one that's way behind.
+    const boosted=[...easy,...average].sort((a,b)=>b.score-a.score).slice(0,8)
+      .map(s=>({...s,boost:boostToMatch(s.p,randRoster)}));
     return{easy,average,hard,boosted};
   },[randRank,randHabitat,randRoster]);
   const sideColor={player:"#2858C0",enemy:"#D82808",neutral:"#686858"}[side];
@@ -4013,8 +4047,10 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
                 </div>
                 <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
                   {randDifficulty?(
-                    (randDifficulty==="Boosted"?randGroups.boosted:randGroups[randDifficulty==="Easy"?"easy":randDifficulty==="Average"?"average":"hard"]).map(({p})=>
-                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p} boost={randDifficulty==="Boosted"?2:undefined}/>
+                    randDifficulty==="Boosted"?
+                      randGroups.boosted.map(({p,boost})=><ResultRow key={`Boosted-${p.number}-${p.name}`} p={p} boost={boost}/>)
+                    :randGroups[randDifficulty==="Easy"?"easy":randDifficulty==="Average"?"average":"hard"].map(({p})=>
+                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p}/>
                     )
                   ):(
                     <div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>Pick a difficulty above to see matching Pokémon.</div>
