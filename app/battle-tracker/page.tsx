@@ -1518,6 +1518,13 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const [accResult,setAccResult]=useState<{rolls:number[];successes:number}|null>(null);
   const [dmgResults,setDmgResults]=useState<Record<string,{rolls:number[];successes:number}>>({});
   const [applied,setApplied]=useState<Set<string>>(new Set());
+  // "Roll 1 Chance Die to increase/reduce..." — a stat effect worded this
+  // way isn't guaranteed the way a dedicated support move's (Growl,
+  // Harden) is; it needs its own die roll first, same as inflicting a
+  // status does. Tracked separately from dmgResults since it isn't tied to
+  // any one target — it governs whether the move's stat effect triggers
+  // at all, once, for the whole move.
+  const [statFxChanceRoll,setStatFxChanceRoll]=useState<{rolls:number[];successes:number}|null>(null);
   // Each step (pick a target, roll accuracy, roll damage) reveals the next
   // section below the fold in the inline (mobile) layout, where the panel's
   // own scroll area is short — nothing scrolled there automatically, so the
@@ -1685,7 +1692,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     const dr=dmgResults[tid];if(!t||!dr)return;
     if(isSelf){
       onApplyDmg(tid,dr.successes);
-      if(applied.size===0)statFx.forEach(se=>{if(se.toSelf)onApplyEffect(attacker.id,se.attr,se.amount,move.name,nameOf(attacker,allEntries));});
+      if(applied.size===0&&statFxReady)statFx.forEach(se=>{if(se.toSelf)onApplyEffect(attacker.id,se.attr,se.amount,move.name,nameOf(attacker,allEntries));});
       setApplied(p=>new Set([...p,tid]));return;
     }
     const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);
@@ -1708,7 +1715,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
        pre-click set here); target-directed effects fire once per target,
        scoped to just this one, so a multi-target hit doesn't reapply a
        per-target debuff onto every other target each time. */
-    statFx.forEach(se=>{
+    if(statFxReady)statFx.forEach(se=>{
       if(se.toSelf){if(applied.size===0)onApplyEffect(attacker.id,se.attr,se.amount,move.name,nameOf(attacker,allEntries));}
       else if(!isSelf)onApplyEffect(tid,se.attr,se.amount,move.name,nameOf(attacker,allEntries));
     });
@@ -1755,6 +1762,13 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   if(el.includes("increase")&&el.includes("special")&&!el.includes("lower"))statFx.push({attr:"special",amount:1,label:"Spc +1",toSelf:selfApply});
   if(el.includes("increase")&&el.includes("sp. def")&&!el.includes("lower"))statFx.push({attr:"insight",amount:1,label:"Sp.Def +1",toSelf:true});
   if(el.includes("increase")&&el.includes("evasion")&&!el.includes("lower"))statFx.push({attr:"dexterity",amount:1,label:"Evasion +1",toSelf:true});
+  /* "Roll 1 Chance Die to increase/reduce..." (Metal Claw, Aurora Beam,
+     Ancient Power, Crunch, ...) is not guaranteed the way a dedicated
+     support move's stat change is (Growl, Harden, Swords Dance never use
+     this wording, and always land) — it needs its own die roll first,
+     same as inflicting a status already does. */
+  const isChanceStatFx=statFx.length>0&&el.includes("chance die");
+  const statFxReady=!isChanceStatFx||(statFxChanceRoll!=null&&statFxChanceRoll.rolls[0]>=4);
   // Heal (HP restore)
   const isHeal=healsUser||healsTarget;
   const healAmount=attacker.maxHp-attacker.currentHp; // restore to full by default
@@ -2156,6 +2170,40 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
             <ClashSection attacker={attacker} targets={targets} allEntries={allEntries} move={move} attrs={attrs} weather={weather} stab={stab} abilBonus={abilMods.bonus} loyalty={attacker.loyalty} happiness={attacker.happiness} onApplyDmg={onApplyDmg} onApplyEffect={onApplyEffect}/>
           )}
 
+          {/* Stat changes — rendered above Damage rather than after it, so
+              a "Roll 1 Chance Die to..." effect (Metal Claw, Aurora Beam,
+              Crunch, ...) gets rolled before the GM ever reaches an Apply
+              Damage button, not discovered afterward. Not guaranteed the
+              way a dedicated support move's stat change is (Growl, Harden
+              never use this wording, and always land) — badges only show
+              once the roll succeeds; the roll only needs doing once per
+              move, not once per target. */}
+          {canAct&&(accResult?.successes??0)>=actReq&&statFx.length>0&&(targets.length>0||selfTarget||statFx.some(s=>s.toSelf))&&(
+            <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px"}}>
+              <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Stat Changes</div>
+              {isChanceStatFx&&(
+                <div style={{marginBottom:8,paddingBottom:8,borderBottom:"1px solid #2a2f45"}}>
+                  <div style={{fontSize:10,color:"#a040a0",fontWeight:700,marginBottom:4}}>Chance Die (succeeds on 4+)</div>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <button onClick={()=>setStatFxChanceRoll(rollDice(1))} style={{background:"rgba(160,64,160,0.15)",border:"1px solid #a040a040",borderRadius:3,color:"#a040a0",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll Chance Die</button>
+                    {statFxChanceRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:statFxChanceRoll.rolls[0]>=4?"#a040a0":"#5a6080"}}>[{statFxChanceRoll.rolls[0]}] = {statFxChanceRoll.rolls[0]>=4?"✓ Effect triggers!":"✗ No effect"}</span>}
+                  </div>
+                </div>
+              )}
+              {statFxReady&&statFx.map((se,i)=>{
+                // toSelf=true → apply to attacker only; toSelf=false → apply to each selected target
+                const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
+                return applyTargets.map(tid=>{
+                  const isSelf=tid===attacker.id;
+                  const t=isSelf?attacker:allEntries.find(e=>e.id===tid);
+                  return<div key={`${i}-${tid}`} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:4,background:se.amount<0?"rgba(255,71,87,0.1)":"rgba(0,212,170,0.1)",border:`1px solid ${se.amount<0?"#ff475730":"#00d4aa30"}`,color:se.amount<0?"#ff4757":"#00d4aa",fontSize:11,fontWeight:700,width:"100%",marginBottom:3,boxSizing:"border-box"}}>
+                    {se.amount>0?"▲":"▼"} {se.label} → {isSelf?"SELF":t?.nickname||t?.pokemon.name}
+                  </div>;
+                });
+              })}
+            </div>
+          )}
+
           {/* Damage (non-clash move, or clash move won by attacker) */}
           {canAct&&move.category!=="Support"&&targets.map(tid=>{
             // Show damage if Phase-1 accuracy hit OR target failed evasion OR attacker won clash reaction
@@ -2217,24 +2265,6 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
           {/* Effects on success — stat changes, healing, status, Transform, etc. */}
           {canAct&&(accResult?.successes??0)>=actReq&&(
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {/* Stat changes */}
-              {statFx.length>0&&(targets.length>0||selfTarget||statFx.some(s=>s.toSelf))&&(
-                <div style={{background:"#13151f",borderRadius:6,padding:"10px 12px"}}>
-                  <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Stat Changes</div>
-                  {statFx.map((se,i)=>{
-                    // toSelf=true → apply to attacker only; toSelf=false → apply to each selected target
-                    const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
-                    return applyTargets.map(tid=>{
-                      const isSelf=tid===attacker.id;
-                      const t=isSelf?attacker:allEntries.find(e=>e.id===tid);
-                      return<div key={`${i}-${tid}`} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:4,background:se.amount<0?"rgba(255,71,87,0.1)":"rgba(0,212,170,0.1)",border:`1px solid ${se.amount<0?"#ff475730":"#00d4aa30"}`,color:se.amount<0?"#ff4757":"#00d4aa",fontSize:11,fontWeight:700,width:"100%",marginBottom:3,boxSizing:"border-box"}}>
-                        {se.amount>0?"▲":"▼"} {se.label} → {isSelf?"SELF":t?.nickname||t?.pokemon.name}
-                      </div>;
-                    });
-                  })}
-                </div>
-              )}
-
               {/* Status is now inline in the damage block above — no separate section needed for damage moves */}
               {/* Support-only status moves (e.g. Stun Spore with no damage) */}
               {statusToInflict&&move.category==="Support"&&targets.filter(t=>t!==attacker.id).length>0&&(
@@ -2776,14 +2806,14 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   a support move with a stat effect (no damage section at
                   all) still needs this as its one and only apply button. */}
               {!(statFx.length>0&&move.category!=="Support"&&targets.length>0)&&(
-                <button onClick={()=>{
-                  // Apply all stat effects
-                  statFx.forEach(se=>{
+                <button disabled={isChanceStatFx&&statFxChanceRoll==null} onClick={()=>{
+                  // Apply all stat effects, unless a required chance die was never rolled/failed
+                  if(statFxReady)statFx.forEach(se=>{
                     const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
                     applyTargets.forEach(tid=>onApplyEffect(tid,se.attr,se.amount,move.name,nameOf(attacker,allEntries)));
                   });
                   onIncrementAction(attacker.id,isPriority);onClose();
-                }} style={{width:"100%",padding:"8px 10px",background:"#00d4aa",border:"none",borderRadius:5,fontSize:12,fontWeight:700,color:"#0f1117",cursor:"pointer"}}>
+                }} title={isChanceStatFx&&statFxChanceRoll==null?"Roll the Chance Die above first":undefined} style={{width:"100%",padding:"8px 10px",background:isChanceStatFx&&statFxChanceRoll==null?"#2a2f45":"#00d4aa",border:"none",borderRadius:5,fontSize:12,fontWeight:700,color:isChanceStatFx&&statFxChanceRoll==null?"#5a6080":"#0f1117",cursor:isChanceStatFx&&statFxChanceRoll==null?"not-allowed":"pointer"}}>
                   ✓ {statFx.length>0?"Apply Effect & Action Used":"Mark Action Used & Close"}{!isPriority&&` (Action #${(attacker.actionCount||0)+1})`}
                 </button>
               )}
