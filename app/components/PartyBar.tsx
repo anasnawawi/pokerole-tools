@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { C } from "./PokedexFrame";
 import { PokemonSheetData } from "../lib/trainer";
@@ -61,39 +61,18 @@ function PixelRect({ x, y, w, h, corner, fill }: { x: number; y: number; w: numb
 
 /* The card's frame only — sprite, name and HP bar are ordinary DOM content
    layered on top, so they stay real text (selectable, screen-reader visible)
-   rather than baked into the bitmap. Four nested stepped bands: dark outer
-   edge, a structural color band, the main fill, then a one-pixel highlight
-   stripe along the top-left the way GBA panels catch a light source — plus
-   the fill's own horizontal scanline texture: a light row every third pixel
-   row, not a diagonal (a first pass got that wrong — the reference's stripe
-   runs straight across, it just moves with the sprite's silhouette because
-   it sits *under* the sprite, not because the line itself is angled). */
-function PixelCardFrame({ w, h, palette }: { w: number; h: number; palette: { edge: string; band: string; fill: string; highlight: string; stripe: string } }) {
-  const id = useId();
-  const clipId = `card-fill-${id}`, patId = `card-stripe-${id}`;
-  const fillBands = steppedBands(2, 2, w - 4, h - 4, [1]);
+   rather than baked into the bitmap. Three nested stepped bands: dark outer
+   edge, a structural color band, the flat main fill, then a one-pixel
+   highlight stripe along the top-left the way GBA panels catch a light
+   source. (An earlier pass textured the fill with scanlines; that read as
+   visual noise once real content sat on top, so the fill is flat.) */
+function PixelCardFrame({ w, h, palette }: { w: number; h: number; palette: { edge: string; band: string; fill: string; highlight: string } }) {
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden
       style={{position:"absolute",inset:0,width:"100%",height:"100%",display:"block"}}>
-      <defs>
-        <clipPath id={clipId}>
-          {fillBands.map((b,i) => <rect key={i} x={b.x} y={b.y} width={b.width} height={b.height}/>)}
-        </clipPath>
-        {/* One light row every 10 base rows — a handful of sparse scanline
-            bands like the reference, not a continuous scanline texture (a
-            first pass at 1-in-3 rows read as "too many stripes" once real
-            content sat on top of it). No horizontal offset between tiles,
-            so the lines stay perfectly horizontal rather than staircasing. */}
-        <pattern id={patId} width={1} height={10} patternUnits="userSpaceOnUse">
-          <rect width={1} height={10} fill={palette.fill}/>
-          <rect x={0} y={0} width={1} height={1} fill={palette.stripe} shapeRendering="crispEdges"/>
-        </pattern>
-      </defs>
       <PixelRect x={0} y={0} w={w} h={h} corner={[2,1]} fill={palette.edge}/>
       <PixelRect x={1} y={1} w={w-2} h={h-2} corner={[1,1]} fill={palette.band}/>
-      <g clipPath={`url(#${clipId})`}>
-        <rect x={2} y={2} width={w-4} height={h-4} fill={`url(#${patId})`} shapeRendering="crispEdges"/>
-      </g>
+      <PixelRect x={2} y={2} w={w-4} h={h-4} corner={[1]} fill={palette.fill}/>
       <rect x={3} y={3} width={w-6} height={1} fill={palette.highlight} shapeRendering="crispEdges"/>
       <rect x={3} y={3} width={1} height={h-6} fill={palette.highlight} shapeRendering="crispEdges"/>
     </svg>
