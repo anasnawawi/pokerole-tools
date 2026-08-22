@@ -360,6 +360,36 @@ function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry
     </div>
   );
 }
+/* One badge per attribute currently under a stat modifier — sits right
+   below the health box rather than on the sprite itself, so it reads as
+   part of that Pokémon's status readout instead of clutter floating over
+   its art. Green + up arrow for a boost, red + down arrow for a drop;
+   several mods on the same attribute (e.g. two separate −1s) net together
+   into one badge rather than stacking duplicates. */
+function StatChangeBadges({entry,align}:{entry:BattleEntry;align:"left"|"right"}){
+  const net=entry.statMods.reduce<Partial<Record<keyof AttrSet,number>>>((acc,m)=>{
+    const k=m.attr as keyof AttrSet;
+    if(k in entry.attrs)acc[k]=(acc[k]??0)+m.amount;
+    return acc;
+  },{});
+  const changed=(Object.entries(net) as [keyof AttrSet,number][]).filter(([,amt])=>amt!==0);
+  if(changed.length===0)return null;
+  return(
+    <div style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:align==="left"?"flex-start":"flex-end"}}>
+      {changed.map(([attr,amt])=>{
+        const up=amt>0;
+        return(
+          <span key={attr} title={`${ATTR_ABBR[attr]} ${up?"+":""}${amt} from active stat modifiers`}
+            style={{display:"inline-flex",alignItems:"center",gap:2,fontSize:7,fontFamily:"'Press Start 2P',monospace",fontWeight:700,
+              padding:"2px 4px",border:"1px solid #181818",
+              background:up?"#C8F0C8":"#F8C8C8",color:up?"#187028":"#A00808"}}>
+            {up?"▲":"▼"}{ATTR_ABBR[attr]}{up?"+":""}{amt}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 // A Pokémon standing on a FireRed-style grass platform. The sprite's feet are pinned to
 // the platform's mid-line so it sits correctly regardless of the sprite's source size.
 //
@@ -4911,6 +4941,7 @@ export default function BattleTrackerPage(){
                       {mounted&&onFieldEnemy&&(
                         <div style={{display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
                           <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={stageContentW}/>
+                          <StatChangeBadges entry={onFieldEnemy} align="left"/>
                           <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                         </div>
                       )}
@@ -4968,6 +4999,7 @@ export default function BattleTrackerPage(){
                       {mounted&&battleStarted&&onFieldPlayer&&(
                         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
                           <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={stageContentW}/>
+                          <StatChangeBadges entry={onFieldPlayer} align="right"/>
                           <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                         </div>
                       )}
@@ -5036,6 +5068,7 @@ export default function BattleTrackerPage(){
                   {mounted&&onFieldEnemy&&(
                     <div style={{position:"absolute",top:16,left:isNarrow?(sidebarCollapsed?SIDEBAR_W.collapsed:SIDEBAR_W.expandedNarrow)+16:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
                       <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                      <StatChangeBadges entry={onFieldEnemy} align="left"/>
                       <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                     </div>
                   )}
@@ -5124,6 +5157,7 @@ export default function BattleTrackerPage(){
                   {mounted&&battleStarted&&onFieldPlayer&&(
                     <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                       <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                      <StatChangeBadges entry={onFieldPlayer} align="right"/>
                       <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                     </div>
                   )}
