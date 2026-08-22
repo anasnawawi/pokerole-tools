@@ -4459,16 +4459,18 @@ export default function BattleTrackerPage(){
             </div>
           ):(
             <>
-              {/* STAGE — minHeight normally keeps the field from collapsing
-                  to nothing, but competed against the move panel's own
-                  maxHeight:80vh for space that doesn't exist: toolbar +
-                  260px floor + up to 80vh could add up to more than the
-                  actual viewport, so the panel's height was correctly
-                  capped while its position still ended up pushed off the
-                  bottom of the screen. Let the stage yield most of that
-                  floor while the panel is open. */}
+              {/* STAGE — minHeight keeps the field from collapsing to
+                  nothing. The move panel used to be allowed up to 68vh,
+                  squeezing this floor down to 80px whenever it was open —
+                  tall enough that the scene (both nameplates, both sprites)
+                  was mostly pushed off screen. The panel's own maxHeight is
+                  capped further below specifically so this floor can stay
+                  close to its normal size instead: the scene should always
+                  stay fully visible, with the move panel's own content
+                  scrolling internally (it already does — see bodyRef) if it
+                  doesn't fit in what's left. */}
               <div ref={stageRef} style={{flex:1,position:"relative",overflow:"hidden",
-                minHeight:battleStarted&&scenePopup&&onFieldPlayer?80:260,containerType:"inline-size"}}>
+                minHeight:battleStarted&&scenePopup&&onFieldPlayer?220:260,containerType:"inline-size"}}>
                 <StageBackdrop/>
                 {/* Weather + terrain FX — scoped to the stage */}
                 <TerrainFX terrain={terrain}/>
@@ -4716,11 +4718,14 @@ export default function BattleTrackerPage(){
                 /* Move resolution takes over the whole bottom bar in place of
                    the FIGHT/BAG/POKéMON/RUN command box, instead of popping
                    up a separate floating window — closer to how the actual
-                   games never leave that dialogue area for this. It's allowed
-                   to grow taller than the normal bar (up to most of the
-                   scene) since target-select/accuracy/damage/effects often
-                   don't fit in the usual strip; content scrolls internally
-                   once it hits that cap. */
+                   games never leave that dialogue area for this. It's
+                   allowed to grow taller than the normal bar since target-
+                   select/accuracy/damage/effects often don't fit in the
+                   usual strip — but capped well short of the old 68vh, which
+                   let it swallow almost the entire screen and push the
+                   battle scene above it down to a sliver. The scene should
+                   always stay fully visible; content scrolls internally
+                   (see bodyRef in MovePopup) once it hits this cap instead. */
                 /* maxHeight as a percentage was resolving against an
                    ancestor whose own height didn't actually reflect what was
                    left after the toolbar/weather banner/status strip above
@@ -4730,7 +4735,7 @@ export default function BattleTrackerPage(){
                    screen edge with nothing able to reach it. vh is relative
                    to the true viewport, not a layout ancestor, so it can't
                    drift out from under it the same way. */
-                <div style={{flexShrink:0,maxHeight:"68vh",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31}}>
+                <div style={{flexShrink:0,maxHeight:"40vh",minHeight:0,display:"flex",borderTop:"3px solid #181818",padding:"clamp(4px,0.8vw,8px)",background:"#283030",overflow:"hidden",position:"relative",zIndex:31}}>
                   <MovePopup inline move={scenePopup} attacker={onFieldPlayer} allEntries={entries} weather={weather}
                     onClose={()=>{setScenePopup(null);setSceneTargetIds([]);}} onApplyDmg={sApplyDmg} onApplyEffect={sApplyEffect}
                     onIncrementAction={sIncrementAction} onSpendWP={sSpendWP} onApplySpecial={sApplySpecial} onEndTurn={nextTurn}
