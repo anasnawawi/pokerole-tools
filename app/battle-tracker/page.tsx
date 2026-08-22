@@ -2233,7 +2233,11 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               )}
               <div style={{fontSize:10,color:"#5a6080",marginBottom:6,fontStyle:"italic"}}>Pool: {accBreakdown} = <strong style={{color:accPool<actReq?"#ff4757":"#6890f0"}}>{accPool}d</strong></div>
               {accPool<=0&&<div style={{background:"rgba(255,71,87,0.12)",border:"1px solid #ff475740",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Dice pool is 0 — cannot roll. Action is impossible.</div>}
-              {accPool>0&&accPool<actReq&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Pool ({accPool}d) is less than required hits ({actReq}) — success is very unlikely.</div>}
+              {/* Each die contributes at most 1 success (rollDice caps
+                  successes at the pool size), so a pool smaller than the
+                  required hits can't ever reach them — that's not "very
+                  unlikely", it's a guaranteed miss no matter what's rolled. */}
+              {accPool>0&&accPool<actReq&&<div style={{background:"rgba(255,71,87,0.12)",border:"1px solid #ff475740",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Pool ({accPool}d) can never reach {actReq} successes — this action is impossible, not just unlikely.</div>}
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
                 {/* A target's Evasion or Clash reaction already rolled this
                     exact accuracy check for itself — show that result
