@@ -404,11 +404,11 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
   return (
     <div style={{ background: "#FBF8E4", border: `2px solid ${TYPE_COLORS[pokemon.types[0]]}40`, borderRadius: 8, padding: 16, marginBottom: 16 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ width: 10, height: 10, borderRadius: "50%", background: TYPE_COLORS[pokemon.types[0]], flexShrink: 0 }} />
         <input value={sheet.nickname} onChange={e => upd({ nickname: e.target.value })}
-          placeholder={pokemon.name}
-          style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 15, color: "#202020", background: "transparent", border: "none", outline: "none", flex: 1 }} />
+          placeholder="Nickname"
+          style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 15, color: "#202020", background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 90 }} />
         <span style={{ fontSize: 11, color: "#585858" }}>({pokemon.name})</span>
         {pokemon.types.map(t => <TypeBadge key={t} type={t} />)}
         <GenderIcon gender={sheet.gender} size={13}/>
@@ -426,7 +426,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
       </div>
 
       {/* Origin + Nature row */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 10, alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 9, color: "#585858", textTransform: "uppercase", letterSpacing: "0.5px" }}>Origin</span>
           <select value={origin} onChange={e => {
@@ -498,7 +498,11 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      {/* minmax(0,1fr) rather than a bare 1fr — a grid item's default
+          min-width is auto, not 0, so unwrapped content in either column
+          (the move list especially) was forcing this grid, and the whole
+          card, wider than the page and cutting the right side off. */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16 }}>
         {/* Attributes */}
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -648,9 +652,13 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
             <div>
               <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>Loyalty (0–5)</div>
               <div style={{ display: "flex", gap: 3 }}>
+                {/* Empty pips are a hollow ring, not a solid dot in another
+                    color — a same-shape same-fill circle in just a
+                    different color read as "also filled, just a different
+                    stat" rather than "not filled yet". */}
                 {[0,1,2,3,4,5].map(i => (
                   <div key={i} onClick={() => upd({ loyalty: i })}
-                    style={{ width: 14, height: 14, borderRadius: "50%", cursor: "pointer", background: i <= sheet.loyalty ? "#A07000" : "#2850A0", border: `1px solid ${i <= sheet.loyalty ? "#A07000" : "#7888A8"}` }} />
+                    style={{ width: 14, height: 14, borderRadius: "50%", cursor: "pointer", background: i <= sheet.loyalty ? "#A07000" : "transparent", border: `2px solid ${i <= sheet.loyalty ? "#A07000" : "#B8BEC9"}` }} />
                 ))}
               </div>
               <button onClick={() => upd({ cruelty: !(sheet.cruelty ?? false) })}
@@ -664,7 +672,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
               <div style={{ display: "flex", gap: 3 }}>
                 {[0,1,2,3,4,5].map(i => (
                   <div key={i} onClick={() => upd({ happiness: i })}
-                    style={{ width: 14, height: 14, borderRadius: "50%", cursor: "pointer", background: i <= sheet.happiness ? "#f85888" : "#2850A0", border: `1px solid ${i <= sheet.happiness ? "#f85888" : "#7888A8"}` }} />
+                    style={{ width: 14, height: 14, borderRadius: "50%", cursor: "pointer", background: i <= sheet.happiness ? "#f85888" : "transparent", border: `2px solid ${i <= sheet.happiness ? "#f85888" : "#B8BEC9"}` }} />
                 ))}
               </div>
               {/* Action buttons */}
@@ -1127,6 +1135,7 @@ function CharactersPageInner() {
   });
   const [pSearch, setPSearch] = useState("");
   const [pSort, setPSort] = useState<"dex" | "name" | "rank">("dex");
+  const [showAddPokemonModal, setShowAddPokemonModal] = useState(false);
   const [useItemIdx, setUseItemIdx] = useState<number | null>(null);
   const [narrow, setNarrow] = useState(false);
   /* Open by default only what you actually fill in while building a
@@ -1867,102 +1876,121 @@ function CharactersPageInner() {
             )}
 
             {tab === "pokemon" && (() => { const partyFull = sel.pokemon.length >= 6; return (
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                    <h2 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 18, color: "#2850A0", margin: 0 }}>Pokémon Party ({sel.pokemon.length}/6)</h2>
-                  </div>
-                  {sel.pokemon.length === 0 && <div style={{ fontSize: 12, color: "#585858", fontStyle: "italic", marginBottom: 16 }}>No Pokémon yet — add from the browser →</div>}
-                  {sel.pokemon.map(key => {
-                    const sheet = pokemonSheets[key];
-                    if (!sheet) return null;
-                    const partyHasPartner = sel.pokemon.some(k => k !== key && pokemonSheets[k]?.isPartner);
-                    return (
-                      <PokemonPartySheet key={key} sheet={sheet} trainerRank={sel.rank}
-                        onChange={s => updatePokemonSheet(key, s)}
-                        onRemove={() => removePokemon(key)}
-                        onSendToBox={() => {
-                          // Deposit to PC: -1 happiness, move key from party to pcBox
-                          const updated = { ...sheet, happiness: Math.max(0, sheet.happiness - 1) };
-                          setPokemonSheets(prev => ({ ...prev, [key]: updated }));
-                          upd(sel.id, {
-                            pokemon: sel.pokemon.filter(k => k !== key),
-                            pcBox: [...(sel.pcBox ?? []), key],
-                          });
-                        }}
-                        partyHasPartner={partyHasPartner}
-                        onDesignatePartner={() => designatePartner(key)}
-                        onRevokePartner={() => revokePartner(key)}
-                        trainerInventory={sel.inventory ?? []}
-                        onTransferItemToTrainer={itemName => {
-                          // Return held item back to trainer's bag (add +1)
-                          const inv = [...(sel.inventory ?? [])];
-                          const idx = inv.findIndex(i => i.name.toLowerCase() === itemName.toLowerCase());
-                          if (idx >= 0) inv[idx] = { ...inv[idx], quantity: inv[idx].quantity + 1 };
-                          else inv.push({ name: itemName, quantity: 1, description: "" });
-                          upd(sel.id, { inventory: inv });
-                        }}
-                        onTransferItemFromTrainer={itemName => {
-                          // When giving held item: decrement qty by 1 from trainer bag
-                          const inv = (sel.inventory ?? []).map(i =>
-                            i.name.toLowerCase() === itemName.toLowerCase()
-                              ? { ...i, quantity: Math.max(0, i.quantity - 1) }
-                              : i
-                          ).filter(i => i.quantity > 0);
-                          upd(sel.id, { inventory: inv });
-                        }}
-                        trainerAttrs={sel.attributes}
-                        trainerSkills={sel.skills} />
-                    );
-                  })}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                  <h2 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 18, color: "#2850A0", margin: 0 }}>Pokémon Party ({sel.pokemon.length}/6)</h2>
+                  <button onClick={() => setShowAddPokemonModal(true)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#2850A0", color: "#FFFFFF", border: "none", borderRadius: 5, padding: "7px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                    + Add Pokémon
+                  </button>
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>Add Pokémon ({sel.pokemon.length}/6 in party)</div>
-                  <input type="text" placeholder="Search by name or #…" value={pSearch} onChange={e => setPSearch(e.target.value)}
-                    style={{ width: "100%", background: "#FBF8E4", border: "1px solid #2850A0", borderRadius: 5, padding: "6px 10px", color: "#202020", fontSize: 12, marginBottom: 6, outline: "none" }} />
-                  <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-                    {(["dex","name","rank"] as const).map(s => (
-                      <button key={s} onClick={() => setPSort(s)}
-                        style={{ flex: 1, fontSize: 10, fontWeight: 700, padding: "3px 0", borderRadius: 4, border: "none", cursor: "pointer", background: pSort === s ? "rgba(61,139,255,0.2)" : "transparent", color: pSort === s ? "#2850A0" : "#585858" }}>
-                        {s === "dex" ? "# Dex" : s === "name" ? "A–Z" : "Rank"}
-                      </button>
-                    ))}
-                  </div>
-                  {partyFull && (
-                    <div style={{ fontSize: 10, color: "#A07000", background: "#A0700014", border: "1px solid #A0700033", borderRadius: 4, padding: "5px 7px", marginBottom: 6, lineHeight: 1.5 }}>
-                      Party is full (6). New catches go to the PC Box.
-                    </div>
-                  )}
-                  <div style={{ maxHeight: 340, overflowY: "auto" }}>
-                    {/* Explicit buttons rather than a clickable row: where a
-                        Pokémon goes is a real choice, and a row that silently
-                        did one of them gave no clue it was even clickable. */}
-                    {filtPokemon.map((p, i) => (
-                      <div key={i}
-                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 4 }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "#FBF8E4"; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
-                        <span style={{ fontSize: 9, color: "#4A5468", width: 26, fontFamily: "'Exo 2'", fontWeight: 700 }}>#{String(p.number).padStart(3, "0")}</span>
-                        <span style={{ fontSize: 12, color: "#202020", flex: 1, minWidth: 0 }}>{p.name}</span>
-                        {p.types.map(t => <TypeBadge key={t} type={t} />)}
-                        <span style={{ fontSize: 9, color: RANK_COLORS[p.suggestedRank], width: 52, textAlign: "right" }}>{p.suggestedRank}</span>
-                        <button onClick={() => addPokemon(p.number, "party")} disabled={partyFull}
-                          title={partyFull ? "Party is full — send it to the PC Box instead" : `Add ${p.name} to your party`}
-                          style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4, whiteSpace: "nowrap",
-                            cursor: partyFull ? "not-allowed" : "pointer", opacity: partyFull ? 0.4 : 1,
-                            border: "1px solid #2850A040", background: "#2850A020", color: "#2850A0" }}>
-                          + Party
-                        </button>
-                        <button onClick={() => addPokemon(p.number, "box")}
-                          title={`Send ${p.name} to the PC Box`}
-                          style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4, whiteSpace: "nowrap",
-                            cursor: "pointer", border: "1px solid #6890f040", background: "#6890f018", color: "#4A6ABF" }}>
-                          + Box
-                        </button>
+                {sel.pokemon.length === 0 && <div style={{ fontSize: 12, color: "#585858", fontStyle: "italic", marginBottom: 16 }}>No Pokémon yet — click + Add Pokémon above.</div>}
+                {sel.pokemon.map(key => {
+                  const sheet = pokemonSheets[key];
+                  if (!sheet) return null;
+                  const partyHasPartner = sel.pokemon.some(k => k !== key && pokemonSheets[k]?.isPartner);
+                  return (
+                    <PokemonPartySheet key={key} sheet={sheet} trainerRank={sel.rank}
+                      onChange={s => updatePokemonSheet(key, s)}
+                      onRemove={() => removePokemon(key)}
+                      onSendToBox={() => {
+                        // Deposit to PC: -1 happiness, move key from party to pcBox
+                        const updated = { ...sheet, happiness: Math.max(0, sheet.happiness - 1) };
+                        setPokemonSheets(prev => ({ ...prev, [key]: updated }));
+                        upd(sel.id, {
+                          pokemon: sel.pokemon.filter(k => k !== key),
+                          pcBox: [...(sel.pcBox ?? []), key],
+                        });
+                      }}
+                      partyHasPartner={partyHasPartner}
+                      onDesignatePartner={() => designatePartner(key)}
+                      onRevokePartner={() => revokePartner(key)}
+                      trainerInventory={sel.inventory ?? []}
+                      onTransferItemToTrainer={itemName => {
+                        // Return held item back to trainer's bag (add +1)
+                        const inv = [...(sel.inventory ?? [])];
+                        const idx = inv.findIndex(i => i.name.toLowerCase() === itemName.toLowerCase());
+                        if (idx >= 0) inv[idx] = { ...inv[idx], quantity: inv[idx].quantity + 1 };
+                        else inv.push({ name: itemName, quantity: 1, description: "" });
+                        upd(sel.id, { inventory: inv });
+                      }}
+                      onTransferItemFromTrainer={itemName => {
+                        // When giving held item: decrement qty by 1 from trainer bag
+                        const inv = (sel.inventory ?? []).map(i =>
+                          i.name.toLowerCase() === itemName.toLowerCase()
+                            ? { ...i, quantity: Math.max(0, i.quantity - 1) }
+                            : i
+                        ).filter(i => i.quantity > 0);
+                        upd(sel.id, { inventory: inv });
+                      }}
+                      trainerAttrs={sel.attributes}
+                      trainerSkills={sel.skills} />
+                  );
+                })}
+
+                {/* Add Pokémon modal — was a permanent search column pinned
+                    beside the party list, which forced the whole grid wider
+                    than the window and cut the party sheets off on the
+                    right. A button + modal instead lets the party list use
+                    the full width all the time. */}
+                {showAddPokemonModal && (
+                  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+                    onClick={() => setShowAddPokemonModal(false)}>
+                    <div style={{ background: "#FBF8E4", border: "1px solid #7888A8", borderRadius: 10, width: 460, maxWidth: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+                      onClick={e => e.stopPropagation()}>
+                      <div style={{ padding: "12px 16px", borderBottom: "1px solid #2850A0", display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#202020", fontFamily: "'Exo 2'", flex: 1 }}>Add Pokémon ({sel.pokemon.length}/6 in party)</span>
+                        <button onClick={() => setShowAddPokemonModal(false)} style={{ background: "none", border: "none", color: "#585858", cursor: "pointer", fontSize: 18 }}>✕</button>
                       </div>
-                    ))}
+                      <div style={{ padding: "12px 16px 0" }}>
+                        <input type="text" autoFocus placeholder="Search by name or #…" value={pSearch} onChange={e => setPSearch(e.target.value)}
+                          style={{ width: "100%", background: "#FFFFFF", border: "1px solid #2850A0", borderRadius: 5, padding: "6px 10px", color: "#202020", fontSize: 12, marginBottom: 6, outline: "none" }} />
+                        <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+                          {(["dex","name","rank"] as const).map(s => (
+                            <button key={s} onClick={() => setPSort(s)}
+                              style={{ flex: 1, fontSize: 10, fontWeight: 700, padding: "3px 0", borderRadius: 4, border: "none", cursor: "pointer", background: pSort === s ? "rgba(61,139,255,0.2)" : "transparent", color: pSort === s ? "#2850A0" : "#585858" }}>
+                              {s === "dex" ? "# Dex" : s === "name" ? "A–Z" : "Rank"}
+                            </button>
+                          ))}
+                        </div>
+                        {partyFull && (
+                          <div style={{ fontSize: 10, color: "#A07000", background: "#A0700014", border: "1px solid #A0700033", borderRadius: 4, padding: "5px 7px", marginBottom: 6, lineHeight: 1.5 }}>
+                            Party is full (6). New catches go to the PC Box.
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 16px 12px" }}>
+                        {/* Explicit buttons rather than a clickable row: where a
+                            Pokémon goes is a real choice, and a row that silently
+                            did one of them gave no clue it was even clickable. */}
+                        {filtPokemon.map((p, i) => (
+                          <div key={i}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 4 }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = "#F8F4D0"; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
+                            <span style={{ fontSize: 9, color: "#4A5468", width: 26, fontFamily: "'Exo 2'", fontWeight: 700 }}>#{String(p.number).padStart(3, "0")}</span>
+                            <span style={{ fontSize: 12, color: "#202020", flex: 1, minWidth: 0 }}>{p.name}</span>
+                            {p.types.map(t => <TypeBadge key={t} type={t} />)}
+                            <span style={{ fontSize: 9, color: RANK_COLORS[p.suggestedRank], width: 52, textAlign: "right" }}>{p.suggestedRank}</span>
+                            <button onClick={() => addPokemon(p.number, "party")} disabled={partyFull}
+                              title={partyFull ? "Party is full — send it to the PC Box instead" : `Add ${p.name} to your party`}
+                              style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4, whiteSpace: "nowrap",
+                                cursor: partyFull ? "not-allowed" : "pointer", opacity: partyFull ? 0.4 : 1,
+                                border: "1px solid #2850A040", background: "#2850A020", color: "#2850A0" }}>
+                              + Party
+                            </button>
+                            <button onClick={() => addPokemon(p.number, "box")}
+                              title={`Send ${p.name} to the PC Box`}
+                              style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4, whiteSpace: "nowrap",
+                                cursor: "pointer", border: "1px solid #6890f040", background: "#6890f018", color: "#4A6ABF" }}>
+                              + Box
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ); })()}
           </div>
