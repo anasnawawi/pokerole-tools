@@ -6,7 +6,7 @@ import {
   POKEMON, MOVES, ABILITIES, ITEMS, TYPE_COLORS, TYPE_CHART, MISSINGNO, HABITATS,
   PokemonEntry, Move, PokemonType, Rank,
 } from "../data/pokerole-data";
-import type { ItemData } from "../data/pokerole-data";
+import type { ItemData, HabitatData } from "../data/pokerole-data";
 import {
   STATUS_CONDITIONS, WEATHER_DATA, WeatherData,
   getDisobedienceLevel, getPainPenalty,
@@ -20,6 +20,7 @@ import { GenderIcon } from "../components/GenderIcon";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Standard:"#f8d030",Advanced:"#f08030",Expert:"#a040a0",Ace:"#e04040",Master:"#705898",Champion:"#ffd700"};
+const RANK_ORDER: Rank[] = ["Starter","Rookie","Standard","Advanced","Expert","Ace","Master","Champion"];
 // The floating sidebar's own width, at every state — read by the sidebar's
 // own style AND by the scene's left-edge padding (so sprites/nameplates clear
 // it), instead of two independently hand-typed copies of the same numbers.
@@ -895,6 +896,58 @@ function getTypeMult(mt:PokemonType,dts:PokemonType[]):{label:string;color:strin
   if(r)return{label:"Not very effective −2",color:"#00d4aa",mod:-1};
   return{label:"Normal",color:"#8b90a8",mod:0};
 }
+
+// ── Random encounter difficulty ─────────────────────────────────────────────
+/* Approximates "how tough is this species for the trainer's own team right
+   now" — there's no formal CR system in PokeRole, so this leans on the two
+   signals that actually exist in the data: Rank tier (a real proxy for
+   overall power — see RANK_BONUSES) and type matchups against every
+   Pokémon the trainer currently has linked in this battle. Not meant to be
+   exact, just a useful sort into three buckets for the random-encounter
+   picker. */
+type EncounterDifficulty="Easy"|"Average"|"Hard";
+
+function trainerRoster(entries:BattleEntry[]):BattleEntry[]{
+  return entries.filter(e=>e.linkedTrainerId);
+}
+
+function trainerAvgRankIdx(roster:BattleEntry[]):number{
+  if(!roster.length)return RANK_ORDER.indexOf("Standard");
+  const idxs=roster.map(e=>Math.max(0,RANK_ORDER.indexOf(e.pokemon.suggestedRank)));
+  return idxs.reduce((a,b)=>a+b,0)/idxs.length;
+}
+
+function encounterScore(candidate:PokemonEntry,targetRankIdx:number,roster:BattleEntry[]):number{
+  // Rank gap dominates — two tiers above the trainer's own average is a
+  // real fight regardless of typing.
+  let score=(targetRankIdx-trainerAvgRankIdx(roster))*2;
+  if(roster.length){
+    let typeSum=0,typeCount=0;
+    roster.forEach(e=>{
+      e.pokemon.types.forEach(trainerType=>{
+        candidate.types.forEach(candType=>{
+          // The candidate attacking the trainer's mon — super effective here
+          // makes the encounter harder for the trainer.
+          const offense=getTypeMult(candType,[trainerType]);
+          if(offense.mod===2)typeSum+=1; else if(offense.mod===-1)typeSum-=0.5; else if(offense.mod===-999)typeSum-=1;
+          // The trainer's mon attacking the candidate — super effective here
+          // makes the encounter easier for the trainer.
+          const defense=getTypeMult(trainerType,[candType]);
+          if(defense.mod===2)typeSum-=1; else if(defense.mod===-1)typeSum+=0.5; else if(defense.mod===-999)typeSum+=1;
+          typeCount+=2;
+        });
+      });
+    });
+    if(typeCount)score+=(typeSum/typeCount)*4;
+  }
+  return score;
+}
+
+function encounterBucket(score:number):EncounterDifficulty{
+  return score<=-1.25?"Easy":score>=1.25?"Hard":"Average";
+}
+
+const ENCOUNTER_DIFFICULTY_COLORS:Record<EncounterDifficulty,string>={Easy:"#00d4aa",Average:"#f8d030",Hard:"#ff4757"};
 
 function calcAbilityBonus(entry:BattleEntry,move:Move,weather:WeatherData,target?:BattleEntry):{bonus:number;reasons:string[]}{
   const res={bonus:0,reasons:[] as string[]};
@@ -3784,20 +3837,55 @@ function PokeballIcon({size=14}:{size?:number}){
 }
 
 // ── Add Pokémon modal — styled after the FireRed party/Pokémon menu ────────────
-function AddPokemonModal({onAdd,onClose}:{onAdd:(p:PokemonEntry,side:"player"|"enemy"|"neutral")=>void;onClose:()=>void}){
+function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"player"|"enemy"|"neutral",boost?:number)=>void;onClose:()=>void;entries:BattleEntry[]}){
   const [q,setQ]=useState("");
   const [side,setSide]=useState<"player"|"enemy"|"neutral">("enemy");
   const [justAdded,setJustAdded]=useState<number|null>(null);
+  const [mode,setMode]=useState<"search"|"random">("search");
+  const [randRank,setRandRank]=useState<Rank|null>(null);
+  const [randHabitat,setRandHabitat]=useState<HabitatData|null>(null);
   const filtered=useMemo(()=>{
     const ql=q.toLowerCase();
     if(!ql)return POKEMON;
     return POKEMON.filter(p=>p.name.toLowerCase().includes(ql)||String(p.number).includes(q));
   },[q]);
+  // The random-encounter picker's three difficulty buckets, plus a fourth
+  // "boosted" group offering the Easy/Average finds again with a stat bump —
+  // extra options to fill out a Hard fight when few species in this Rank +
+  // Habitat naturally qualify as one.
+  const randRoster=useMemo(()=>trainerRoster(entries),[entries]);
+  const randGroups=useMemo(()=>{
+    if(!randRank||!randHabitat)return null;
+    const allHabTypes=[...randHabitat.commonTypes,...randHabitat.uncommonTypes,...randHabitat.rareTypes];
+    const candidates=POKEMON.filter(p=>p.suggestedRank===randRank&&p.types.some(t=>allHabTypes.includes(t)));
+    const targetIdx=RANK_ORDER.indexOf(randRank);
+    const scored=candidates.map(p=>({p,score:encounterScore(p,targetIdx,randRoster)}));
+    const easy=scored.filter(s=>encounterBucket(s.score)==="Easy").sort((a,b)=>a.score-b.score);
+    const average=scored.filter(s=>encounterBucket(s.score)==="Average").sort((a,b)=>a.score-b.score);
+    const hard=scored.filter(s=>encounterBucket(s.score)==="Hard").sort((a,b)=>b.score-a.score);
+    const boosted=[...easy,...average].sort((a,b)=>b.score-a.score).slice(0,8);
+    return{easy,average,hard,boosted};
+  },[randRank,randHabitat,randRoster]);
   const sideColor={player:"#2858C0",enemy:"#D82808",neutral:"#686858"}[side];
-  const handleAdd=(p:PokemonEntry)=>{
-    onAdd(p,side);
+  const handleAdd=(p:PokemonEntry,boost=0)=>{
+    onAdd(p,side,boost);
     setJustAdded(p.number);
     setTimeout(()=>setJustAdded(cur=>cur===p.number?null:cur),500);
+  };
+  const ResultRow=({p,boost}:{p:PokemonEntry;boost?:number})=>{
+    const added=justAdded===p.number;
+    return(
+      <div onClick={()=>handleAdd(p,boost)} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #C8C8A8",background:added?"#B8F0B8":boost?"rgba(248,208,48,0.15)":"transparent"}}
+        onMouseEnter={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=boost?"rgba(248,208,48,0.35)":"#C8D8F0";}}
+        onMouseLeave={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=boost?"rgba(248,208,48,0.15)":"transparent";}}>
+        <img src={`/sprites/pokemon/${p.number}.png`} alt="" width={24} height={24} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}} onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
+        <span style={{fontSize:7,color:"#888870",width:26,flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
+        <span style={{fontSize:9,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+        {p.types.slice(0,2).map(t=><TypeBadge key={t} type={t as PokemonType} small/>)}
+        {boost?<span style={{fontSize:6,color:"#806018",fontWeight:700,flexShrink:0}}>+{boost} STAT</span>:null}
+        <span style={{fontSize:7,color:RANK_COLORS[p.suggestedRank],flexShrink:0}}>{added?"ADDED":p.suggestedRank.slice(0,3).toUpperCase()}</span>
+      </div>
+    );
   };
   return(
     <div style={{position:"fixed",inset:0,zIndex:200,background:"rgba(8,16,8,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
@@ -3823,33 +3911,90 @@ function AddPokemonModal({onAdd,onClose}:{onAdd:(p:PokemonEntry,side:"player"|"e
             );
           })}
         </div>
-        {/* Search input */}
-        <input type="text" autoFocus placeholder="Search Pokémon…" value={q} onChange={e=>setQ(e.target.value)}
-          style={{width:"100%",background:"#F8F8E8",border:"2px solid #0C2024",padding:"6px 8px",color:"#181818",fontSize:9,outline:"none",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 rgba(0,0,0,0.3)"}}/>
-        {/* Results list — cream FireRed rows */}
-        <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
-          <div onClick={()=>handleAdd(MISSINGNO)} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 8px",cursor:"pointer",borderBottom:"2px solid #181818",background:justAdded===MISSINGNO.number?"#B8F0B8":"#E8E8D0"}}
-            onMouseEnter={e=>{if(justAdded!==MISSINGNO.number)(e.currentTarget as HTMLDivElement).style.background="#DCDCC0";}}
-            onMouseLeave={e=>{if(justAdded!==MISSINGNO.number)(e.currentTarget as HTMLDivElement).style.background="#E8E8D0";}}>
-            <PokeballIcon/>
-            <span style={{fontSize:8,color:"#807008",fontWeight:700}}>Custom (blank card)</span>
-          </div>
-          {filtered.map(p=>{
-            const added=justAdded===p.number;
+        {/* Mode tabs — SEARCH is the plain species list, RANDOM is the
+            Rank > Habitat > Difficulty wizard below. */}
+        <div style={{display:"flex",gap:5}}>
+          {(["search","random"] as const).map(m=>{
+            const active=mode===m;
             return(
-              <div key={`${p.number}-${p.name}`} onClick={()=>handleAdd(p)} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #C8C8A8",background:added?"#B8F0B8":"transparent"}}
-                onMouseEnter={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background="#C8D8F0";}}
-                onMouseLeave={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background="transparent";}}>
-                <img src={`/sprites/pokemon/${p.number}.png`} alt="" width={24} height={24} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}} onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
-                <span style={{fontSize:7,color:"#888870",width:26,flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
-                <span style={{fontSize:9,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-                {p.types.slice(0,2).map(t=><TypeBadge key={t} type={t as PokemonType} small/>)}
-                <span style={{fontSize:7,color:RANK_COLORS[p.suggestedRank],flexShrink:0}}>{added?"ADDED":p.suggestedRank.slice(0,3).toUpperCase()}</span>
-              </div>
+              <button key={m} onClick={()=>setMode(m)} style={{flex:1,padding:"6px 4px",fontSize:8,fontFamily:"'Press Start 2P',monospace",
+                background:active?"#F8D030":"rgba(248,248,232,0.85)",color:active?"#0C2024":"#585858",border:`2px solid ${active?"#0C2024":"#585858"}`,
+                boxShadow:active?"inset 0 0 0 1px rgba(255,255,255,0.4)":"1px 1px 0 rgba(0,0,0,0.3)",cursor:"pointer"}}>
+                {m==="search"?"🔍 SEARCH":"🎲 RANDOM"}
+              </button>
             );
           })}
-          {filtered.length===0&&<div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>No matches.</div>}
         </div>
+        {mode==="search"?(
+          <>
+            {/* Search input */}
+            <input type="text" autoFocus placeholder="Search Pokémon…" value={q} onChange={e=>setQ(e.target.value)}
+              style={{width:"100%",background:"#F8F8E8",border:"2px solid #0C2024",padding:"6px 8px",color:"#181818",fontSize:9,outline:"none",fontFamily:"'Press Start 2P',monospace",boxShadow:"2px 2px 0 rgba(0,0,0,0.3)"}}/>
+            {/* Results list — cream FireRed rows */}
+            <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
+              <div onClick={()=>handleAdd(MISSINGNO)} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 8px",cursor:"pointer",borderBottom:"2px solid #181818",background:justAdded===MISSINGNO.number?"#B8F0B8":"#E8E8D0"}}
+                onMouseEnter={e=>{if(justAdded!==MISSINGNO.number)(e.currentTarget as HTMLDivElement).style.background="#DCDCC0";}}
+                onMouseLeave={e=>{if(justAdded!==MISSINGNO.number)(e.currentTarget as HTMLDivElement).style.background="#E8E8D0";}}>
+                <PokeballIcon/>
+                <span style={{fontSize:8,color:"#807008",fontWeight:700}}>Custom (blank card)</span>
+              </div>
+              {filtered.map(p=><ResultRow key={`${p.number}-${p.name}`} p={p}/>)}
+              {filtered.length===0&&<div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>No matches.</div>}
+            </div>
+          </>
+        ):(
+          <>
+            {/* Step 1 — Rank */}
+            <div>
+              <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>1. RANK</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                {RANK_ORDER.map(r=>(
+                  <button key={r} onClick={()=>setRandRank(r)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
+                    border:`2px solid ${randRank===r?"#0C2024":RANK_COLORS[r]}`,background:randRank===r?RANK_COLORS[r]:"rgba(248,248,232,0.85)",
+                    color:randRank===r?"#0C2024":RANK_COLORS[r],fontWeight:700}}>{r}</button>
+                ))}
+              </div>
+            </div>
+            {/* Step 2 — Habitat, only once a Rank is picked */}
+            {randRank&&(
+              <div>
+                <div style={{fontSize:7,color:"#E0F0F0",marginBottom:4,textShadow:"1px 1px 0 #0C2024"}}>2. ENVIRONMENT</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                  {HABITATS.map(h=>(
+                    <button key={h.name} onClick={()=>setRandHabitat(h)} style={{padding:"4px 6px",fontSize:7,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",
+                      border:`2px solid ${randHabitat?.name===h.name?"#0C2024":"#585858"}`,background:randHabitat?.name===h.name?"#F8D030":"rgba(248,248,232,0.85)",
+                      color:randHabitat?.name===h.name?"#0C2024":"#383838",fontWeight:700}}>{h.emoji} {h.name}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Step 3 — computed Easy/Average/Hard difficulty, grouping the
+                matching species; a trainer with no linked Pokémon yet in
+                this battle gets a neutral (Standard-rank, no typing) read. */}
+            {randRank&&randHabitat&&randGroups&&(
+              <>
+                <div style={{fontSize:6,color:"#C8E8E0",textAlign:"center"}}>
+                  {randRoster.length?`Difficulty vs. ${randRoster.length} trainer Pokémon on the field.`:"No trainer Pokémon in this battle yet — difficulty assumes a Standard-rank team."}
+                </div>
+                <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
+                  {([["Easy",randGroups.easy],["Average",randGroups.average],["Hard",randGroups.hard]] as const).map(([label,list])=>list.length>0&&(
+                    <div key={label}>
+                      <div style={{padding:"4px 8px",background:ENCOUNTER_DIFFICULTY_COLORS[label]+"30",borderBottom:"1px solid #C8C8A8",fontSize:7,fontWeight:700,color:"#383838"}}>{label.toUpperCase()} ({list.length})</div>
+                      {list.map(({p})=><ResultRow key={`${label}-${p.number}-${p.name}`} p={p}/>)}
+                    </div>
+                  ))}
+                  {randGroups.boosted.length>0&&(
+                    <div>
+                      <div style={{padding:"4px 8px",background:"rgba(248,208,48,0.3)",borderBottom:"1px solid #C8C8A8",fontSize:7,fontWeight:700,color:"#383838"}}>⚡ BOOSTED FOR A HARDER FIGHT ({randGroups.boosted.length})</div>
+                      {randGroups.boosted.map(({p})=><ResultRow key={`boost-${p.number}-${p.name}`} p={p} boost={2}/>)}
+                    </div>
+                  )}
+                  {randGroups.easy.length+randGroups.average.length+randGroups.hard.length===0&&<div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>No {randRank} Pokémon match this environment&apos;s types.</div>}
+                </div>
+              </>
+            )}
+          </>
+        )}
         <div style={{fontSize:7,color:"#E0F0F0",textAlign:"center",textShadow:"1px 1px 0 #0C2024"}}>Adding to <span style={{color:sideColor,background:"#F8F8E8",padding:"0 4px"}}>{side.toUpperCase()}</span> side — click a row to add, list stays open.</div>
         {/* Footer */}
         <button onClick={onClose} style={{alignSelf:"center",padding:"7px 28px",fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#F8F8E8",
@@ -4145,7 +4290,7 @@ export default function BattleTrackerPage(){
   const sSpendWP=(id:string,amt:number)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e));
   const sApplySpecial=(id:string,u:Partial<BattleEntry>)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e));
 
-  const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string,side?:"player"|"enemy"|"neutral")=>{
+  const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string,side?:"player"|"enemy"|"neutral",boost=0)=>{
     /* A linked party Pokémon brings its sheet with it. Rank-ups live on the
        sheet as base attributes plus trained ones, so reading only the species
        entry here meant a Pokémon you'd raised walked into the fight with its
@@ -4153,7 +4298,19 @@ export default function BattleTrackerPage(){
        is one; the species entry is the fallback for wild//custom adds. */
     const sheet=sheetKey?loadFromStorage<Record<string,any>>("pokemon_sheets",{})[sheetKey]:null;
     const derived=sheet?deriveSheetStats(pokemon,sheet):null;
-    const attrs=derived?.attrs??{...pokemon.attributes};
+    const baseAttrs=derived?.attrs??{...pokemon.attributes};
+    // The random-encounter picker's "boosted" suggestions bump every
+    // attribute by a flat amount (clamped to the species' own limits, or a
+    // sane default cap when it has none) to fill out a Hard fight from
+    // species that don't naturally qualify as one.
+    const clampAttr=(v:number,limit?:number)=>Math.min(limit??10,v);
+    const attrs=boost?{
+      strength:clampAttr(baseAttrs.strength+boost,pokemon.attributeLimits?.strength),
+      dexterity:clampAttr(baseAttrs.dexterity+boost,pokemon.attributeLimits?.dexterity),
+      vitality:clampAttr(baseAttrs.vitality+boost,pokemon.attributeLimits?.vitality),
+      special:clampAttr(baseAttrs.special+boost,pokemon.attributeLimits?.special),
+      insight:clampAttr(baseAttrs.insight+boost,pokemon.attributeLimits?.insight),
+    }:baseAttrs;
     const hp=derived?.maxHp??(pokemon.number<=0?10:pokemon.baseHp+attrs.vitality);
     const will=derived?.maxWill??(pokemon.number<=0?5:attrs.insight+3);
     const ini=Math.floor(Math.random()*6)+1+(attrs?.dexterity??1);
@@ -4361,7 +4518,7 @@ export default function BattleTrackerPage(){
   return(
     <PokedexFrame active="battle-tracker" hideParty>
     <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#181818",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
-      {showAddModal&&<AddPokemonModal onAdd={(p,side)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side)} onClose={()=>setShowAddModal(false)}/>}
+      {showAddModal&&<AddPokemonModal onAdd={(p,side,boost)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side,boost)} onClose={()=>setShowAddModal(false)} entries={entries}/>}
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
