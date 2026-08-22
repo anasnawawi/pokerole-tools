@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { C } from "./PokedexFrame";
 import { PokemonSheetData } from "../lib/trainer";
@@ -63,14 +63,39 @@ function PixelRect({ x, y, w, h, corner, fill }: { x: number; y: number; w: numb
    layered on top, so they stay real text (selectable, screen-reader visible)
    rather than baked into the bitmap. Four nested stepped bands: dark outer
    edge, a structural color band, the main fill, then a one-pixel highlight
-   stripe along the top-left the way GBA panels catch a light source. */
+   stripe along the top-left the way GBA panels catch a light source — plus
+   the faint diagonal stripe texture the reference's fill actually carries,
+   which the flat-color first pass dropped. GBA hardware has no rotation, so
+   a real diagonal there is a *staircase*: each row's stripe shifts over by
+   one pixel from the row above, built here as a small repeating `<pattern>`
+   of axis-aligned rects (never a rotated shape, which would need
+   anti-aliasing to look smooth — exactly what this is avoiding). */
 function PixelCardFrame({ w, h, palette }: { w: number; h: number; palette: { edge: string; band: string; fill: string; highlight: string } }) {
+  const id = useId();
+  const clipId = `card-fill-${id}`, patId = `card-stripe-${id}`;
+  const fillBands = steppedBands(2, 2, w - 4, h - 4, [1]);
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden
       style={{position:"absolute",inset:0,width:"100%",height:"100%",display:"block"}}>
+      <defs>
+        <clipPath id={clipId}>
+          {fillBands.map((b,i) => <rect key={i} x={b.x} y={b.y} width={b.width} height={b.height}/>)}
+        </clipPath>
+        {/* 4x4 tile, one pixel-row of highlight stepping over by one column
+            each row — a staircase diagonal, not a rotated line. */}
+        <pattern id={patId} width={4} height={4} patternUnits="userSpaceOnUse">
+          <rect width={4} height={4} fill={palette.fill}/>
+          <rect x={0} y={0} width={1} height={1} fill={palette.highlight} opacity={0.4} shapeRendering="crispEdges"/>
+          <rect x={1} y={1} width={1} height={1} fill={palette.highlight} opacity={0.4} shapeRendering="crispEdges"/>
+          <rect x={2} y={2} width={1} height={1} fill={palette.highlight} opacity={0.4} shapeRendering="crispEdges"/>
+          <rect x={3} y={3} width={1} height={1} fill={palette.highlight} opacity={0.4} shapeRendering="crispEdges"/>
+        </pattern>
+      </defs>
       <PixelRect x={0} y={0} w={w} h={h} corner={[2,1]} fill={palette.edge}/>
       <PixelRect x={1} y={1} w={w-2} h={h-2} corner={[1,1]} fill={palette.band}/>
-      <PixelRect x={2} y={2} w={w-4} h={h-4} corner={[1]} fill={palette.fill}/>
+      <g clipPath={`url(#${clipId})`}>
+        <rect x={2} y={2} width={w-4} height={h-4} fill={`url(#${patId})`} shapeRendering="crispEdges"/>
+      </g>
       <rect x={3} y={3} width={w-6} height={1} fill={palette.highlight} shapeRendering="crispEdges"/>
       <rect x={3} y={3} width={1} height={h-6} fill={palette.highlight} shapeRendering="crispEdges"/>
     </svg>
