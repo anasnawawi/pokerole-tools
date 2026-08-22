@@ -5014,7 +5014,11 @@ export default function BattleTrackerPage(){
                       <div style={{display:"grid",gridTemplateColumns:isNarrow?"1fr":"1fr 1fr",gridTemplateRows:isNarrow?"repeat(4,1fr)":"1fr 1fr",gap:4,height:"100%"}}>
                         {[
                           {l:"FIGHT",fn:()=>setMenuMode("fight")},
-                          {l:"BAG",fn:()=>setMenuMode("bag")},
+                          /* BAG is a trainer's own item pouch — a wild/
+                             unlinked Pokémon has no trainer standing behind
+                             it to reach into one, so the option only shows
+                             up on a trainer-linked Pokémon's turn. */
+                          ...(onFieldPlayer?.linkedTrainerId?[{l:"BAG",fn:()=>setMenuMode("bag")}]:[]),
                           {l:"POKéMON",fn:()=>setMenuMode("pokemon")},
                           {l:"RUN",fn:()=>endBattle()},
                         ].map(b=>(
