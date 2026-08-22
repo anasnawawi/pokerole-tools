@@ -1683,7 +1683,11 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     const isSelf=tid===attacker.id;
     const t=isSelf?attacker:allEntries.find(e=>e.id===tid);
     const dr=dmgResults[tid];if(!t||!dr)return;
-    if(isSelf){onApplyDmg(tid,dr.successes);setApplied(p=>new Set([...p,tid]));return;}
+    if(isSelf){
+      onApplyDmg(tid,dr.successes);
+      if(applied.size===0)statFx.forEach(se=>{if(se.toSelf)onApplyEffect(attacker.id,se.attr,se.amount,move.name,nameOf(attacker,allEntries));});
+      setApplied(p=>new Set([...p,tid]));return;
+    }
     const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);
     if(tm.mod===-999){alert(`${nameOf(t,allEntries)} is immune!`);return;}
     const def=defBreakdown(t,move.category==="Physical"?"vitality":"insight").value;
@@ -1692,7 +1696,23 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     const rawDmg=Math.max(1,succ-def);
     const typeAdj=tm.mod===2?rawDmg+2:tm.mod===-1?Math.max(1,rawDmg-2):rawDmg;
     const finalDmg=typeAdj+brutalBonus2;
-    onApplyDmg(tid,finalDmg);setApplied(p=>new Set([...p,tid]));
+    onApplyDmg(tid,finalDmg);
+    /* A damaging move with its own stat effects (e.g. an accuracy-lowering
+       hit that also self-buffs Strength) used to only apply those effects
+       through the separate generic "Apply Effect & Action Used" button
+       further down — but that button and this one both close the popup on
+       click, so whichever the GM clicked first silently dropped the
+       other's job. Applying statFx right here means Apply Damage always
+       carries them along. Self-directed effects (toSelf) fire once, on
+       whichever target's damage gets applied first (`applied` is still the
+       pre-click set here); target-directed effects fire once per target,
+       scoped to just this one, so a multi-target hit doesn't reapply a
+       per-target debuff onto every other target each time. */
+    statFx.forEach(se=>{
+      if(se.toSelf){if(applied.size===0)onApplyEffect(attacker.id,se.attr,se.amount,move.name,nameOf(attacker,allEntries));}
+      else if(!isSelf)onApplyEffect(tid,se.attr,se.amount,move.name,nameOf(attacker,allEntries));
+    });
+    setApplied(p=>new Set([...p,tid]));
     // Happiness drop when target is in pain
     const defPainPenalty=getPainPenalty(t.currentHp,t.maxHp);
     if(defPainPenalty>0&&onApplySpecial){
@@ -2746,17 +2766,27 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 </div>
               )}
 
-              {/* Mark action taken button */}
-              <button onClick={()=>{
-                // Apply all stat effects
-                statFx.forEach(se=>{
-                  const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
-                  applyTargets.forEach(tid=>onApplyEffect(tid,se.attr,se.amount,move.name,nameOf(attacker,allEntries)));
-                });
-                onIncrementAction(attacker.id,isPriority);onClose();
-              }} style={{width:"100%",padding:"8px 10px",background:"#00d4aa",border:"none",borderRadius:5,fontSize:12,fontWeight:700,color:"#0f1117",cursor:"pointer"}}>
-                ✓ {statFx.length>0?"Apply Effect & Action Used":"Mark Action Used & Close"}{!isPriority&&` (Action #${(attacker.actionCount||0)+1})`}
-              </button>
+              {/* Mark action taken button — a damaging move with stat
+                  effects now applies them from its own Apply Damage
+                  button(s) below (see applyDmg), so this generic button
+                  hides itself there instead of sitting alongside as a
+                  second, competing way to close the popup that would
+                  silently skip whichever one the GM didn't click. Only
+                  hides when there's actually a damage flow to defer to —
+                  a support move with a stat effect (no damage section at
+                  all) still needs this as its one and only apply button. */}
+              {!(statFx.length>0&&move.category!=="Support"&&targets.length>0)&&(
+                <button onClick={()=>{
+                  // Apply all stat effects
+                  statFx.forEach(se=>{
+                    const applyTargets=se.toSelf?[attacker.id]:targets.length>0?targets:[attacker.id];
+                    applyTargets.forEach(tid=>onApplyEffect(tid,se.attr,se.amount,move.name,nameOf(attacker,allEntries)));
+                  });
+                  onIncrementAction(attacker.id,isPriority);onClose();
+                }} style={{width:"100%",padding:"8px 10px",background:"#00d4aa",border:"none",borderRadius:5,fontSize:12,fontWeight:700,color:"#0f1117",cursor:"pointer"}}>
+                  ✓ {statFx.length>0?"Apply Effect & Action Used":"Mark Action Used & Close"}{!isPriority&&` (Action #${(attacker.actionCount||0)+1})`}
+                </button>
+              )}
             </div>
           )}
 
