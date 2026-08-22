@@ -166,7 +166,7 @@ export default function PartyBar({ compact = false, onPanel = false, dark = fals
       <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:0,width:"100%"}}>
         {Array.from({length:6},(_,i)=>{
           const member = party[i];
-          if (!member) return <EmptyRow key={i} dim={!registered} light={light}/>;
+          if (!member) return <EmptyRow key={i} dim={!registered} light={light} dark={dark}/>;
           return (
             <Row key={member.key} sheetKey={member.key} sheet={member.sheet}
               dex={dex} battle={session?.battle ?? []} onClick={onOpen}/>
@@ -186,7 +186,7 @@ export default function PartyBar({ compact = false, onPanel = false, dark = fals
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,minWidth:0}}>
         {Array.from({length:6},(_,i)=>{
           const member = party[i];
-          if (!member) return <EmptySlot key={i} compact sprite={sprite} dim={!registered} light={light}/>;
+          if (!member) return <EmptySlot key={i} compact sprite={sprite} dim={!registered} light={light} dark={dark}/>;
           return (
             <Slot key={member.key} sheetKey={member.key} sheet={member.sheet}
               dex={dex} battle={session?.battle ?? []} compact sprite={sprite}
@@ -222,18 +222,22 @@ function PartyNote({ compact, light, registered, count, session, onClick }: {
   );
 }
 
-function EmptySlot({ compact, sprite, dim, light }: {
-  compact: boolean; sprite: number; dim: boolean; light: boolean;
+function EmptySlot({ compact, sprite, dim, light, dark }: {
+  compact: boolean; sprite: number; dim: boolean; light: boolean; dark: boolean;
 }) {
   /* Ink follows the surface, not the density — a dashed white outline is
      invisible on the landing's pale bezel, and a navy one vanishes on the
-     crimson shell (or the expanded list's own dark teal panel). */
+     crimson shell (or the expanded list's own dark teal panel). On the
+     scanline panel specifically, the slot also needs its own flat backing —
+     otherwise the lines cut straight through it and it barely reads as a
+     slot at all. */
   const line   = light ? "rgba(24,32,60,0.28)" : "rgba(255,255,255,0.35)";
   const ring   = light ? "rgba(24,32,60,0.30)" : "rgba(255,255,255,0.40)";
   const ink    = light ? "rgba(24,32,60,0.50)" : "rgba(255,255,255,0.65)";
   return (
     <div aria-hidden style={{display:"flex",flexDirection:"column",alignItems:"center",
       gap:compact?3:4,padding:compact?"5px 3px":"7px 5px",borderRadius:5,minWidth:0,
+      background:dark?"#1E5652":undefined,
       border:`2px dashed ${line}`,opacity:dim?0.45:0.75}}>
       <span style={{width:sprite,height:sprite,borderRadius:"50%",
         border:`2px dashed ${ring}`,color:ink,
@@ -313,13 +317,14 @@ function Slot({ sheetKey, sheet, dex, battle, compact, sprite, onClick }: {
   );
 }
 
-function EmptyRow({ dim, light }: { dim: boolean; light: boolean }) {
+function EmptyRow({ dim, light, dark }: { dim: boolean; light: boolean; dark: boolean }) {
   const line = light ? "rgba(24,32,60,0.28)" : "rgba(255,255,255,0.4)";
   const ring = light ? "rgba(24,32,60,0.3)" : "rgba(255,255,255,0.45)";
   const ink  = light ? "rgba(24,32,60,0.5)" : "rgba(255,255,255,0.7)";
   return (
     <div aria-hidden style={{display:"flex",alignItems:"center",gap:12,
       padding:"10px 14px",borderRadius:7,minHeight:60,
+      background:dark?"#1E5652":undefined,
       border:`2px dashed ${line}`,opacity:dim?0.4:0.65}}>
       <span style={{width:40,height:40,flexShrink:0,borderRadius:"50%",
         border:`2px dashed ${ring}`,display:"flex",alignItems:"center",

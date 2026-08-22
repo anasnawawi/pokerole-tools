@@ -339,7 +339,7 @@ export default function Home() {
                shared pale C.bezel token every other panel on this screen
                still uses — a one-off look shouldn't change the shared
                color other panels rely on. */
-            background:"repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 1px,#226B64 1px,#226B64 5px)",
+            background:"repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 2px,#226B64 2px,#226B64 11px)",
             padding:narrow?8:10,display:"flex",flexDirection:"column",
             justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
             <PartyBar compact={portrait} onPanel dark/>
