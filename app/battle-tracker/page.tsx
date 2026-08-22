@@ -4361,11 +4361,12 @@ export default function BattleTrackerPage(){
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
-      {/* Battle toolbar — scrolls rather than clipping, so the controls at the far
-          right (INI, EOR, END) stay reachable on narrow windows. */}
-      <div style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"0 10px",height:42,display:"flex",alignItems:"center",gap:8,flexShrink:0,overflowX:"auto",overflowY:"hidden"}}>
+      {/* Battle toolbar — wraps onto extra rows rather than scrolling, so
+          every control (INI, EOR, END, GM, ...) stays visible and reachable
+          without a horizontal scrollbar on narrow windows. */}
+      <div style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"6px 10px",minHeight:42,display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,rowGap:6,flexShrink:0}}>
         <span style={{fontSize:9,color:"#D82808",fontWeight:700,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>⚔ BATTLE</span>
-        <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+        <div style={{marginLeft:"auto",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",justifyContent:"flex-end"}}>
           <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>{WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}</select>
           <select value={terrain} onChange={e=>setTerrain(e.target.value)} title="Active Terrain" style={{background:"#F8F8E8",border:"2px solid #181818",color:terrain==="None"?"#888870":"#2858C0",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>
             <option value="None">🌍 No Terrain</option>
