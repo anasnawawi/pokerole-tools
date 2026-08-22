@@ -134,10 +134,13 @@ function vitals(sheetKey: string, sheet: PokemonSheetData, dex: Dex | null, batt
  * `onPanel` is the surface, which is a separate question from the density:
  * the compact strip rides the crimson shell inside PokedexFrame but a pale
  * bezel panel on the landing device, and the empty slots have to ink
- * themselves for whichever one they're actually sitting on.
+ * themselves for whichever one they're actually sitting on. `dark` is for
+ * the one panel that's neither — the expanded list's own dark teal
+ * scanline background — so the empty-slot ink can go pale again without
+ * confusing it for the crimson shell.
  */
-export default function PartyBar({ compact = false, onPanel = false }: {
-  compact?: boolean; onPanel?: boolean;
+export default function PartyBar({ compact = false, onPanel = false, dark = false }: {
+  compact?: boolean; onPanel?: boolean; dark?: boolean;
 }) {
   const router = useRouter();
   const session = useSession();
@@ -153,19 +156,23 @@ export default function PartyBar({ compact = false, onPanel = false }: {
 
   const registered = !!session?.trainer;
   const onOpen = () => router.push("/characters");
+  // Whether the surface behind this bar is pale (needs dark ink) — the
+  // bezel panel is, unless this specific panel overrode it to its own dark
+  // background.
+  const light = onPanel && !dark;
 
   if (!compact) {
     return (
       <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:0,width:"100%"}}>
         {Array.from({length:6},(_,i)=>{
           const member = party[i];
-          if (!member) return <EmptyRow key={i} dim={!registered}/>;
+          if (!member) return <EmptyRow key={i} dim={!registered} light={light}/>;
           return (
             <Row key={member.key} sheetKey={member.key} sheet={member.sheet}
               dex={dex} battle={session?.battle ?? []} onClick={onOpen}/>
           );
         })}
-        <PartyNote compact={false} onPanel registered={registered} count={party.length} session={session}
+        <PartyNote compact={false} light={light} registered={registered} count={party.length} session={session}
           onClick={()=>router.push(registered ? "/characters" : "/")}/>
       </div>
     );
@@ -179,7 +186,7 @@ export default function PartyBar({ compact = false, onPanel = false }: {
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,minWidth:0}}>
         {Array.from({length:6},(_,i)=>{
           const member = party[i];
-          if (!member) return <EmptySlot key={i} compact sprite={sprite} dim={!registered} onPanel={onPanel}/>;
+          if (!member) return <EmptySlot key={i} compact sprite={sprite} dim={!registered} light={light}/>;
           return (
             <Slot key={member.key} sheetKey={member.key} sheet={member.sheet}
               dex={dex} battle={session?.battle ?? []} compact sprite={sprite}
@@ -189,14 +196,14 @@ export default function PartyBar({ compact = false, onPanel = false }: {
       </div>
 
       {/* One line of context, rather than a caption per slot */}
-      <PartyNote compact onPanel={onPanel} registered={registered} count={party.length} session={session}
+      <PartyNote compact light={light} registered={registered} count={party.length} session={session}
         onClick={()=>router.push(registered ? "/characters" : "/")}/>
     </div>
   );
 }
 
-function PartyNote({ compact, onPanel, registered, count, session, onClick }: {
-  compact: boolean; onPanel: boolean; registered: boolean; count: number;
+function PartyNote({ compact, light, registered, count, session, onClick }: {
+  compact: boolean; light: boolean; registered: boolean; count: number;
   session: Session | null; onClick: () => void;
 }) {
   const text = session === null ? "Reading save…"
@@ -208,22 +215,22 @@ function PartyNote({ compact, onPanel, registered, count, session, onClick }: {
     <button onClick={onClick}
       style={{alignSelf:"flex-start",background:"none",border:"none",padding:0,
         cursor:"pointer",textAlign:"left",
-        fontSize:compact?10:11,color:onPanel?"#5A6280":"#FFFFFF",
+        fontSize:compact?10:11,color:light?"#5A6280":"#FFFFFF",
         textDecoration:"underline",textUnderlineOffset:2}}>
       {text}
     </button>
   );
 }
 
-function EmptySlot({ compact, sprite, dim, onPanel }: {
-  compact: boolean; sprite: number; dim: boolean; onPanel: boolean;
+function EmptySlot({ compact, sprite, dim, light }: {
+  compact: boolean; sprite: number; dim: boolean; light: boolean;
 }) {
   /* Ink follows the surface, not the density — a dashed white outline is
      invisible on the landing's pale bezel, and a navy one vanishes on the
-     crimson shell. */
-  const line   = onPanel ? "rgba(24,32,60,0.28)" : "rgba(255,255,255,0.35)";
-  const ring   = onPanel ? "rgba(24,32,60,0.30)" : "rgba(255,255,255,0.40)";
-  const ink    = onPanel ? "rgba(24,32,60,0.50)" : "rgba(255,255,255,0.65)";
+     crimson shell (or the expanded list's own dark teal panel). */
+  const line   = light ? "rgba(24,32,60,0.28)" : "rgba(255,255,255,0.35)";
+  const ring   = light ? "rgba(24,32,60,0.30)" : "rgba(255,255,255,0.40)";
+  const ink    = light ? "rgba(24,32,60,0.50)" : "rgba(255,255,255,0.65)";
   return (
     <div aria-hidden style={{display:"flex",flexDirection:"column",alignItems:"center",
       gap:compact?3:4,padding:compact?"5px 3px":"7px 5px",borderRadius:5,minWidth:0,
@@ -306,15 +313,18 @@ function Slot({ sheetKey, sheet, dex, battle, compact, sprite, onClick }: {
   );
 }
 
-function EmptyRow({ dim }: { dim: boolean }) {
+function EmptyRow({ dim, light }: { dim: boolean; light: boolean }) {
+  const line = light ? "rgba(24,32,60,0.28)" : "rgba(255,255,255,0.4)";
+  const ring = light ? "rgba(24,32,60,0.3)" : "rgba(255,255,255,0.45)";
+  const ink  = light ? "rgba(24,32,60,0.5)" : "rgba(255,255,255,0.7)";
   return (
     <div aria-hidden style={{display:"flex",alignItems:"center",gap:12,
       padding:"10px 14px",borderRadius:7,minHeight:60,
-      border:"2px dashed rgba(24,32,60,0.28)",opacity:dim?0.4:0.65}}>
+      border:`2px dashed ${line}`,opacity:dim?0.4:0.65}}>
       <span style={{width:40,height:40,flexShrink:0,borderRadius:"50%",
-        border:"2px dashed rgba(24,32,60,0.3)",display:"flex",alignItems:"center",
-        justifyContent:"center",fontSize:17,opacity:0.6,color:C.navy}}>◦</span>
-      <span style={{fontFamily:PIXEL,fontSize:9,color:"rgba(24,32,60,0.5)"}}>— empty —</span>
+        border:`2px dashed ${ring}`,display:"flex",alignItems:"center",
+        justifyContent:"center",fontSize:17,opacity:0.6,color:ink}}>◦</span>
+      <span style={{fontFamily:PIXEL,fontSize:9,color:ink}}>— empty —</span>
     </div>
   );
 }

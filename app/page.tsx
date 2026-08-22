@@ -335,9 +335,14 @@ export default function Home() {
               menu, so it still gets the compact six-across itself. */}
           <div style={{flex:portrait?"0 0 auto":"1",minHeight:0,
             borderRadius:6,border:`3px solid ${C.outline}`,
-            background:C.bezel,padding:narrow?8:10,display:"flex",flexDirection:"column",
+            /* This panel's own dark teal + scanline treatment, not the
+               shared pale C.bezel token every other panel on this screen
+               still uses — a one-off look shouldn't change the shared
+               color other panels rely on. */
+            background:"repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 1px,#226B64 1px,#226B64 5px)",
+            padding:narrow?8:10,display:"flex",flexDirection:"column",
             justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
-            <PartyBar compact={portrait} onPanel/>
+            <PartyBar compact={portrait} onPanel dark/>
           </div>
 
           <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:narrow?6:9,flexWrap:"wrap"}}>
