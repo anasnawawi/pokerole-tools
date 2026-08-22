@@ -1662,6 +1662,17 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   // starts at the top instead, only following new content down once the
   // GM actually picks a target or rolls something.
   const everOpenedRef=useRef(false);
+  // The command menu reuses this same MovePopup instance across different
+  // moves (picking FIGHT → a move → BACK → a different move never remounts
+  // it), so everOpenedRef alone only caught the very first move ever opened
+  // this battle — every move after that skipped straight to the "follow new
+  // content down" branch below, landing at the bottom instead of the top.
+  // Re-arm it whenever the move itself changes, so every fresh popup load
+  // gets the same top-of-page start the very first one did.
+  useEffect(()=>{
+    everOpenedRef.current=false;
+    const el=bodyRef.current;if(el)el.scrollTo({top:0});
+  },[move]);
   useEffect(()=>{
     // Scoped to inline — the floating (desktop) popup has room to show
     // everything at once and shouldn't yank the view around on its own.
