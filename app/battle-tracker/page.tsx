@@ -3980,7 +3980,14 @@ export default function BattleTrackerPage(){
   // The extra 48px covers what the two measured name-row heights don't:
   // each group's own internal gap to its sprite row, and the player
   // group's own bottom padding below its sprite.
-  const spriteRowH=Math.max(60,(stageH-enemyNameH-playerNameH-100)/2);
+  // The 30px covers what the two measured name-row heights don't: each
+  // group's own internal gap to its sprite row (~4-10px each) and the
+  // player group's own bottom padding below its sprite (~8-16px). Wider
+  // margins were tried to chase down a few px of sub-pixel rounding
+  // overflow, but that overshot badly — floor-rounding the sprite's own
+  // size (see FieldMon) fixed the actual rounding drift, so this only
+  // needs to cover real layout, not also hide a rounding bug.
+  const spriteRowH=Math.max(60,(stageH-enemyNameH-playerNameH-26)/2);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
