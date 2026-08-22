@@ -4029,7 +4029,7 @@ export default function BattleTrackerPage(){
   // Collapsed toolbar keeps just the turn navigator and the round/active-mon
   // box — the two things worth glancing at mid-fight — and hides the rest
   // (weather/terrain, INI/priority/EOR, battle type, END, GM) behind a toggle.
-  const [toolbarCollapsed,setToolbarCollapsed]=useState(false);
+  const [toolbarCollapsed,setToolbarCollapsed]=useState(true);
   // Below this, the sidebar's fixed width eats too much of the viewport for
   // the scene to lay out without overlap. Float it over the scene instead
   // of squeezing it, so the scene always keeps its full width to work with.
