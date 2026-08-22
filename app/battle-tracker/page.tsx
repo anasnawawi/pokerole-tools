@@ -1055,6 +1055,23 @@ function trainerBestOffense(roster:BattleEntry[]):number{
 // round's worth of actions instead of an arbitrary small number of hits.
 const FAIR_HITS_TO_DEFEAT=5;
 
+/* A separate, much tighter target than FAIR_HITS_TO_DEFEAT for the
+   reverse direction — how many hits the CANDIDATE needs to take the
+   trainer down. The two aren't symmetric: the trainer routinely gets
+   several actions a round, but (per the picker's own warning banner) a
+   wild add typically only gets its one reaction before it's spent. A
+   "Hard" fight is supposed to be one that could actually faint the
+   trainer's Pokémon without a potion, not just chip it — which means
+   those one or two real hits the candidate lands need to be a lot more
+   lethal than "eventually wins a fair, evenly-traded fight" implies.
+   Tuned down from FAIR_HITS_TO_DEFEAT after a boosted Pidgey (maxed at
+   its own species Attribute caps) scored Hard on paper but only took the
+   trainer's Charmander to yellow HP over two rounds in an actual
+   playtest — its own threat term was still using the 5-hit trainer-side
+   bar, which a handful of real hits from the wild side's single reaction
+   was never going to reach. */
+const FATAL_THREAT_HITS=3;
+
 /* How the trainer's own opening Accuracy Roll (Phase 1, gated by actReq —
    needs 1+ on action 1, 2+ on action 2, ...) stacks up against the
    candidate's Evasion pool, the one roll a defender can actually contest
@@ -1123,7 +1140,9 @@ function encounterScoreForAttrs(candidate:PokemonEntry,roster:BattleEntry[],rank
   const candOffense=Math.max(rankAttrs.strength+1,rankAttrs.special+1);
   const trainerDur=trainerAvgDurability(roster);
   const threatHits=expectedHitsToDefeat(candOffense,trainerDur.def,trainerDur.hp);
-  score+=(FAIR_HITS_TO_DEFEAT-threatHits)*1.2;
+  // FATAL_THREAT_HITS, not FAIR_HITS_TO_DEFEAT — see its own comment for
+  // why the two directions aren't held to the same bar.
+  score+=(FATAL_THREAT_HITS-threatHits)*1.8;
   if(roster.length){
     // Typing still nudges the read — a resisted attacker or an easy target
     // should skew the bucket a little even at an even pool size — but it's
