@@ -957,6 +957,14 @@ function trainerAvgPool(roster:BattleEntry[]):number{
   return totals.reduce((a,b)=>a+b,0)/totals.length;
 }
 
+/* Sum (not average) of the whole team's pools — used to weigh several Easy
+   adds against the trainer's whole side at once, since a pile of small
+   pools is what actually adds up to a fair fight, not any one of them
+   alone. */
+function totalPool(roster:BattleEntry[]):number{
+  return roster.reduce((sum,e)=>sum+pokemonPoolProfile(e.attrs,e.pokemonSkills),0);
+}
+
 function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   // Dice-pool gap is the dominant signal now — a candidate rolling notably
   // bigger or smaller pools than the trainer's own team is the real
@@ -1544,13 +1552,15 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const resolvedAccSkill=resolveAccSkill(move,attacker.pokemonSkills,accSkillOverride??undefined);
   const accPool=calcAccPool(move,attrs,weather,attacker.pokemonSkills,accAttrOverride??undefined,accSkillOverride??undefined);
   const canAct=preRollDone?.canAct??false;
-  /* A target choosing Evasion rolls the attacker's accuracy itself, inline
-     in its own reaction box, before Phase 1 ever runs — the "① Accuracy
-     Roll" section below used to have no idea that happened and still
-     invited a second, redundant roll even after "Couldn't Dodge" already
-     showed the attacker's result. Falling back to that reaction's roll
-     here lets Phase 1 display what already happened instead of re-asking. */
-  const reactionAtkRoll=Object.values(defReactions).find(r=>r.type==="evasion"&&r.atkRoll)?.atkRoll??null;
+  /* A target choosing Evasion OR Clash rolls the attacker's accuracy
+     itself, inline in its own reaction box, before Phase 1 ever runs — the
+     "① Accuracy Roll" section below used to have no idea that happened
+     (Evasion's case was fixed first; Clash has the exact same box with its
+     own atkRoll and was still missed here) and still invited a second,
+     redundant roll even after the reaction's own banner already showed the
+     attacker's result. Falling back to that reaction's roll here lets
+     Phase 1 display what already happened instead of re-asking. */
+  const reactionAtkRoll=Object.values(defReactions).find(r=>(r.type==="evasion"||r.type==="clash")&&r.atkRoll)?.atkRoll??null;
 
   // Disobedience: ONLY for player side, and never blocks rolls — just a warning
   const isPlayer=attacker.side==="player";
@@ -2045,14 +2055,15 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {accPool<=0&&<div style={{background:"rgba(255,71,87,0.12)",border:"1px solid #ff475740",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Dice pool is 0 — cannot roll. Action is impossible.</div>}
               {accPool>0&&accPool<actReq&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Pool ({accPool}d) is less than required hits ({actReq}) — success is very unlikely.</div>}
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                {/* A target's Evasion reaction already rolled this exact
-                    accuracy check for itself — show that result instead of
-                    a second live "Roll Accuracy" button asking to redo it.
-                    No HIT/MISS label here: against an evading target, the
-                    "✓ DODGED"/"✗ Couldn't Dodge" banner above is what
-                    actually decided the outcome, not this roll vs actReq. */}
+                {/* A target's Evasion or Clash reaction already rolled this
+                    exact accuracy check for itself — show that result
+                    instead of a second live "Roll Accuracy" button asking
+                    to redo it. No HIT/MISS label here: the reaction's own
+                    banner above ("✓ DODGED"/"✗ Couldn't Dodge", or the
+                    Clash win/lose/tie line) is what actually decided the
+                    outcome, not this roll vs actReq. */}
                 {!accResult&&reactionAtkRoll?(
-                  <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>[{reactionAtkRoll.rolls.join(",")}]={reactionAtkRoll.successes} <span style={{fontSize:9,color:"#5a6080",fontWeight:400}}>(already rolled — see Evasion Check above)</span></span>
+                  <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>[{reactionAtkRoll.rolls.join(",")}]={reactionAtkRoll.successes} <span style={{fontSize:9,color:"#5a6080",fontWeight:400}}>(already rolled — see the reaction check above)</span></span>
                 ):(
                   <button onClick={()=>setAccResult(rollDice(accPool))} disabled={accPool<=0} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:accPool<=0?"#5a6080":"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:accPool<=0?"default":"pointer"}}>🎲 Roll Accuracy ({accPool}d)</button>
                 )}
@@ -3942,6 +3953,15 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
     return{easy,average,hard,boosted};
   },[randRank,randHabitat,randRoster]);
   const sideColor={player:"#2858C0",enemy:"#D82808",neutral:"#686858"}[side];
+  /* Piling on several Easy adds one at a time can quietly turn "an easy
+     fight" into an even one — once the enemy side's combined dice pool
+     catches up to the trainer's own, the Easy list mutes itself instead of
+     silently letting the GM keep stacking past the point it was ever meant
+     to signal. Only meaningful with a real trainer team to weigh against,
+     and only while actually adding to the enemy side. */
+  const enemySideTotal=useMemo(()=>totalPool(entries.filter(e=>e.side==="enemy")),[entries]);
+  const trainerSideTotal=useMemo(()=>totalPool(randRoster),[randRoster]);
+  const encounterEven=side==="enemy"&&trainerSideTotal>0&&enemySideTotal>=trainerSideTotal;
   const handleAdd=(p:PokemonEntry,boost=0,rankAttrs=false)=>{
     // Random-picker rows (Easy/Average/Hard/Boosted) add at the species'
     // Rank-appropriate attributes (base + that Rank's upgrade pool spent),
@@ -3952,12 +3972,13 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
     setJustAdded(p.number);
     setTimeout(()=>setJustAdded(cur=>cur===p.number?null:cur),500);
   };
-  const ResultRow=({p,boost,rankAttrs}:{p:PokemonEntry;boost?:number;rankAttrs?:boolean})=>{
+  const ResultRow=({p,boost,rankAttrs,muted}:{p:PokemonEntry;boost?:number;rankAttrs?:boolean;muted?:boolean})=>{
     const added=justAdded===p.number;
+    const idleBg=muted?"transparent":boost?"rgba(248,208,48,0.15)":"transparent";
     return(
-      <div onClick={()=>handleAdd(p,boost,rankAttrs)} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #C8C8A8",background:added?"#B8F0B8":boost?"rgba(248,208,48,0.15)":"transparent"}}
-        onMouseEnter={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=boost?"rgba(248,208,48,0.35)":"#C8D8F0";}}
-        onMouseLeave={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=boost?"rgba(248,208,48,0.15)":"transparent";}}>
+      <div onClick={()=>handleAdd(p,boost,rankAttrs)} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #C8C8A8",background:added?"#B8F0B8":idleBg,opacity:muted&&!added?0.4:1}}
+        onMouseEnter={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=muted?"#DCDCC0":boost?"rgba(248,208,48,0.35)":"#C8D8F0";}}
+        onMouseLeave={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=idleBg;}}>
         <img src={`/sprites/pokemon/${p.number}.png`} alt="" width={24} height={24} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}} onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
         <span style={{fontSize:7,color:"#888870",width:26,flexShrink:0}}>#{String(p.number).padStart(3,"0")}</span>
         <span style={{fontSize:9,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
@@ -4073,12 +4094,21 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
                     })}
                   </div>
                 </div>
+                {/* Stacking several Easy adds one at a time can quietly turn
+                    "an easy fight" into an even one — once the enemy side's
+                    combined pool has caught up to the trainer's own, the
+                    Easy list mutes itself so that creep doesn't go unnoticed. */}
+                {randDifficulty==="Easy"&&encounterEven&&(
+                  <div style={{fontSize:7,color:"#806018",background:"rgba(248,208,48,0.25)",border:"1px solid #806018",borderRadius:3,padding:"5px 7px",textAlign:"center"}}>
+                    ⚖ Enemy side has caught up to the trainer's own dice pool — this encounter is no longer trivially easy.
+                  </div>
+                )}
                 <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
                   {randDifficulty?(
                     randDifficulty==="Boosted"?
                       randGroups.boosted.map(({p,boost})=><ResultRow key={`Boosted-${p.number}-${p.name}`} p={p} boost={boost} rankAttrs/>)
                     :randGroups[randDifficulty==="Easy"?"easy":randDifficulty==="Average"?"average":"hard"].map(({p})=>
-                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p} rankAttrs/>
+                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p} rankAttrs muted={randDifficulty==="Easy"&&encounterEven}/>
                     )
                   ):(
                     <div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>Pick a difficulty above to see matching Pokémon.</div>
