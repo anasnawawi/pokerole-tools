@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import {
   POKEMON, NATURES, TYPE_COLORS, PokemonType,
   RANK_BONUSES, ITEMS, Move,
@@ -1872,9 +1871,6 @@ function CharactersPageInner() {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                     <h2 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 18, color: "#2850A0", margin: 0 }}>Pokémon Party ({sel.pokemon.length}/6)</h2>
-                    <Link href="/gm-screen" style={{ display: "inline-block", background: "#2850A0", color: "#35785F", borderRadius: 4, padding: "6px 14px", fontWeight: 700, fontSize: 12, textDecoration: "none" }}>
-                      ⚔️ Open Battle Tracker
-                    </Link>
                   </div>
                   {sel.pokemon.length === 0 && <div style={{ fontSize: 12, color: "#585858", fontStyle: "italic", marginBottom: 16 }}>No Pokémon yet — add from the browser →</div>}
                   {sel.pokemon.map(key => {
