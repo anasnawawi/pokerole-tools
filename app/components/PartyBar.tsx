@@ -253,11 +253,14 @@ function EmptyRow({ dim }: { dim: boolean }) {
   );
 }
 
-/* One plate per Pokémon, styled after the FRLG party-select screen: sprite,
-   name + rank (this game's stand-in for a level), an HP bar, the numbers.
-   Reuses `.frw` — the same blue-plate token the battle dialogue boxes use —
-   so the landing device's party list and the rest of the FireRed chrome
-   read as one system rather than two different UIs bolted together. */
+/* One plate per Pokémon, styled after the FRLG "Choose a Pokémon" party
+   screen specifically: the sprite floats free (no backing circle) against a
+   sky-blue plate, the name sits top-left with a small gold "HP" pill leading
+   the bar, and the fraction sits right-aligned and bold. Built from scratch
+   rather than the shared `.frw` token — `.frw` is the generic blue window
+   every FireRed panel borrows, and retuning it for this one screen's colors
+   would have shifted every other thing that uses it. Fainted swaps the plate
+   to the same warm brown/tan the game itself uses, not just a grey fade. */
 function Row({ sheetKey, sheet, dex, battle, onClick }: {
   sheetKey: string; sheet: PokemonSheetData; dex: Dex | null; battle: BattleLite[];
   onClick: () => void;
@@ -268,45 +271,48 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
   const fainted = v.known && v.curHp <= 0;
 
   return (
-    <button onClick={onClick} className="frw"
+    <button onClick={onClick}
       title={`${v.name} — ${sheet.rank}${v.known?` — ${v.curHp}/${v.maxHp} HP`:""}`}
       aria-label={`${v.name}, ${sheet.rank}${v.known?`, ${v.curHp} of ${v.maxHp} HP`:""}${
         fainted?", fainted":v.statuses.length?`, ${v.statuses.join(", ")}`:""}`}
-      style={{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",
-        padding:"9px 14px",cursor:"pointer",touchAction:"manipulation",
-        // Fainted greys the plate rather than fading it, same reasoning as the
-        // compact tile: at reduced opacity the page behind shows through and
-        // the plate stops reading as "down", just as pale.
-        background:fainted?"linear-gradient(180deg, #9AA0AE 0%, #7A8090 100%)":undefined}}>
+      style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",
+        padding:"8px 14px 8px 8px",cursor:"pointer",touchAction:"manipulation",
+        borderRadius:9,border:"3px solid #14295C",
+        boxShadow:"0 0 0 2px #F0F4FF, 2px 3px 0 rgba(0,0,0,0.35)",
+        color:"#FFFFFF",textShadow:"1px 1px 0 #14295C",
+        background:fainted
+          ? "linear-gradient(180deg, #D0A468 0%, #B07838 55%, #8A5A24 100%)"
+          : "linear-gradient(180deg, #8CD0F8 0%, #4890D8 55%, #2C64B0 100%)"}}>
 
-      <span style={{width:40,height:40,flexShrink:0,borderRadius:"50%",
-        background:"rgba(255,255,255,0.18)",border:"2px solid rgba(255,255,255,0.55)",
-        display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- local pixel
-            art at a fixed tiny size; next/image would resample and blur it. */}
-        <img src={`/sprites/pokemon/${sheet.number}.png`} alt="" width={34} height={34}
-          draggable={false}
-          style={{imageRendering:"pixelated",objectFit:"contain",
-            filter:fainted?"grayscale(1) brightness(1.3)":undefined}}
-          onError={e=>{(e.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
-      </span>
+      {/* No backing circle — the game's own sprite floats directly on the
+          plate, slightly larger than the compact strip's tile. */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- local pixel
+          art at a fixed tiny size; next/image would resample and blur it. */}
+      <img src={`/sprites/pokemon/${sheet.number}.png`} alt="" width={44} height={44}
+        draggable={false} style={{flexShrink:0,imageRendering:"pixelated",objectFit:"contain",
+          filter:fainted?"grayscale(1) brightness(1.15)":"drop-shadow(1px 2px 1px rgba(0,0,0,0.4))"}}
+        onError={e=>{(e.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
 
-      <span style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:4}}>
+      <span style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:5}}>
         <span style={{display:"flex",alignItems:"baseline",gap:7}}>
           <span style={{fontFamily:PIXEL,fontSize:11,flex:1,minWidth:0,
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
           {sheet.isPartner&&<span title="Partner Pokémon" style={{fontSize:11,lineHeight:1}}>⭐</span>}
-          <span style={{fontFamily:PIXEL,fontSize:8,opacity:0.85,flexShrink:0}}>{sheet.rank}</span>
         </span>
+        <span style={{fontFamily:PIXEL,fontSize:8,opacity:0.9}}>{sheet.rank}</span>
 
-        <span style={{display:"flex",alignItems:"center",gap:7}}>
-          <span style={{fontFamily:PIXEL,fontSize:7,opacity:0.85,flexShrink:0}}>HP</span>
+        <span style={{display:"flex",alignItems:"center",gap:6}}>
+          {/* The gold "HP" pill FRLG's own party screen leads the bar with,
+              rather than plain label text. */}
+          <span style={{fontFamily:PIXEL,fontSize:7,color:"#503000",background:"#F8D840",
+            border:"1px solid #14295C",borderRadius:8,padding:"1px 5px",flexShrink:0}}>HP</span>
           <span style={{flex:1,height:7,borderRadius:3,overflow:"hidden",
             background:"rgba(0,0,0,0.35)",border:"1px solid rgba(0,0,0,0.4)"}}>
             <span style={{display:"block",height:"100%",width:`${pct*100}%`,background:hpColor,
               transition:"width 240ms"}}/>
           </span>
-          <span style={{fontFamily:PIXEL,fontSize:9,fontVariantNumeric:"tabular-nums",flexShrink:0}}>
+          <span style={{fontFamily:PIXEL,fontSize:10,fontWeight:700,
+            fontVariantNumeric:"tabular-nums",flexShrink:0}}>
             {v.known ? `${v.curHp}/${v.maxHp}` : "—"}
           </span>
         </span>
@@ -314,7 +320,7 @@ function Row({ sheetKey, sheet, dex, battle, onClick }: {
         {(fainted || v.statuses.length > 0) && (
           <span style={{display:"flex",gap:4,flexWrap:"wrap"}}>
             {fainted
-              ? <Chip label="FAINTED" bg="#5A0A0A" compact={false}/>
+              ? <Chip label="FNT" bg="#8A1010" compact={false}/>
               : v.statuses.map(s => <Chip key={s} label={s.toUpperCase()} bg="#8A3C0A" compact={false}/>)}
           </span>
         )}
