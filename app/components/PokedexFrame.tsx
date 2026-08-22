@@ -31,10 +31,8 @@ export const C = {
    the page itself and lets its own sub-nav pick the tab. */
 export const SITE_LINKS = [
   {href:"/reference",               label:"DEX",     match:"reference"},
-  {href:"/encounter",               label:"ENCTR",   match:"encounter"},
   {href:"/battle-tracker",          label:"BATTLE",  match:"battle-tracker"},
   {href:"/gm-screen",               label:"GM",      match:"gm-screen"},
-  {href:"/trainer-card",            label:"CARD",    match:"trainer-card"},
   {href:"/characters",              label:"CHARS",   match:"characters"},
   {href:"/reference/quick-ref",     label:"RULES",   match:"quick-ref"},
 ];
@@ -109,12 +107,16 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
             ))}
           </div>
 
-          {/* Home — back to the device's own front screen */}
+          {/* Home — back to the device's own front screen. The house glyph
+              reads as a faint squiggle at Press Start 2P's pixel size, so it
+              renders in a plain sans-serif at a much larger size instead —
+              bold and unmistakable rather than in-theme but illegible. */}
           <Link href="/" title="Pokédex home" aria-label="Pokédex home"
             style={{flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",
-              height:narrow?22:26,padding:"0 9px",borderRadius:4,textDecoration:"none",
+              width:narrow?22:26,height:narrow?22:26,borderRadius:4,textDecoration:"none",
               background:C.yellow,border:`2px solid ${C.outline}`,
-              fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:8,color:C.navy}}>⌂</Link>
+              fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+              fontSize:narrow?15:18,fontWeight:900,lineHeight:1,color:C.navy}}>⌂</Link>
 
           {/* Destination keys. Scrolls rather than clipping — a nav that
               silently hides its tail is worse than one that scrolls. */}
