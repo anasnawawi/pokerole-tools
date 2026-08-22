@@ -317,20 +317,21 @@ function nameOf(entry:BattleEntry,roster:BattleEntry[]):string{
 
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
 // (as in-game); player plates show HP n/n + WP n/n.
-function SceneNameplate({entry,enemy,allEntries,onClick}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void}){
+function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void;maxW:number}){
   const name=nameOf(entry,allEntries).toUpperCase();
   const sts=(entry.statuses||[]).filter(s=>s!=="Healthy");
   const rank=entry.trainerRank||entry.pokemon.suggestedRank;
+  const defaultW=enemy?188:210;
+  const width=Math.round(clampPx(enemy?85:95,maxW,defaultW));
   return(
     <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"5px 9px 6px",
-      /* width, not minWidth — the row's real space budget (nameplate + gap +
-         sprite, computed against the actual room left after the sidebar's
-         clearance) only holds if this box is forced down to it; a minWidth
-         floor still lets the HP bar/name/rank's own natural content width
-         win out and push the box wider than the row has room for, which is
-         exactly how this and the sprite ended up overlapping at the
-         narrowest phone-plus-expanded-sidebar combination. */
-      width:enemy?"clamp(85px, 26.9cqw, 188px)":"clamp(95px, 30cqw, 210px)",
+      /* width, not minWidth — a minWidth floor still lets the HP bar/name/
+         rank's own natural content width win out and push the box wider
+         than the row has room for. Renders at its full default width
+         (matching the sprite's own "default until it wouldn't fit" rule)
+         and only shrinks as far as maxW (the row's real available width)
+         actually forces it to. */
+      width,
       cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
         <span style={{fontSize:9,fontWeight:700,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
@@ -4511,7 +4512,7 @@ export default function BattleTrackerPage(){
                     padding:"clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad,paddingBottom:0}}>
                     {mounted&&onFieldEnemy&&(
                       <div style={{display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
-                        <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                        <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={stageContentW}/>
                         <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                       </div>
                     )}
@@ -4569,7 +4570,7 @@ export default function BattleTrackerPage(){
                     {mounted&&battleStarted&&onFieldPlayer&&(
                       <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
                         <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
-                        <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                        <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={stageContentW}/>
                       </div>
                     )}
                   </div>
