@@ -17,7 +17,7 @@ import { saveToStorage } from "../lib/storage";
 import {
   TrainerData, PokemonSheetData, makeBlankTrainer as makeBlank,
   setActiveTrainer, getActiveTrainer, TRAINER_SPRITES,
-  loadTrainers, loadPokemonSheets, PokemonGender, TrainerGender,
+  loadTrainers, loadPokemonSheets, PokemonGender, TrainerGender, resolveGender,
 } from "../lib/trainer";
 import { GenderIcon } from "../components/GenderIcon";
 import { MOVES_DATA } from "../data/moves-data";
@@ -101,7 +101,7 @@ function getFeedDelta(item: FeedItem, nature: string): number {
 function makeBlankPokemonSheet(number: number, trainerRank: Rank): PokemonSheetData {
   const pokemon = POKEMON.find(p => p.number === number);
   return {
-    number, nickname: "", gender: "Unknown", rank: pokemon?.suggestedRank ?? "Starter",
+    number, nickname: "", gender: resolveGender(number, "Unknown"), rank: pokemon?.suggestedRank ?? "Starter",
     loyalty: 1, happiness: 1,
     attributes: pokemon ? { ...pokemon.attributes } : { strength: 1, dexterity: 1, vitality: 1, special: 1, insight: 1 },
     trainingAttributes: { strength: 0, dexterity: 0, vitality: 0, special: 0, insight: 0 },

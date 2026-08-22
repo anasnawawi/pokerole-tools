@@ -6,13 +6,65 @@
 import { Rank, TrainerAge } from "../data/game-rules";
 import { loadFromStorage, saveToStorage } from "./storage";
 
-/* Pokémon can be Genderless (no data set here carries per-species gender
-   ratios to roll against), so "Unknown" exists as a distinct fourth state
-   from an intentional "Genderless" choice — it's what every sheet starts
-   as until a player actually picks one. Trainers are always people, so
-   there's no Genderless state for them, just an unset "Unspecified". */
+/* Pokémon can be Genderless, so "Unknown" exists as a distinct fourth state
+   from an intentional "Genderless" choice — but it's meant to be transient:
+   every sheet gets a real gender resolved for it (see resolveGender below)
+   the first time it's normalized, so "Unknown" only shows up mid-migration,
+   never as a Pokémon's actual permanent state. Trainers are always people,
+   so there's no Genderless state for them, just an unset "Unspecified" that
+   IS meant to persist until a player chooses to fill it in. */
 export type PokemonGender = "Male" | "Female" | "Genderless" | "Unknown";
 export type TrainerGender = "Male" | "Female" | "Unspecified";
+
+/* Species that are always Genderless in the mainline games — legendaries
+   and mythicals, plus the handful of ordinary lines (Magnemite, Ditto,
+   Unown, Beldum, etc.) that never had a gender to begin with. This file
+   deliberately doesn't import the ~2MB Pokémon dataset (see header comment),
+   so a per-species "legendary" flag isn't available here — this is a
+   hand-maintained dex-number list instead. Not perfectly exhaustive for the
+   newest generations, but covers every mainstream case a resolveGender call
+   is likely to hit. */
+const GENDERLESS_DEX_NUMBERS = new Set<number>([
+  // Ordinary genderless lines
+  81, 82, 462,   // Magnemite/Magneton/Magnezone
+  100, 101,      // Voltorb/Electrode
+  120, 121,      // Staryu/Starmie
+  132,           // Ditto
+  201,           // Unown
+  299, 476,      // Nosepass/Probopass
+  337, 338,      // Lunatone/Solrock
+  343, 344,      // Baltoy/Claydol
+  374, 375, 376, // Beldum/Metang/Metagross
+  436, 437,      // Bronzor/Bronzong
+  479,           // Rotom
+  599, 600, 601, // Klink/Klang/Klinklang
+  622, 623,      // Golett/Golurk
+  679, 680, 681, // Honedge/Doublade/Aegislash
+  703,           // Carbink
+  769, 770,      // Sandygast/Palossand
+  774,           // Minior
+  870,           // Falinks
+  781,           // Dhelmise
+  // Legendaries / mythicals (Gen 1-8)
+  144, 145, 146, 150, 151,
+  243, 244, 245, 249, 250, 251,
+  377, 378, 379, 380, 381, 382, 383, 384, 385, 386,
+  480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493,
+  494, 638, 639, 640, 641, 642, 643, 644, 645, 646, 647, 648, 649,
+  716, 717, 718, 719, 720, 721,
+  772, 773, 785, 786, 787, 788, 789, 790, 791, 792, 800, 801, 802, 803, 804, 805, 806, 807, 808, 809,
+  888, 889, 890, 891, 892, 893, 894, 895, 896, 897, 898,
+]);
+
+/** Resolves an "Unknown" gender into a real one — Genderless for a species
+ * that's always Genderless, otherwise a coin flip between Male and Female.
+ * Anything already resolved (including a deliberate "Genderless" pick for a
+ * species not on the list above) passes through untouched. */
+export function resolveGender(number: number, current: PokemonGender): PokemonGender {
+  if (current !== "Unknown") return current;
+  if (GENDERLESS_DEX_NUMBERS.has(number)) return "Genderless";
+  return Math.random() < 0.5 ? "Male" : "Female";
+}
 
 export interface TrainerData {
   id: string; name: string; playerName: string; concept: string; nature: string;
@@ -119,7 +171,7 @@ export function normalizePokemonSheet(s: PokemonSheetData): PokemonSheetData {
     ...s,
     socialAttributes: s.socialAttributes ?? BLANK_SOCIAL,
     skills: { ...BLANK_POKEMON_SKILLS, ...s.skills },
-    gender: s.gender ?? "Unknown",
+    gender: resolveGender(s.number, s.gender ?? "Unknown"),
   };
 }
 

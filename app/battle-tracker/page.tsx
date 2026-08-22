@@ -14,6 +14,7 @@ import {
 import { saveToStorage, loadFromStorage, STORAGE_PREFIX } from "../lib/storage";
 import { notifySession } from "../lib/session";
 import type { TrainerData, PokemonSheetData, PokemonGender } from "../lib/trainer";
+import { resolveGender } from "../lib/trainer";
 import PokedexFrame from "../components/PokedexFrame";
 import { GenderIcon } from "../components/GenderIcon";
 
@@ -648,17 +649,31 @@ function deriveSheetStats(pokemon:PokemonEntry,sheet:PokemonSheetData):{attrs:At
 function reconcileEntriesWithSheets(entries:BattleEntry[],sheets:Record<string,PokemonSheetData>):BattleEntry[]{
   let changed=false;
   const next=entries.map(en=>{
-    if(!en.linkedPokemonSheetKey)return en;
+    // Entries saved before gender existed have no field at all, and a wild
+    // add that slipped through before addPokemon resolved it can still be
+    // sitting on "Unknown" — resolve it once here so an already-in-progress
+    // battle picks up a real gender without needing the entry re-added.
+    const resolvedGender=resolveGender(en.pokemon.number,en.gender??"Unknown");
+    const genderChanged=resolvedGender!==en.gender;
+    if(!en.linkedPokemonSheetKey){
+      if(!genderChanged)return en;
+      changed=true;
+      return{...en,gender:resolvedGender};
+    }
     const sheet=sheets[en.linkedPokemonSheetKey];
-    if(!sheet)return en;
+    if(!sheet){
+      if(!genderChanged)return en;
+      changed=true;
+      return{...en,gender:resolvedGender};
+    }
     const{attrs,maxHp,maxWill,skills}=deriveSheetStats(en.pokemon,sheet);
-    if(attrs.strength===en.attrs.strength&&attrs.dexterity===en.attrs.dexterity&&attrs.vitality===en.attrs.vitality&&
+    if(!genderChanged&&attrs.strength===en.attrs.strength&&attrs.dexterity===en.attrs.dexterity&&attrs.vitality===en.attrs.vitality&&
        attrs.special===en.attrs.special&&attrs.insight===en.attrs.insight&&maxHp===en.maxHp&&maxWill===en.maxWill&&
        JSON.stringify(skills)===JSON.stringify(en.pokemonSkills??null)){
       return en;
     }
     changed=true;
-    return{...en,attrs,maxHp,maxWill,
+    return{...en,attrs,maxHp,maxWill,gender:resolvedGender,
       currentHp:Math.max(0,Math.min(maxHp,en.currentHp+(maxHp-en.maxHp))),
       currentWill:Math.max(0,Math.min(maxWill,en.currentWill+(maxWill-en.maxWill))),
       pokemonSkills:skills??en.pokemonSkills};
@@ -2570,7 +2585,7 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
       const sheets=loadFromStorage<Record<string,PokemonSheetData>>("pokemon_sheets",{});
       sheets[key]={
         number:target.pokemon.number,nickname:target.nickname||"",
-        gender:target.gender??"Unknown",
+        gender:resolveGender(target.pokemon.number,target.gender??"Unknown"),
         rank:target.pokemon.suggestedRank,loyalty:1,happiness:1,
         attributes:{...target.attrs},
         trainingAttributes:{strength:0,dexterity:0,vitality:0,special:0,insight:0},
@@ -3944,7 +3959,7 @@ export default function BattleTrackerPage(){
     }
     setEntries(prev=>[...prev,{
       id:`${pokemon.number}-${Date.now()}`,pokemon,nickname:nickname||"",
-      gender:(sheet?.gender as PokemonGender)??"Unknown",
+      gender:resolveGender(pokemon.number,(sheet?.gender as PokemonGender)??"Unknown"),
       initiative:ini,currentHp:hp,maxHp:hp,currentWill:will,maxWill:will,
       loyalty,happiness,
       statuses:["Healthy"],statusTurnsLeft:0,notes:"",isExpanded:false,hasTakenTurn:false,
@@ -4539,7 +4554,13 @@ export default function BattleTrackerPage(){
                   </div>
                 </div>
                 {/* Menu / move list */}
-                <div style={{width:"44%",maxWidth:420,minWidth:280,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
+                {/* minWidth used to be a flat 280 regardless of viewport — on an
+                    actual narrow phone (~360-420px total bar width) that floor
+                    alone exceeded the whole bar, pushing this box's right edge
+                    (border/shadow ring included) straight past the frame's own
+                    edge and clipping it. Narrow gets a floor the single-column
+                    FIGHT/BAG/POKéMON/RUN list can actually live inside. */}
+                <div style={{width:"44%",maxWidth:420,minWidth:isNarrow?160:280,background:"#283030",padding:"clamp(4px,0.8vw,8px)",display:"flex"}}>
                   <div className="frw-menu" style={{flex:1,padding:"clamp(6px,1.2vw,10px)",display:"flex",flexDirection:"column",gap:5,minHeight:0}}>
                     <div style={{flex:1,minHeight:0}}>
                     {menuMode==="fight"?(
