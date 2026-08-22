@@ -4657,8 +4657,8 @@ export default function BattleTrackerPage(){
                       padding:"clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad,paddingBottom:0}}>
                       {mounted&&battleStarted&&onFieldPlayer&&(
                         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
-                          <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                           <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={stageContentW}/>
+                          <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                         </div>
                       )}
                     </div>
@@ -4810,11 +4810,11 @@ export default function BattleTrackerPage(){
                       <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
                     </div>
                   )}
-                  {/* Player nameplate — lower-right, with that side's field hazards above it */}
+                  {/* Player nameplate — lower-right, with that side's field hazards below it */}
                   {mounted&&battleStarted&&onFieldPlayer&&(
                     <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                      <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                       <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                      <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                     </div>
                   )}
                 </>
