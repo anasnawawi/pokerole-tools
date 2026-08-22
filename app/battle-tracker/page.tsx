@@ -9,7 +9,7 @@ import {
 import type { ItemData, HabitatData } from "../data/pokerole-data";
 import {
   STATUS_CONDITIONS, WEATHER_DATA, WeatherData,
-  getDisobedienceLevel, getPainPenalty,
+  getDisobedienceLevel, getPainPenalty, POKEMON_RANK_ATTR_UPGRADES,
 } from "../data/game-rules";
 import { saveToStorage, loadFromStorage, STORAGE_PREFIX } from "../lib/storage";
 import { notifySession } from "../lib/session";
@@ -907,6 +907,28 @@ function getTypeMult(mt:PokemonType,dts:PokemonType[]):{label:string;color:strin
    defenses, averaged into one "how big are this thing's dice" number. */
 type EncounterDifficulty="Easy"|"Average"|"Hard";
 
+/* A wild encounter shouldn't be added at its bare dex-minimum stats — the
+   species entry's `attributes` is the base stat before a Rank's own
+   attribute-upgrade pool (POKEMON_RANK_ATTR_UPGRADES, the same pool the
+   Characters sheet lets a player spend up to each attribute's own cap) is
+   spent. This spends that pool evenly across the five attributes so an
+   Easy/Average/Hard add reads as a properly-built individual of its Rank,
+   not a stat-starved dex entry — no arbitrary boost involved, just what
+   the Rank already entitles it to. */
+function pokemonRankAttrs(pokemon:PokemonEntry):AttrSet{
+  let pool=POKEMON_RANK_ATTR_UPGRADES[pokemon.suggestedRank]??0;
+  const keys:(keyof AttrSet)[]=["strength","dexterity","vitality","special","insight"];
+  const attrs={...pokemon.attributes};
+  const limits=keys.reduce((acc,k)=>{acc[k]=pokemon.attributeLimits?.[k]??Math.min(attrs[k]+4,8);return acc;},{} as Record<keyof AttrSet,number>);
+  let guard=0;
+  while(pool>0&&guard<200){
+    const k=keys[guard%keys.length];
+    if(attrs[k]<limits[k]){attrs[k]++;pool--;}
+    guard++;
+  }
+  return attrs;
+}
+
 /* A species that isn't in the battle yet has no assigned skill ranks — a
    fresh wild add's skills default to 1 across the board (see addPokemon's
    own fallback), so that default is baked in here rather than guessed, to
@@ -939,7 +961,7 @@ function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   // Dice-pool gap is the dominant signal now — a candidate rolling notably
   // bigger or smaller pools than the trainer's own team is the real
   // difficulty, regardless of what Rank tier either side is nominally at.
-  let score=pokemonPoolProfile(candidate.attributes)-trainerAvgPool(roster);
+  let score=pokemonPoolProfile(pokemonRankAttrs(candidate))-trainerAvgPool(roster);
   if(roster.length){
     // Typing still nudges the read — a resisted attacker or an easy target
     // should skew the bucket a little even at an even pool size — but it's
@@ -970,11 +992,12 @@ function encounterBucket(score:number):EncounterDifficulty{
 }
 
 /* Flat attribute boost (same mechanism the "boosted" add already applies)
-   that would bring this candidate's pool average up to the trainer's own —
-   sized to actually be a fair fight, not a fixed +2 regardless of how big
-   the real gap is. */
+   on top of the candidate's already-Rank-appropriate attributes
+   (pokemonRankAttrs) that would bring its pool average up to the
+   trainer's own — sized to actually be a fair fight, not a fixed +2
+   regardless of how big the real gap is. */
 function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
-  const gap=trainerAvgPool(roster)-pokemonPoolProfile(candidate.attributes);
+  const gap=trainerAvgPool(roster)-pokemonPoolProfile(pokemonRankAttrs(candidate));
   return Math.max(1,Math.min(8,Math.ceil(gap)));
 }
 
@@ -3885,7 +3908,7 @@ function PokeballIcon({size=14}:{size?:number}){
 }
 
 // ── Add Pokémon modal — styled after the FireRed party/Pokémon menu ────────────
-function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"player"|"enemy"|"neutral",boost?:number)=>void;onClose:()=>void;entries:BattleEntry[]}){
+function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"player"|"enemy"|"neutral",boost?:number,baseAttrs?:AttrSet)=>void;onClose:()=>void;entries:BattleEntry[]}){
   const [q,setQ]=useState("");
   const [side,setSide]=useState<"player"|"enemy"|"neutral">("enemy");
   const [justAdded,setJustAdded]=useState<number|null>(null);
@@ -3919,15 +3942,20 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
     return{easy,average,hard,boosted};
   },[randRank,randHabitat,randRoster]);
   const sideColor={player:"#2858C0",enemy:"#D82808",neutral:"#686858"}[side];
-  const handleAdd=(p:PokemonEntry,boost=0)=>{
-    onAdd(p,side,boost);
+  const handleAdd=(p:PokemonEntry,boost=0,rankAttrs=false)=>{
+    // Random-picker rows (Easy/Average/Hard/Boosted) add at the species'
+    // Rank-appropriate attributes (base + that Rank's upgrade pool spent),
+    // not the bare dex-minimum stats a plain search add uses — see
+    // pokemonRankAttrs. Boosted adds that same baseline plus its own flat
+    // bump on top, inside addPokemon.
+    onAdd(p,side,boost,rankAttrs?pokemonRankAttrs(p):undefined);
     setJustAdded(p.number);
     setTimeout(()=>setJustAdded(cur=>cur===p.number?null:cur),500);
   };
-  const ResultRow=({p,boost}:{p:PokemonEntry;boost?:number})=>{
+  const ResultRow=({p,boost,rankAttrs}:{p:PokemonEntry;boost?:number;rankAttrs?:boolean})=>{
     const added=justAdded===p.number;
     return(
-      <div onClick={()=>handleAdd(p,boost)} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #C8C8A8",background:added?"#B8F0B8":boost?"rgba(248,208,48,0.15)":"transparent"}}
+      <div onClick={()=>handleAdd(p,boost,rankAttrs)} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",cursor:"pointer",borderBottom:"1px solid #C8C8A8",background:added?"#B8F0B8":boost?"rgba(248,208,48,0.15)":"transparent"}}
         onMouseEnter={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=boost?"rgba(248,208,48,0.35)":"#C8D8F0";}}
         onMouseLeave={e=>{if(!added)(e.currentTarget as HTMLDivElement).style.background=boost?"rgba(248,208,48,0.15)":"transparent";}}>
         <img src={`/sprites/pokemon/${p.number}.png`} alt="" width={24} height={24} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}} onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
@@ -4048,9 +4076,9 @@ function AddPokemonModal({onAdd,onClose,entries}:{onAdd:(p:PokemonEntry,side:"pl
                 <div style={{flex:1,minHeight:0,overflowY:"auto",background:"#F8F8E8",border:"2px solid #0C2024",boxShadow:"inset 0 0 0 2px rgba(255,255,255,0.5)"}}>
                   {randDifficulty?(
                     randDifficulty==="Boosted"?
-                      randGroups.boosted.map(({p,boost})=><ResultRow key={`Boosted-${p.number}-${p.name}`} p={p} boost={boost}/>)
+                      randGroups.boosted.map(({p,boost})=><ResultRow key={`Boosted-${p.number}-${p.name}`} p={p} boost={boost} rankAttrs/>)
                     :randGroups[randDifficulty==="Easy"?"easy":randDifficulty==="Average"?"average":"hard"].map(({p})=>
-                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p}/>
+                      <ResultRow key={`${randDifficulty}-${p.number}-${p.name}`} p={p} rankAttrs/>
                     )
                   ):(
                     <div style={{padding:16,textAlign:"center",fontSize:8,color:"#888870"}}>Pick a difficulty above to see matching Pokémon.</div>
@@ -4355,15 +4383,17 @@ export default function BattleTrackerPage(){
   const sSpendWP=(id:string,amt:number)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e));
   const sApplySpecial=(id:string,u:Partial<BattleEntry>)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e));
 
-  const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string,side?:"player"|"enemy"|"neutral",boost=0)=>{
+  const addPokemon=useCallback((pokemon:PokemonEntry,trainerId?:string,nickname?:string,loyalty=1,happiness=1,moves?:Move[],sheetKey?:string,trainerRank?:string,side?:"player"|"enemy"|"neutral",boost=0,baseAttrsOverride?:AttrSet)=>{
     /* A linked party Pokémon brings its sheet with it. Rank-ups live on the
        sheet as base attributes plus trained ones, so reading only the species
        entry here meant a Pokémon you'd raised walked into the fight with its
        out-of-the-box stats — moves updated, HP didn't. Sheet wins when there
-       is one; the species entry is the fallback for wild//custom adds. */
+       is one; baseAttrsOverride (the random-encounter picker's Rank-
+       appropriate attributes, see pokemonRankAttrs) is next; the bare
+       species entry is the last-resort fallback for search/custom adds. */
     const sheet=sheetKey?loadFromStorage<Record<string,any>>("pokemon_sheets",{})[sheetKey]:null;
     const derived=sheet?deriveSheetStats(pokemon,sheet):null;
-    const baseAttrs=derived?.attrs??{...pokemon.attributes};
+    const baseAttrs=derived?.attrs??baseAttrsOverride??{...pokemon.attributes};
     // The random-encounter picker's "boosted" suggestions bump every
     // attribute by a flat amount (clamped to the species' own limits, or a
     // sane default cap when it has none) to fill out a Hard fight from
@@ -4583,7 +4613,7 @@ export default function BattleTrackerPage(){
   return(
     <PokedexFrame active="battle-tracker" hideParty>
     <div suppressHydrationWarning style={{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#181818",color:"#181818",overflow:"hidden",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
-      {showAddModal&&<AddPokemonModal onAdd={(p,side,boost)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side,boost)} onClose={()=>setShowAddModal(false)} entries={entries}/>}
+      {showAddModal&&<AddPokemonModal onAdd={(p,side,boost,baseAttrs)=>addPokemon(p,undefined,undefined,1,1,undefined,undefined,undefined,side,boost,baseAttrs)} onClose={()=>setShowAddModal(false)} entries={entries}/>}
       {showEOR&&<EORPopup entries={entries} weather={weather} round={round} onApply={applyEOR} onClose={()=>setShowEOR(false)}/>}
       {showPriority&&<PriorityPopup entries={entries} allEntries={entries} weather={weather} onClose={()=>setShowPriority(false)} onApplyDmg={(id,dmg)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentHp:Math.max(0,e.currentHp-dmg)}:e))} onApplyEffect={(id,attr,amt,src)=>setEntries(prev=>prev.map(e=>{if(e.id!==id)return e;const nm=[...e.statMods];const idx=nm.findIndex(m=>m.attr===attr&&m.source===src);if(idx>=0)nm[idx].amount+=amt;else nm.push({source:src,attr,amount:amt});return{...e,statMods:nm};}))} onIncrementAction={(id,isR)=>setEntries(prev=>prev.map(e=>e.id===id?(isR?{...e,reactionUsed:true}:{...e,actionCount:Math.min(4,e.actionCount+1)}):e))} onSpendWP={(id,amt)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,currentWill:Math.max(0,e.currentWill-amt)}:e))} onApplySpecial={(id,u)=>setEntries(prev=>prev.map(e=>e.id===id?{...e,...u}:e))}/>}
 
