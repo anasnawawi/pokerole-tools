@@ -5524,7 +5524,7 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:isNarrow?"clamp(230px, 36vw, 380px)":"clamp(130px, 20vw, 210px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31}}>
+              <div style={{flexShrink:0,height:isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
