@@ -4560,7 +4560,7 @@ export default function BattleTrackerPage(){
                                   <span aria-hidden data-cursor style={{fontSize:"clamp(9px,1.3vw,12px)",color:"transparent",fontFamily:"'Press Start 2P',monospace",flexShrink:0,lineHeight:1.35}}>▶</span>
                                   <span style={{fontSize:"clamp(9px,1.3vw,12px)",fontFamily:"'Press Start 2P',monospace",fontWeight:700,whiteSpace:"normal",wordBreak:"break-word",lineHeight:1.35}}>{m.name}</span>
                                 </span>
-                                <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0,paddingLeft:13}}><TypeBadge type={m.type as PokemonType}/>{stab&&<span style={{fontSize:8,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:8,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
+                                <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0,alignSelf:"flex-end"}}><TypeBadge type={m.type as PokemonType}/>{stab&&<span style={{fontSize:8,color:"#806018",fontFamily:"'Press Start 2P',monospace"}}>★</span>}{(m.priority??0)>0&&<span style={{fontSize:8,color:"#107850",fontFamily:"'Press Start 2P',monospace"}}>P+</span>}</div>
                               </button>
                             );
                           })}
