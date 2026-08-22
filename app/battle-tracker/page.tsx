@@ -3881,6 +3881,10 @@ export default function BattleTrackerPage(){
      at turn order than as a search box. Collapsed, it becomes exactly that:
      one sprite per combatant, fastest initiative on top. */
   const [sidebarCollapsed,setSidebarCollapsed]=useState(false);
+  // Collapsed toolbar keeps just the turn navigator and the round/active-mon
+  // box — the two things worth glancing at mid-fight — and hides the rest
+  // (weather/terrain, INI/priority/EOR, battle type, END, GM) behind a toggle.
+  const [toolbarCollapsed,setToolbarCollapsed]=useState(false);
   // Below this, the sidebar's fixed width eats too much of the viewport for
   // the scene to lay out without overlap. Float it over the scene instead
   // of squeezing it, so the scene always keeps its full width to work with.
@@ -4363,18 +4367,32 @@ export default function BattleTrackerPage(){
 
       {/* Battle toolbar — wraps onto extra rows rather than scrolling, so
           every control (INI, EOR, END, GM, ...) stays visible and reachable
-          without a horizontal scrollbar on narrow windows. */}
-      <div style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"6px 10px",minHeight:42,display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,rowGap:6,flexShrink:0}}>
-        <span style={{fontSize:9,color:"#D82808",fontWeight:700,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>⚔ BATTLE</span>
-        <div style={{marginLeft:"auto",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",justifyContent:"flex-end"}}>
-          <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>{WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}</select>
-          <select value={terrain} onChange={e=>setTerrain(e.target.value)} title="Active Terrain" style={{background:"#F8F8E8",border:"2px solid #181818",color:terrain==="None"?"#888870":"#2858C0",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>
-            <option value="None">🌍 No Terrain</option>
-            <option value="Electric Terrain">⚡ Electric Terrain</option>
-            <option value="Grassy Terrain">🌿 Grassy Terrain</option>
-            <option value="Misty Terrain">🌫 Misty Terrain</option>
-            <option value="Psychic Terrain">🔮 Psychic Terrain</option>
-          </select>
+          without a horizontal scrollbar on narrow windows. Laid out as
+          separate groups under one space-between row (not one clump pinned
+          to the right) so they spread across the full width instead of
+          bunching up. Collapsible: collapsed mode keeps only the turn
+          navigator and the round/active-mon box, the two things worth a
+          glance mid-fight — everything else tucks behind the toggle. */}
+      <div style={{background:"#F8F8E8",borderBottom:"3px solid #181818",boxShadow:"0 3px 0 #787878",padding:"6px 10px",minHeight:42,display:"flex",flexWrap:"wrap",alignItems:"center",justifyContent:"space-between",gap:8,rowGap:6,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <span style={{fontSize:9,color:"#D82808",fontWeight:700,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>⚔ BATTLE</span>
+          <button onClick={()=>setToolbarCollapsed(v=>!v)} title={toolbarCollapsed?"Expand toolbar":"Collapse toolbar"} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"1px 1px 0 #787878",padding:"2px 5px",fontSize:8,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#181818"}}>{toolbarCollapsed?"v":"^"}</button>
+        </div>
+
+        {!toolbarCollapsed&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+            <select value={weather.name} onChange={e=>setWeather(WEATHER_DATA.find(w=>w.name===e.target.value)!)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>{WEATHER_DATA.map(w=><option key={w.name} value={w.name}>{w.emoji?.split(" ")[0]} {w.name}</option>)}</select>
+            <select value={terrain} onChange={e=>setTerrain(e.target.value)} title="Active Terrain" style={{background:"#F8F8E8",border:"2px solid #181818",color:terrain==="None"?"#888870":"#2858C0",fontSize:10,padding:"2px 4px",cursor:"pointer"}}>
+              <option value="None">🌍 No Terrain</option>
+              <option value="Electric Terrain">⚡ Electric Terrain</option>
+              <option value="Grassy Terrain">🌿 Grassy Terrain</option>
+              <option value="Misty Terrain">🌫 Misty Terrain</option>
+              <option value="Psychic Terrain">🔮 Psychic Terrain</option>
+            </select>
+          </div>
+        )}
+
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",gap:4,background:"#E8E8D0",border:"2px solid #181818",padding:"2px 6px",fontSize:9,fontFamily:"'Press Start 2P',monospace"}}>
             <span style={{color:"#888870"}}>RND</span>
             <span style={{color:"#181818",fontWeight:700}}>{round}</span>
@@ -4389,20 +4407,30 @@ export default function BattleTrackerPage(){
                b.style, and a duplicate key would just be overwritten. */
             <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#181818",...b.style}}>{b.label}</button>
           ))}
-          <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});setBattleStarted(false);setSidebarCollapsed(false);}}} title="Reset battle" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
-          <button onClick={rollAllIni} title="Roll initiative for all combatants (also resets round/turn)" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
-          <button onClick={()=>setShowPriority(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}} title="Priority phase">⚡</button>
-          <button onClick={()=>setShowEOR(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D88018"}} title="End of Round">EOR</button>
-          <select value={battleType} onChange={e=>setBattleType(e.target.value as any)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:9,padding:"2px 4px",cursor:"pointer",fontFamily:"'Press Start 2P',monospace"}}>
-            <option value="default">DEFAULT</option>
-            <option value="gym">GYM</option>
-            <option value="boss">BOSS</option>
-            <option value="raid">RAID</option>
-            <option value="danger">DANGER</option>
-          </select>
-          <button onClick={endBattle} style={{background:"#D82808",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#F8F8E8",fontWeight:700}} title="End battle">END</button>
-          <Link href="/gm-screen" title="Open GM Screen" style={{fontSize:9,color:"#181818",textDecoration:"none",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 6px",fontFamily:"'Press Start 2P',monospace"}}>GM</Link>
         </div>
+
+        {!toolbarCollapsed&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+            <button onClick={()=>{if(confirm("Reset the battle? All combatants will be cleared.")){setEntries([]);setTurn(0);setRound(1);setHazards({player:EMPTY_HAZARDS,enemy:EMPTY_HAZARDS});setBattleStarted(false);setSidebarCollapsed(false);}}} title="Reset battle" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D82808"}}>↺</button>
+            <button onClick={rollAllIni} title="Roll initiative for all combatants (also resets round/turn)" style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}}>INI</button>
+            <button onClick={()=>setShowPriority(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#2858C0"}} title="Priority phase">⚡</button>
+            <button onClick={()=>setShowEOR(true)} style={{background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#D88018"}} title="End of Round">EOR</button>
+          </div>
+        )}
+
+        {!toolbarCollapsed&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+            <select value={battleType} onChange={e=>setBattleType(e.target.value as any)} style={{background:"#F8F8E8",border:"2px solid #181818",color:"#181818",fontSize:9,padding:"2px 4px",cursor:"pointer",fontFamily:"'Press Start 2P',monospace"}}>
+              <option value="default">DEFAULT</option>
+              <option value="gym">GYM</option>
+              <option value="boss">BOSS</option>
+              <option value="raid">RAID</option>
+              <option value="danger">DANGER</option>
+            </select>
+            <button onClick={endBattle} style={{background:"#D82808",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"3px 7px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#F8F8E8",fontWeight:700}} title="End battle">END</button>
+            <Link href="/gm-screen" title="Open GM Screen" style={{fontSize:9,color:"#181818",textDecoration:"none",background:"#E8E8D0",border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 6px",fontFamily:"'Press Start 2P',monospace"}}>GM</Link>
+          </div>
+        )}
       </div>
 
       {/* Weather banner — FireRed dialogue box style */}
