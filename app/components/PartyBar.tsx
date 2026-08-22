@@ -32,6 +32,68 @@ const RANK_TINT: Record<string, string> = {
 
 const PIXEL = "'Press Start 2P',monospace";
 
+/* ── Pixel-grid primitives ─────────────────────────────────────────────────
+   The party card's frame used to be a CSS gradient + border-radius, which
+   reads as a modern rounded card no matter how the colors are tuned — real
+   GBA UI panels are built from a handful of solid-color pixel rows stacked
+   into a stepped (chamfered) corner, never a smooth curve or a blend. These
+   render that directly as SVG rects on a small integer-unit grid, with
+   shapeRendering="crispEdges" so the edges stay hard at any display size —
+   sturdier than a raster image + `image-rendering:pixelated`, which only
+   stays crisp at exact integer scale factors and this bar's width is
+   whatever the panel's flex layout gives it. */
+
+/** A rectangle whose corners step inward by `corner[i]` units per row, top and
+ * bottom mirrored — the classic GBA window chamfer instead of a rounded
+ * corner. `corner:[2,1]` staircases two pixels, `[]` is a plain rectangle. */
+function steppedBands(x: number, y: number, w: number, h: number, corner: number[]) {
+  const n = corner.length;
+  const bands: { x: number; y: number; width: number; height: number }[] = [];
+  for (let i = 0; i < n; i++) bands.push({ x: x + corner[i], y: y + i, width: w - corner[i] * 2, height: 1 });
+  bands.push({ x, y: y + n, width: w, height: Math.max(0, h - n * 2) });
+  for (let i = 0; i < n; i++) bands.push({ x: x + corner[n - 1 - i], y: y + h - n + i, width: w - corner[n - 1 - i] * 2, height: 1 });
+  return bands;
+}
+
+function PixelRect({ x, y, w, h, corner, fill }: { x: number; y: number; w: number; h: number; corner: number[]; fill: string }) {
+  return <>{steppedBands(x, y, w, h, corner).map((b, i) => <rect key={i} x={b.x} y={b.y} width={b.width} height={b.height} fill={fill} shapeRendering="crispEdges"/>)}</>;
+}
+
+/* The card's frame only — sprite, name and HP bar are ordinary DOM content
+   layered on top, so they stay real text (selectable, screen-reader visible)
+   rather than baked into the bitmap. Four nested stepped bands: dark outer
+   edge, a structural color band, the main fill, then a one-pixel highlight
+   stripe along the top-left the way GBA panels catch a light source. */
+function PixelCardFrame({ w, h, palette }: { w: number; h: number; palette: { edge: string; band: string; fill: string; highlight: string } }) {
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden
+      style={{position:"absolute",inset:0,width:"100%",height:"100%",display:"block"}}>
+      <PixelRect x={0} y={0} w={w} h={h} corner={[2,1]} fill={palette.edge}/>
+      <PixelRect x={1} y={1} w={w-2} h={h-2} corner={[1,1]} fill={palette.band}/>
+      <PixelRect x={2} y={2} w={w-4} h={h-4} corner={[1]} fill={palette.fill}/>
+      <rect x={3} y={3} width={w-6} height={1} fill={palette.highlight} shapeRendering="crispEdges"/>
+      <rect x={3} y={3} width={1} height={h-6} fill={palette.highlight} shapeRendering="crispEdges"/>
+    </svg>
+  );
+}
+
+/* HP bar: dark frame / white inner frame / grey empty track / colored fill —
+   four flat layers, no rounded modern progress-bar treatment, fill width
+   computed straight from the live percentage. */
+function PixelHPBar({ pct, color }: { pct: number; color: string }) {
+  const W = 110, H = 10;
+  const trackX = 2, trackY = 2, trackW = W - 4, trackH = H - 4;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden
+      style={{width:"100%",height:11,display:"block",flexShrink:1,minWidth:0}}>
+      <PixelRect x={0} y={0} w={W} h={H} corner={[1]} fill="#3D3C49"/>
+      <PixelRect x={1} y={1} w={W-2} h={H-2} corner={[1]} fill="#FFFFFF"/>
+      <rect x={trackX} y={trackY} width={trackW} height={trackH} fill="#6F7679" shapeRendering="crispEdges"/>
+      <rect x={trackX} y={trackY} width={trackW*Math.max(0,Math.min(1,pct))} height={trackH} fill={color} shapeRendering="crispEdges"/>
+    </svg>
+  );
+}
+
 /* What the party display knows about one Pokémon. If the sheet is on the
    battle tracker, its live HP is the truthful "currently"; otherwise the
    sheet only knows the mon's maximum. The formulas are the battle tracker's
@@ -253,64 +315,63 @@ function EmptyRow({ dim }: { dim: boolean }) {
   );
 }
 
-/* One plate per Pokémon, styled after the FRLG "Choose a Pokémon" party
-   screen specifically: the sprite floats free (no backing circle) against a
-   sky-blue plate, the name sits top-left with a small gold "HP" pill leading
-   the bar, and the fraction sits right-aligned and bold. Built from scratch
-   rather than the shared `.frw` token — `.frw` is the generic blue window
-   every FireRed panel borrows, and retuning it for this one screen's colors
-   would have shifted every other thing that uses it. Fainted swaps the plate
-   to the same warm brown/tan the game itself uses, not just a grey fade. */
+/* Card palette, straight from the reference spec — blue/cyan family for a
+   healthy plate, the orange/cream family for a fainted one (the spec didn't
+   give fainted colors explicitly; these are its own "orange" palette group,
+   so the down state stays inside the same system rather than introducing an
+   unlisted color). */
+const CARD_PALETTE = {
+  healthy:  { edge:"#3B5666", band:"#317E9C", fill:"#3B95C4", highlight:"#7CE0DE" },
+  fainted:  { edge:"#3B5666", band:"#C16921", fill:"#DCAE56", highlight:"#E3E1BC" },
+};
+
+/* One plate per Pokémon, built as a pixel-grid panel rather than a CSS
+   gradient card — see PixelCardFrame above for why. Sprite, name and the HP
+   bar are real DOM content laid over that frame, positioned to match the
+   FRLG "Choose a Pokémon" screen: sprite floating free on the left, name top,
+   rank/HP bar stacked below it. */
 function Row({ sheetKey, sheet, dex, battle, onClick }: {
   sheetKey: string; sheet: PokemonSheetData; dex: Dex | null; battle: BattleLite[];
   onClick: () => void;
 }) {
   const v = vitals(sheetKey, sheet, dex, battle);
   const pct = v.maxHp > 0 ? Math.max(0, Math.min(1, v.curHp / v.maxHp)) : 1;
-  const hpColor = pct > 0.5 ? "#48C048" : pct > 0.25 ? "#F0B028" : "#E04038";
+  // The spec's exact HP tri-color, not the app's usual green/amber/red.
+  const hpColor = pct > 0.5 ? "#62D34A" : pct > 0.25 ? "#F0C52D" : "#E97830";
   const fainted = v.known && v.curHp <= 0;
+  const palette = fainted ? CARD_PALETTE.fainted : CARD_PALETTE.healthy;
 
   return (
     <button onClick={onClick}
       title={`${v.name} — ${sheet.rank}${v.known?` — ${v.curHp}/${v.maxHp} HP`:""}`}
       aria-label={`${v.name}, ${sheet.rank}${v.known?`, ${v.curHp} of ${v.maxHp} HP`:""}${
         fainted?", fainted":v.statuses.length?`, ${v.statuses.join(", ")}`:""}`}
-      style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",
-        padding:"8px 14px 8px 8px",cursor:"pointer",touchAction:"manipulation",
-        borderRadius:9,border:"3px solid #14295C",
-        boxShadow:"0 0 0 2px #F0F4FF, 2px 3px 0 rgba(0,0,0,0.35)",
-        color:"#FFFFFF",textShadow:"1px 1px 0 #14295C",
-        background:fainted
-          ? "linear-gradient(180deg, #D0A468 0%, #B07838 55%, #8A5A24 100%)"
-          : "linear-gradient(180deg, #8CD0F8 0%, #4890D8 55%, #2C64B0 100%)"}}>
+      style={{position:"relative",display:"flex",alignItems:"center",gap:10,width:"100%",
+        textAlign:"left",padding:"8px 14px 8px 8px",cursor:"pointer",touchAction:"manipulation",
+        border:"none",borderRadius:0,color:"#FFFFFF",textShadow:"1px 1px 0 #14295C"}}>
+
+      <PixelCardFrame w={200} h={32} palette={palette}/>
 
       {/* No backing circle — the game's own sprite floats directly on the
           plate, slightly larger than the compact strip's tile. */}
       {/* eslint-disable-next-line @next/next/no-img-element -- local pixel
           art at a fixed tiny size; next/image would resample and blur it. */}
       <img src={`/sprites/pokemon/${sheet.number}.png`} alt="" width={44} height={44}
-        draggable={false} style={{flexShrink:0,imageRendering:"pixelated",objectFit:"contain",
-          filter:fainted?"grayscale(1) brightness(1.15)":"drop-shadow(1px 2px 1px rgba(0,0,0,0.4))"}}
+        draggable={false} style={{position:"relative",flexShrink:0,imageRendering:"pixelated",
+          objectFit:"contain",filter:fainted?"grayscale(1) brightness(1.15)":undefined}}
         onError={e=>{(e.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
 
-      <span style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:5}}>
+      <span style={{position:"relative",flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:5}}>
         <span style={{display:"flex",alignItems:"baseline",gap:7}}>
           <span style={{fontFamily:PIXEL,fontSize:11,flex:1,minWidth:0,
             overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
           {sheet.isPartner&&<span title="Partner Pokémon" style={{fontSize:11,lineHeight:1}}>⭐</span>}
         </span>
-        <span style={{fontFamily:PIXEL,fontSize:8,opacity:0.9}}>{sheet.rank}</span>
+        <span style={{fontFamily:PIXEL,fontSize:8,color:"#E3E1BC"}}>{sheet.rank}</span>
 
         <span style={{display:"flex",alignItems:"center",gap:6}}>
-          {/* The gold "HP" pill FRLG's own party screen leads the bar with,
-              rather than plain label text. */}
-          <span style={{fontFamily:PIXEL,fontSize:7,color:"#503000",background:"#F8D840",
-            border:"1px solid #14295C",borderRadius:8,padding:"1px 5px",flexShrink:0}}>HP</span>
-          <span style={{flex:1,height:7,borderRadius:3,overflow:"hidden",
-            background:"rgba(0,0,0,0.35)",border:"1px solid rgba(0,0,0,0.4)"}}>
-            <span style={{display:"block",height:"100%",width:`${pct*100}%`,background:hpColor,
-              transition:"width 240ms"}}/>
-          </span>
+          <span style={{fontFamily:PIXEL,fontSize:7,flexShrink:0}}>HP</span>
+          <PixelHPBar pct={pct} color={hpColor}/>
           <span style={{fontFamily:PIXEL,fontSize:10,fontWeight:700,
             fontVariantNumeric:"tabular-nums",flexShrink:0}}>
             {v.known ? `${v.curHp}/${v.maxHp}` : "—"}
