@@ -1070,6 +1070,20 @@ function evasionEdge(trainerAccPool:number,candidateEvasionPool:number):number{
   return Math.round(candidateEvasionPool/2)-Math.round(trainerAccPool/2);
 }
 
+/* Everything above asks "can the candidate survive/dodge the trainer" —
+   none of it asks whether the candidate can hurt the trainer back. A
+   Pokémon that just soaks hit after hit without ever threatening a real
+   KO isn't a "Hard" fight, it's a damage sponge — the difficulty this
+   picker is actually meant to describe is the trainer's own risk, not how
+   long the wild Pokémon survives. Averaged the same way trainerBestOffense
+   is: how tough is the trainer's own side to put down. */
+function trainerAvgDurability(roster:BattleEntry[]):{def:number;hp:number}{
+  if(!roster.length)return{def:2,hp:6};
+  const defs=roster.map(e=>(e.attrs.vitality+e.attrs.insight)/2);
+  const hps=roster.map(e=>e.maxHp);
+  return{def:defs.reduce((a,b)=>a+b,0)/defs.length,hp:hps.reduce((a,b)=>a+b,0)/hps.length};
+}
+
 function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   // Dice-pool gap is the dominant signal now — a candidate rolling notably
   // bigger or smaller pools than the trainer's own team is the real
@@ -1087,6 +1101,16 @@ function encounterScore(candidate:PokemonEntry,roster:BattleEntry[]):number{
   // Whether the trainer's own hit even lands at all — see evasionEdge.
   const candEvasion=rankAttrs.dexterity+1;
   score+=evasionEdge(trainerAcc,candEvasion)*1.3;
+  // Whether the candidate actually threatens the trainer back — see
+  // trainerAvgDurability's comment. Same expectedHitsToDefeat math, run in
+  // the opposite direction: candidate attacking, trainer defending. Fewer
+  // hits needed = a real threat = harder for the trainer; a candidate that
+  // can barely dent the trainer's team pulls the score toward Easy no
+  // matter how many hits it can itself soak.
+  const candOffense=Math.max(rankAttrs.strength+1,rankAttrs.special+1);
+  const trainerDur=trainerAvgDurability(roster);
+  const threatHits=expectedHitsToDefeat(candOffense,trainerDur.def,trainerDur.hp);
+  score+=(FAIR_HITS_TO_DEFEAT-threatHits)*1.2;
   if(roster.length){
     // Typing still nudges the read — a resisted attacker or an easy target
     // should skew the bucket a little even at an even pool size — but it's
@@ -1143,7 +1167,17 @@ function boostToMatch(candidate:PokemonEntry,roster:BattleEntry[]):number{
     if(evasionEdge(offense,rankAttrs.dexterity+evasionBoost+1)>=0)break;
     evasionBoost++;
   }
-  return Math.max(1,Math.min(8,Math.max(poolBoost,survBoost,evasionBoost)));
+  // A boost sized only to help the candidate survive/dodge can still leave
+  // it toothless — see trainerAvgDurability's comment. Boost until it can
+  // threaten the trainer's own team within FAIR_HITS_TO_DEFEAT hits too.
+  const trainerDur=trainerAvgDurability(roster);
+  let threatBoost=0;
+  while(threatBoost<8){
+    const boostedOffense=Math.max(rankAttrs.strength+threatBoost+1,rankAttrs.special+threatBoost+1);
+    if(expectedHitsToDefeat(boostedOffense,trainerDur.def,trainerDur.hp)<=FAIR_HITS_TO_DEFEAT)break;
+    threatBoost++;
+  }
+  return Math.max(1,Math.min(8,Math.max(poolBoost,survBoost,evasionBoost,threatBoost)));
 }
 
 const ENCOUNTER_DIFFICULTY_COLORS:Record<EncounterDifficulty,string>={Easy:"#00d4aa",Average:"#f8d030",Hard:"#ff4757"};
