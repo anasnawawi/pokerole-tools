@@ -1100,7 +1100,17 @@ function encounterScoreForAttrs(candidate:PokemonEntry,roster:BattleEntry[],rank
   // alone missed this.
   const candDef=(rankAttrs.vitality+rankAttrs.insight)/2;
   const hits=expectedHitsToDefeat(trainerAcc,candDef,candHp);
-  score+=(hits-FAIR_HITS_TO_DEFEAT)*1.2;
+  // expectedHitsToDefeat divides HP by a small integer damage-per-hit, so
+  // one extra point of Defense right around where that damage number is
+  // already low (1-2) can double or triple "hits", not just nudge it — a
+  // single boost point pushing Defense across that line was swinging this
+  // one term by more than the entire Hard threshold on its own, rating a
+  // durable-but-harmless candidate "Hard" off survivability alone despite
+  // the threat term (below) correctly recognizing it can barely dent the
+  // trainer back. Capped only on the positive (harder-to-kill) side — a
+  // genuinely fragile candidate should still pull hard toward Easy, that
+  // read isn't the part that was ever unreliable.
+  score+=Math.min(hits-FAIR_HITS_TO_DEFEAT,2)*1.2;
   // Whether the trainer's own hit even lands at all — see evasionEdge.
   const candEvasion=rankAttrs.dexterity+1;
   score+=evasionEdge(trainerAcc,candEvasion)*1.3;
