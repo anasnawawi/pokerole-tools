@@ -316,22 +316,23 @@ function nameOf(entry:BattleEntry,roster:BattleEntry[]):string{
 }
 
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
-// (as in-game); player plates show HP n/n + WP n/n.
-function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void;maxW:number}){
+// (as in-game); player plates show HP n/n + WP n/n. maxW is only ever passed
+// from the narrow/mobile scene branch — omitting it (the default/desktop
+// branch) renders at the exact original fixed minWidth, unconditionally.
+function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void;maxW?:number}){
   const name=nameOf(entry,allEntries).toUpperCase();
   const sts=(entry.statuses||[]).filter(s=>s!=="Healthy");
   const rank=entry.trainerRank||entry.pokemon.suggestedRank;
   const defaultW=enemy?188:210;
-  const width=Math.round(clampPx(enemy?85:95,maxW,defaultW));
+  // width, not minWidth, in narrow mode — a minWidth floor still lets the
+  // HP bar/name/rank's own natural content width win out and push the box
+  // wider than the row has room for. Renders at its full default width
+  // (matching the sprite's own "default until it wouldn't fit" rule) and
+  // only shrinks as far as maxW (the row's real available width) forces.
+  const widthStyle=maxW===undefined?{minWidth:defaultW}:{width:Math.round(clampPx(enemy?85:95,maxW,defaultW))};
   return(
     <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"5px 9px 6px",
-      /* width, not minWidth — a minWidth floor still lets the HP bar/name/
-         rank's own natural content width win out and push the box wider
-         than the row has room for. Renders at its full default width
-         (matching the sprite's own "default until it wouldn't fit" rule)
-         and only shrinks as far as maxW (the row's real available width)
-         actually forces it to. */
-      width,
+      ...widthStyle,
       cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
         <span style={{fontSize:9,fontWeight:700,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
@@ -361,42 +362,65 @@ function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry
 // A Pokémon standing on a FireRed-style grass platform. The sprite's feet are pinned to
 // the platform's mid-line so it sits correctly regardless of the sprite's source size.
 //
-// The sprite box and the disc are sized independently on purpose: the sprite
-// box is this component's actual footprint (what a flex row reserves space
-// for). It renders at its full default size — the same size it's always
+// The sprite box's height and the disc's height used to be sized
+// independently (the disc via its own CSS clamp(cqw), unrelated to the
+// sprite's own budget) — that meant the row's real total height (box +
+// disc) was never actually knowable in advance, so the height budget below
+// either starved the sprite (guessing the disc bigger than it was) or let
+// the whole thing overflow the stage (guessing it smaller). The disc's
+// height is now a fixed proportion of the sprite's own computed height —
+// matching the original 74/232 (back) and 62/200 (front) ratios — so it
+// always co-scales with the sprite instead of being a second, independent
+// unknown; the caller's maxRowH is the one number that has to cover the
+// whole box+disc total, and it's an exact division, not a guess.
+//
+// The sprite renders at its full default size — the same size it's always
 // been — unless the room actually available is less than that, in which
 // case it shrinks only as far as needed to fit, down to a floor. It never
 // grows past the default just because there's extra room; only shrinks on
 // genuine pressure. "Room available" is checked in both dimensions —
 // stageW (the row's real content width) and maxRowH (the sprite row's own
-// share of the stage's height, since it's a flex:1 row splitting whatever's
-// left after the compact nameplate rows) — and whichever comes out smaller
-// wins, so a sprite with plenty of horizontal room can't still end up
-// spilling out of its row vertically. The disc is a plain decorative
-// shape — position:absolute, so it isn't constrained by the wrapper —
-// sized a little more generously via its own CSS clamp(cqw); at a tight
-// squeeze it's free to render wider than the sprite box and quietly get
-// cut by the stage's own overflow:hidden, rather than shrinking the sprite
-// to make room for it.
-function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW:number;maxRowH:number}){
+// share of the stage's height) — and whichever comes out smaller wins, so
+// a sprite with plenty of horizontal room can't still end up spilling out
+// of its row vertically. The disc's *width* is still independent and a
+// little more generous (own CSS clamp(cqw)) — at a tight squeeze it's free
+// to render wider than the sprite box and quietly get cut by the stage's
+// own overflow:hidden, rather than shrinking the sprite to make room for it.
+//
+// stageW/maxRowH are only ever passed from the narrow/mobile branch of the
+// scene (see isNarrow in the parent) — omitting them (the default/desktop
+// branch) skips all of the above and renders at the exact original fixed
+// size, unconditionally, byte-for-byte what this component always was.
+function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number}){
   const defaultW=back?300:250, defaultH=back?232:200;
-  const widthCappedW=clampPx(back?85:70,stageW,defaultW);
-  // The row's height budget also has to cover the platform disc beneath the
-  // sprite's feet, not just the sprite itself — dividing by 1.3 leaves
-  // roughly the same disc-to-sprite proportion the default sizes already
-  // have, so the whole FieldMon box (sprite + disc) fits the row.
-  const heightCappedH=Math.max(back?66:56,maxRowH/1.3);
-  const heightCappedW=heightCappedH*(defaultW/defaultH);
-  // floor, not round — this is a ceiling on the sprite's own size, and
-  // rounding up even by a pixel is exactly the kind of drift that ends
-  // with the sprite's box a pixel or two past the room it was given.
-  const spriteBoxW=Math.floor(Math.min(widthCappedW,heightCappedW));
-  const spriteBoxH=Math.floor(spriteBoxW*(defaultH/defaultW));
-  const discW=back?"clamp(130px, 48.6cqw, 340px)":"clamp(85px, 42.9cqw, 300px)";
-  const plat=back?"clamp(24px, 10.6cqw, 74px)":"clamp(20px, 8.9cqw, 62px)";
+  const platRatio=back?74/232:62/200;
+  let spriteBoxW=defaultW, spriteBoxH=defaultH, plat=back?74:62;
+  // Default mode's wrapper is wider than the sprite box (340/300 vs
+  // 300/250) and only as tall as the sprite box itself — the disc sits
+  // inside that same box (bottom:0, shorter than the box), not added on
+  // top of it. Narrow mode's wrapper is exactly the sprite box, with the
+  // disc's height added on top instead (see spriteRowH in the parent,
+  // which budgets for box+disc as one total).
+  let wrapperW=back?340:300, wrapperH=defaultH;
+  if(stageW!==undefined&&maxRowH!==undefined){
+    const widthCappedW=clampPx(back?85:70,stageW,defaultW);
+    // maxRowH has to cover the sprite box AND its disc together, so convert
+    // it to an equivalent sprite height first (divide out the disc's share).
+    const heightCappedH=Math.max(back?66:56,maxRowH/(1+platRatio));
+    const heightCappedW=heightCappedH*(defaultW/defaultH);
+    // floor, not round — this is a ceiling on the sprite's own size, and
+    // rounding up even by a pixel is exactly the kind of drift that ends
+    // with the sprite's box a pixel or two past the room it was given.
+    spriteBoxW=Math.floor(Math.min(widthCappedW,heightCappedW));
+    spriteBoxH=Math.floor(spriteBoxW*(defaultH/defaultW));
+    plat=Math.max(back?18:16,Math.floor(spriteBoxH*platRatio));
+    wrapperW=spriteBoxW;
+    wrapperH=spriteBoxH+plat;
+  }
+  const discW=stageW===undefined?wrapperW:(back?"clamp(130px, 48.6cqw, 340px)":"clamp(85px, 42.9cqw, 300px)");
   return(
-    <div onClick={onClick} style={{position:"relative",width:spriteBoxW,
-      height:`calc(${spriteBoxH}px + ${plat})`,cursor:onClick?"pointer":"default"}}>
+    <div onClick={onClick} style={{position:"relative",width:wrapperW,
+      height:wrapperH,cursor:onClick?"pointer":"default"}}>
       <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:discW,height:plat,borderRadius:"50%",
         background:"radial-gradient(ellipse at 50% 38%, #C8E4A8 0%, #A8D088 45%, #7CAC54 100%)",
         boxShadow:"inset 0 -5px 7px rgba(72,108,44,0.55)",border:"3px solid rgba(80,100,40,0.35)"}}/>
@@ -405,7 +429,7 @@ function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH}:{
           in for that — it only has to place the box on the platform. Half
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
-      <div style={{position:"absolute",bottom:`calc(${plat} / 2)`,left:0,right:0,display:"flex",justifyContent:"center"}}>
+      <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
         <PokeSprite number={number} back={back} boxW={spriteBoxW} boxH={spriteBoxH} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
       </div>
     </div>
@@ -3972,22 +3996,16 @@ export default function BattleTrackerPage(){
   },[]);
   // Each sprite row gets whatever height is left over after the two
   // nameplate rows' real measured heights, split evenly between the two
-  // sprite rows (minus a little slack for the groups' own internal gaps).
-  // Sizing FieldMon off width alone let a sprite that had plenty of
-  // horizontal room end up taller than its own row's actual share of the
-  // stage's height and spill into the nameplate row next to it — a real
-  // vertical overlap, not just a horizontal one.
-  // The extra 48px covers what the two measured name-row heights don't:
-  // each group's own internal gap to its sprite row, and the player
-  // group's own bottom padding below its sprite.
-  // The 30px covers what the two measured name-row heights don't: each
-  // group's own internal gap to its sprite row (~4-10px each) and the
-  // player group's own bottom padding below its sprite (~8-16px). Wider
-  // margins were tried to chase down a few px of sub-pixel rounding
-  // overflow, but that overshot badly — floor-rounding the sprite's own
-  // size (see FieldMon) fixed the actual rounding drift, so this only
-  // needs to cover real layout, not also hide a rounding bug.
-  const spriteRowH=Math.max(60,(stageH-enemyNameH-playerNameH-26)/2);
+  // sprite rows. The groups are flexShrink:0 (see the comment above LAYOUT)
+  // so this number has to be right, not just a reasonable guess — nothing
+  // in CSS will correct it if it's too big, the group will just overflow
+  // the stage. This is the one number FieldMon treats as its whole row
+  // budget (box + disc together — see FieldMon's own comment for why the
+  // disc no longer needs a separate term here); the remaining ~30px covers
+  // what isn't the sprite itself: each group's internal gap to its sprite
+  // row, the sprite row's own edge padding, and the player group's bottom
+  // padding.
+  const spriteRowH=Math.max(60,(stageH-enemyNameH-playerNameH-30)/2);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4490,13 +4508,19 @@ export default function BattleTrackerPage(){
               <WeatherFX weather={weather}/>
               {/* Trainer placeholder — same as the setup platform, so the
                   field doesn't read as fully empty even before the first
-                  Pokémon is added. Nothing else is on the field yet to
-                  overlap with, so this just needs the same sidebar clearance
-                  every other left-anchored element gets, not a full row. */}
+                  Pokémon is added. Narrow mode still needs the sidebar
+                  clearance every other left-anchored element gets; default
+                  mode is the original fixed left:5%, no dynamic sizing. */}
               {mounted&&setupTrainerSpriteId&&(
-                <div style={{position:"absolute",bottom:"3%",left:sidebarPad,zIndex:2}}>
-                  <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
-                </div>
+                isNarrow?(
+                  <div style={{position:"absolute",bottom:"3%",left:sidebarPad,zIndex:2}}>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
+                  </div>
+                ):(
+                  <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
+                  </div>
+                )
               )}
               <div style={{position:"relative",zIndex:6,background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:"24px 32px",textAlign:"center"}}>
                 <div style={{fontSize:10,fontWeight:700,color:"#181818",fontFamily:"'Press Start 2P',monospace",marginBottom:10}}>NO COMBATANTS</div>
@@ -4523,44 +4547,51 @@ export default function BattleTrackerPage(){
                 <WeatherFX weather={weather}/>
                 <TerrainLabel terrain={terrain}/>
 
-                {/* LAYOUT — four stacked flex rows instead of six
-                    independently hand-tuned position:absolute offsets: each
-                    nameplate gets its own compact row, and each sprite gets
-                    a separate flex:1 row all to itself (sharing only with
-                    its bench lane) rather than sharing a row's width budget
-                    with its nameplate. That's a deliberate change from
-                    "nameplate and sprite share a row" — sharing meant the
-                    sprite visibly shrank to make room for the nameplate even
-                    though the nameplate wasn't the one that needed to move;
-                    now the nameplate stays a fixed, comfortable size and the
-                    sprite gets the entire vertical middle of the stage to
-                    itself, anchored toward that middle (flex-end for the
-                    enemy row, flex-start... no — flex-end again for the
-                    player row, since both sprite rows want their content
-                    hugging their own default corner by default — enemy
-                    nameplate+sprite pinned near the top edge, player
-                    sprite+nameplate pinned near the bottom edge, any
-                    leftover vertical space collecting as one gap in the
-                    middle rather than being force-distributed to push
-                    anything toward it. Grouping is what makes this safe:
-                    within a group, nameplate and sprite are flex column
-                    siblings (never overlap each other, real gap between
-                    them); between the two groups, the outer column's
-                    space-between pins the first group to the top and the
-                    last to the bottom — they only touch if their combined
-                    natural heights exceed the stage's own height, and at
-                    that point each group's flexShrink (plus the sprite's own
-                    stageH-aware clampPx sizing) compresses them down rather
-                    than letting them collide. Bench lanes (flex:1) sharing a
-                    sprite's row are still guaranteed clear of it by the same
-                    flex-sibling rule. Rows are pointerEvents:none so open
-                    ground stays click-through; the actual interactive pieces
-                    (nameplates, bench mons, sprites) opt back in. */}
+                {isNarrow ? (
+                /* LAYOUT (narrow/mobile only) — four stacked flex rows
+                    instead of six independently hand-tuned position:absolute
+                    offsets: each nameplate gets its own compact row, and
+                    each sprite gets a separate row all to itself (sharing
+                    only with its bench lane) rather than sharing a row's
+                    width budget with its nameplate. Enemy nameplate+sprite
+                    hug the top edge together and player sprite+nameplate
+                    hug the bottom edge together, with any leftover vertical
+                    space collecting as one gap between the two groups.
+                    Grouping is what makes this safe: within a group,
+                    nameplate and sprite are flex column siblings (never
+                    overlap each other, real gap between them); between the
+                    two groups, the outer column's space-between pins the
+                    first group to the top and the last to the bottom.
+
+                    Both groups and their sprite rows are flexShrink:0 —
+                    deliberately not allowed to compress. The sprite's own
+                    size is already computed to fit the real available
+                    height (maxRowH, from the two measured nameplate-row
+                    heights below), so if flexbox were ALSO allowed to
+                    shrink the row independently of that number, the two
+                    sizing decisions could disagree: the row shrinks to a
+                    box smaller than the sprite it contains, and the sprite —
+                    sized by inline style, not reactive to its shrunken
+                    parent — just overflows past the shrunk row instead of
+                    actually getting smaller. flexShrink:0 makes the JS-
+                    computed size the single source of truth; CSS only lays
+                    it out, it doesn't also try to compress it.
+
+                    This whole responsive system is scoped to isNarrow on
+                    purpose — a normal desktop window renders the original,
+                    unmodified fixed-position layout below instead (see the
+                    else branch), since the two goals ("always exactly the
+                    classic proportions" and "gracefully degrade on a phone
+                    that can't fit them") kept fighting each other when they
+                    shared one continuous formula. Splitting them in two
+                    lets the default view stay byte-for-byte what it always
+                    was, with all this machinery only kicking in once the
+                    viewport genuinely can't fit that anymore. */
                 <div style={{position:"absolute",inset:0,zIndex:2,display:"flex",
                   flexDirection:"column",justifyContent:"space-between",pointerEvents:"none"}}>
 
                   {/* Enemy group — nameplate then sprite, hugging the top edge */}
-                  <div style={{display:"flex",flexDirection:"column",flexShrink:1,minHeight:0,gap:"clamp(4px, 1cqw, 10px)"}}>
+                  <div style={{display:"flex",flexDirection:"column",flexShrink:0,minHeight:0,gap:"clamp(4px, 1cqw, 10px)"}}>
                     {/* Enemy nameplate row — compact */}
                     <div ref={enemyNameRef} style={{display:"flex",flexShrink:0,
                       padding:"clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad,paddingBottom:0}}>
@@ -4575,7 +4606,7 @@ export default function BattleTrackerPage(){
                     {/* Enemy sprite row — sits right under its nameplate by
                         default; only shrinks if the two groups together
                         don't fit the stage. Its bench lane shares the row. */}
-                    <div style={{display:"flex",flexShrink:1,minHeight:0,alignItems:"flex-start",justifyContent:"space-between",
+                    <div style={{display:"flex",flexShrink:0,minHeight:0,alignItems:"flex-start",justifyContent:"space-between",
                       gap:"clamp(6px, 2cqw, 16px)",padding:"0 clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad}}>
                       {/* Everyone else still in the fight, on the field beside
                           the focused slot: small and see-through, so they read
@@ -4617,7 +4648,7 @@ export default function BattleTrackerPage(){
                   {/* Player group — nameplate then sprite, hugging the
                       bottom edge (nameplate sits just above its sprite by
                       default, sprite grounds at the true bottom edge). */}
-                  <div style={{display:"flex",flexDirection:"column",flexShrink:1,minHeight:0,justifyContent:"flex-end",gap:"clamp(4px, 1cqw, 10px)"}}>
+                  <div style={{display:"flex",flexDirection:"column",flexShrink:0,minHeight:0,justifyContent:"flex-end",gap:"clamp(4px, 1cqw, 10px)"}}>
                     {/* Player nameplate row — compact */}
                     <div ref={playerNameRef} style={{display:"flex",flexShrink:0,justifyContent:"flex-end",
                       padding:"clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad,paddingBottom:0}}>
@@ -4630,7 +4661,7 @@ export default function BattleTrackerPage(){
                     </div>
 
                     {/* Player sprite row — its bench lane shares the row. */}
-                    <div style={{display:"flex",flexShrink:1,minHeight:0,alignItems:"flex-end",justifyContent:"space-between",
+                    <div style={{display:"flex",flexShrink:0,minHeight:0,alignItems:"flex-end",justifyContent:"space-between",
                       gap:"clamp(6px, 2cqw, 16px)",padding:"0 clamp(8px, 2cqw, 16px) clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad}}>
                       {/* Player mon (back sprite) — turn-driven, so it only
                           makes sense once the battle has actually begun and
@@ -4669,6 +4700,115 @@ export default function BattleTrackerPage(){
                     </div>
                   </div>
                 </div>
+                ) : (
+                /* DEFAULT (non-narrow) — the original fixed-position scene,
+                   unchanged since before this session's responsive work.
+                   Every offset/size here is a literal constant, matching
+                   the classic FRLG "Choose a Pokémon"-style composition
+                   exactly: enemy nameplate top-left, enemy sprite top-
+                   right, player sprite bottom-left, player nameplate
+                   bottom-right. See the isNarrow branch above for the
+                   mobile-only responsive version. */
+                <>
+                  {/* Enemy nameplate — top-left, with that side's field
+                      hazards below it. Padded clear of the floating
+                      sidebar's current width on a narrow viewport, since
+                      the sidebar overlays the scene there instead of
+                      taking flex width from it — without this the icon
+                      strip (or the expanded drawer) sits right on top of
+                      the health bar. (isNarrow is always false in this
+                      branch, so this is effectively just left:16 here —
+                      kept as-is since it's harmless and matches the
+                      original exactly.) */}
+                  {mounted&&onFieldEnemy&&(
+                    <div style={{position:"absolute",top:16,left:isNarrow?(sidebarCollapsed?SIDEBAR_W.collapsed:SIDEBAR_W.expandedNarrow)+16:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
+                      <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
+                      <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
+                    </div>
+                  )}
+                  {/* Everyone else still in the fight, on the field beside the two
+                      focused slots: small and see-through, so they read as
+                      background without being decoration.
+
+                      Lanes are measured to clear each side's nameplate-plus-
+                      hazards block — the opponent's is 98px tall from top:16,
+                      the player's 112px above bottom:9%, both fixed-px, so the
+                      offsets hold as the stage resizes. Width caps a row at two
+                      so they wrap into open ground rather than behind the big
+                      sprites.
+
+                      They sit above the focused mons in z-order because a
+                      FieldMon's wrapper box is far larger than its visible
+                      sprite and swallows clicks over bare ground; underneath it
+                      these were unclickable. Size and opacity carry "not the
+                      subject" here, not paint order. */}
+                  {mounted&&benchFar.length>0&&(
+                    /* benchFar is already fastest-first (it's a filter of `sorted`).
+                       row-reverse renders that first — the enemy up next — at the
+                       lane's right edge, nearest the focused enemy sprite, with
+                       slower ones trailing off to the left; a plain row would have
+                       put the next-up mon farthest away instead. */
+                    <div style={{position:"absolute",top:118,left:8,width:"46%",zIndex:4,
+                      display:"flex",flexDirection:"row-reverse",alignItems:"flex-end",justifyContent:"flex-start",
+                      gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
+                      {benchFar.map(e=>(
+                        <span key={e.id} style={{pointerEvents:"auto"}}>
+                          <BenchMon entry={e} allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Your own side, behind the acting slot */}
+                  {mounted&&benchNear.length>0&&(
+                    <div style={{position:"absolute",bottom:"calc(9% + 116px)",right:8,width:"46%",zIndex:4,
+                      display:"flex",alignItems:"flex-end",justifyContent:"flex-end",
+                      gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
+                      {benchNear.map(e=>(
+                        <span key={e.id} style={{pointerEvents:"auto"}}>
+                          <BenchMon entry={e} back allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
+                  {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
+                    <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
+                      <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)}/>
+                      <StatusFX statuses={onFieldEnemy.statuses}/>
+                      <HazardMarkers hazards={hazards.enemy}/>
+                    </div>
+                  </div>}
+                  {/* Player mon — lower-left (back sprite). Turn-driven, so it
+                      only makes sense once the battle has actually begun and
+                      there's a real turn order; before that, nothing's been
+                      "sent out" yet regardless of what's first in the roster,
+                      so the trainer placeholder below takes this spot instead. */}
+                  {mounted&&battleStarted&&onFieldPlayer&&(
+                    <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                      <div style={{position:"relative"}}>
+                        <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
+                        <StatusFX statuses={onFieldPlayer.statuses}/>
+                        <HazardMarkers hazards={hazards.player}/>
+                      </div>
+                    </div>
+                  )}
+                  {/* Trainer placeholder — stands on the player platform during
+                      setup, same spot the real back sprite takes over once the
+                      battle begins. Purely visual, not a roster entry. */}
+                  {mounted&&!battleStarted&&setupTrainerSpriteId&&(
+                    <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
+                      <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
+                    </div>
+                  )}
+                  {/* Player nameplate — lower-right, with that side's field hazards above it */}
+                  {mounted&&battleStarted&&onFieldPlayer&&(
+                    <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                      <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
+                      <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
+                    </div>
+                  )}
+                </>
+                )}
 
                 {/* POKéMON overlay — whoever's turn it is is always shown automatically (no send
                     needed); SEND here just picks who's focused in the "other" spotlight slot. */}
