@@ -339,12 +339,12 @@ export default function Home() {
                is the expanded FRLG list's own look, and portrait doesn't
                show that view (it's the compact strip instead), so it stays
                on the shared pale C.bezel token like every other panel.
-               Landscape gets a solid ring of the stripes' own light teal
-               between the black border and the scanlines themselves (this
-               padding, filled by the outer div's own solid background),
-               so the stripes read as stopping short of the border instead
-               of running straight into it. */
-            background:portrait?C.bezel:"#4CB1AB",
+               Landscape gets a solid ring of the stripes' own darker,
+               muted teal between the black border and the scanlines
+               themselves (this padding, filled by the outer div's own
+               solid background), so the stripes read as stopping short of
+               the border instead of running straight into it. */
+            background:portrait?C.bezel:"#226B64",
             padding:portrait?0:(narrow?4:6),display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <div style={{flex:1,minHeight:0,borderRadius:portrait?0:4,
               background:portrait?"transparent":"repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 2px,#226B64 2px,#226B64 11px)",
