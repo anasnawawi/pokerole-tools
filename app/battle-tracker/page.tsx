@@ -331,7 +331,12 @@ function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry
   // wider than the row has room for. Renders at its full default width
   // (matching the sprite's own "default until it wouldn't fit" rule) and
   // only shrinks as far as maxW (the row's real available width) forces.
-  const widthStyle=maxW===undefined?{minWidth:defaultW}:{width:Math.round(clampPx(enemy?85:95,maxW,defaultW))};
+  // Fixed width, not just a minWidth floor — a minWidth alone doesn't stop
+  // a long nickname from pushing the box wider than defaultW, since the
+  // name span's own ellipsis only kicks in once its flex parent is
+  // actually constrained. Capping here keeps the nameplate's own footprint
+  // stable regardless of nickname length; the name itself still truncates.
+  const widthStyle=maxW===undefined?{width:defaultW}:{width:Math.round(clampPx(enemy?85:95,maxW,defaultW))};
   return(
     <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"5px 9px 6px",
       ...widthStyle,
@@ -5078,11 +5083,18 @@ export default function BattleTrackerPage(){
         )}
 
         <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
-          <div style={{display:"flex",alignItems:"center",gap:4,background:"#E8E8D0",border:"2px solid #181818",padding:"2px 6px",fontSize:9,fontFamily:"'Press Start 2P',monospace"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,background:"#E8E8D0",border:"2px solid #181818",padding:"2px 6px",fontSize:9,fontFamily:"'Press Start 2P',monospace",flexShrink:0}}>
             <span style={{color:"#888870"}}>RND</span>
             <span style={{color:"#181818",fontWeight:700}}>{round}</span>
             <span style={{color:"#C8C8A8",margin:"0 2px"}}>·</span>
-            <span style={{color:mounted&&activeEntry?.side==="player"?"#2858C0":"#D82808",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mounted?(activeEntry?.nickname||activeEntry?.pokemon.name||"—"):"—"}</span>
+            <span style={{color:"#888870"}}>TURN</span>
+            <span style={{color:"#181818",fontWeight:700}}>{turn+1}</span>
+            <span style={{color:"#C8C8A8",margin:"0 2px"}}>·</span>
+            {/* No maxWidth/ellipsis here on purpose — a long nickname used to
+                get clipped to 70px no matter how much room the toolbar
+                actually had. whiteSpace:"nowrap" still keeps it one line;
+                the box itself just grows to fit instead of truncating. */}
+            <span style={{color:mounted&&activeEntry?.side==="player"?"#2858C0":"#D82808",whiteSpace:"nowrap"}}>{mounted?(activeEntry?.nickname||activeEntry?.pokemon.name||"—"):"—"}</span>
           </div>
           {[
             {label:"◀ PREV",onClick:prevTurn,style:{background:"#E8E8D0"}},
