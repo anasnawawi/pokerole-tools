@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React from "react";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
@@ -4754,53 +4754,19 @@ export default function BattleTrackerPage(){
   // get a box sized for the whole stage and overflow past the actual
   // remaining room by however much the padding took.
   const stageContentW=Math.max(0,stageW-sidebarPad-16);
-  // Each side's nameplate row's own real rendered height — hazards can add
-  // rows, so this isn't a fixed number. A guessed constant here (a first
-  // pass used 150px total for both, "about a nameplate + hazard row each")
-  // undershot the real height enough that the sprite's own budget below
-  // came out too generous and it overlapped the nameplate whenever hazards
-  // pushed the real row taller than the guess assumed. Same measure-on-
-  // attach + ResizeObserver pattern as the stage itself.
-  const [enemyNameH,setEnemyNameH]=useState(90);
-  const enemyNameObsRef=useRef<ResizeObserver|null>(null);
-  const enemyNameRef=useCallback((el:HTMLDivElement|null)=>{
-    enemyNameObsRef.current?.disconnect();
-    if(!el)return;
-    const h0=el.getBoundingClientRect().height;
-    if(h0)setEnemyNameH(h0);
-    const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect.height;
-      if(h)setEnemyNameH(h);
-    });
-    ro.observe(el);
-    enemyNameObsRef.current=ro;
-  },[]);
-  const [playerNameH,setPlayerNameH]=useState(115);
-  const playerNameObsRef=useRef<ResizeObserver|null>(null);
-  const playerNameRef=useCallback((el:HTMLDivElement|null)=>{
-    playerNameObsRef.current?.disconnect();
-    if(!el)return;
-    const h0=el.getBoundingClientRect().height;
-    if(h0)setPlayerNameH(h0);
-    const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect.height;
-      if(h)setPlayerNameH(h);
-    });
-    ro.observe(el);
-    playerNameObsRef.current=ro;
-  },[]);
-  // Each sprite row gets whatever height is left over after the two
-  // nameplate rows' real measured heights, split evenly between the two
-  // sprite rows. The groups are flexShrink:0 (see the comment above LAYOUT)
-  // so this number has to be right, not just a reasonable guess — nothing
-  // in CSS will correct it if it's too big, the group will just overflow
-  // the stage. This is the one number FieldMon treats as its whole row
-  // budget (box + disc together — see FieldMon's own comment for why the
-  // disc no longer needs a separate term here); the remaining ~30px covers
-  // what isn't the sprite itself: each group's internal gap to its sprite
-  // row, the sprite row's own edge padding, and the player group's bottom
-  // padding.
-  const spriteRowH=Math.max(60,(stageH-enemyNameH-playerNameH-30)/2);
+  // Each half of the stage (enemy / player) gets an even split of the
+  // measured stage height as its sprite's size budget. Nameplates are
+  // corner-anchored with position:absolute over their half (matching the
+  // classic fixed layout's own technique) rather than stacked in flex flow
+  // above the sprite, so they don't compete with the sprite for vertical
+  // room — a nameplate can only ever overlap its OWN half's sprite, never
+  // the other side's, and that's fine since they're anchored to opposite
+  // corners of that half. This is what an earlier universal-layout attempt
+  // got wrong: stacking nameplate-then-sprite as flex siblings subtracted
+  // both nameplates' full height from the sprite budget, so sprites read
+  // as too small/cramped even on a roomy desktop window. The ~20px covers
+  // each half's own edge padding.
+  const spriteRowH=Math.max(60,stageH/2-20);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -5418,279 +5384,106 @@ export default function BattleTrackerPage(){
                 <WeatherFX weather={weather}/>
                 <TerrainLabel terrain={terrain}/>
 
-                {isNarrow ? (
-                /* LAYOUT (narrow/mobile only) — four stacked flex rows
-                    instead of six independently hand-tuned position:absolute
-                    offsets: each nameplate gets its own compact row, and
-                    each sprite gets a separate row all to itself (sharing
-                    only with its bench lane) rather than sharing a row's
-                    width budget with its nameplate. Enemy nameplate+sprite
-                    hug the top edge together and player sprite+nameplate
-                    hug the bottom edge together, with any leftover vertical
-                    space collecting as one gap between the two groups.
-                    Grouping is what makes this safe: within a group,
-                    nameplate and sprite are flex column siblings (never
-                    overlap each other, real gap between them); between the
-                    two groups, the outer column's space-between pins the
-                    first group to the top and the last to the bottom.
+                {/* LAYOUT — one universal structure at every viewport width.
+                    The stage splits into two real flex halves (enemy half on
+                    top, player half on the bottom), which guarantees the two
+                    sides can never intrude on each other regardless of stage
+                    size — that guarantee is what actually fixed the
+                    originally-reported cross-side overlap bug.
 
-                    Both groups and their sprite rows are flexShrink:0 —
-                    deliberately not allowed to compress. The sprite's own
-                    size is already computed to fit the real available
-                    height (maxRowH, from the two measured nameplate-row
-                    heights below), so if flexbox were ALSO allowed to
-                    shrink the row independently of that number, the two
-                    sizing decisions could disagree: the row shrinks to a
-                    box smaller than the sprite it contains, and the sprite —
-                    sized by inline style, not reactive to its shrunken
-                    parent — just overflows past the shrunk row instead of
-                    actually getting smaller. flexShrink:0 makes the JS-
-                    computed size the single source of truth; CSS only lays
-                    it out, it doesn't also try to compress it.
-
-                    This whole responsive system is scoped to isNarrow on
-                    purpose — a normal desktop window renders the original,
-                    unmodified fixed-position layout below instead (see the
-                    else branch), since the two goals ("always exactly the
-                    classic proportions" and "gracefully degrade on a phone
-                    that can't fit them") kept fighting each other when they
-                    shared one continuous formula. Splitting them in two
-                    lets the default view stay byte-for-byte what it always
-                    was, with all this machinery only kicking in once the
-                    viewport genuinely can't fit that anymore. */
-                <div style={{position:"absolute",inset:0,zIndex:2,display:"flex",
-                  flexDirection:"column",justifyContent:"space-between",pointerEvents:"none"}}>
-
-                  {/* Enemy group — nameplate then sprite, hugging the top edge */}
-                  <div style={{display:"flex",flexDirection:"column",flexShrink:0,minHeight:0,gap:"clamp(4px, 1cqw, 10px)"}}>
-                    {/* Enemy nameplate row — compact */}
-                    <div ref={enemyNameRef} style={{display:"flex",flexShrink:0,
-                      padding:"clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad,paddingBottom:0}}>
-                      {mounted&&onFieldEnemy&&(
-                        <div style={{display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
-                          <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={stageContentW}/>
-                          <StatChangeBadges entry={onFieldEnemy} align="left"/>
-                          <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
+                    Within each half, the nameplate corner-anchors with
+                    position:absolute over the sprite, the same technique the
+                    old fixed desktop-only layout used, rather than stacking
+                    in flex flow above it. That stacking is what made an
+                    earlier universal-layout attempt read as cramped: it
+                    subtracted BOTH nameplates' full height from the sprite's
+                    size budget (spriteRowH) before the sprite ever got a
+                    chance to claim it, even though nameplate and sprite were
+                    never reported overlapping EACH OTHER — only the enemy
+                    and player sides overlapping was the bug. Corner-
+                    anchoring means each half's sprite gets the whole
+                    half-height budget instead, so it renders at its full
+                    classic size whenever the stage has room, while the flex
+                    split still keeps the two halves apart. */}
+                <div style={{position:"absolute",inset:0,zIndex:2,display:"flex",flexDirection:"column",pointerEvents:"none"}}>
+                  {/* Enemy half — nameplate top-left, bench lane bottom-left,
+                      sprite bottom-right (glows red while selected as the
+                      FIGHT target). */}
+                  <div style={{flex:1,minHeight:0,position:"relative"}}>
+                    {mounted&&onFieldEnemy&&(
+                      <div style={{position:"absolute",top:"clamp(8px, 2cqw, 16px)",left:sidebarPad,zIndex:3,display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
+                        <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={stageContentW}/>
+                        <StatChangeBadges entry={onFieldEnemy} align="left"/>
+                        <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
+                      </div>
+                    )}
+                    {/* Everyone else still in the fight, small and see-through
+                        so they read as background without being decoration.
+                        Above the sprite in z-order because its wrapper box is
+                        far larger than the visible sprite and swallows clicks
+                        over bare ground otherwise. benchFar is already
+                        fastest-first; row-reverse puts the enemy up next
+                        nearest the sprite, slower ones trailing away. */}
+                    {mounted&&benchFar.length>0&&(
+                      <div style={{position:"absolute",bottom:"clamp(4px, 1cqw, 10px)",left:sidebarPad,width:"46%",zIndex:1,
+                        display:"flex",flexDirection:"row-reverse",alignItems:"flex-end",justifyContent:"flex-start",
+                        gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
+                        {benchFar.map(e=>(
+                          <span key={e.id} style={{pointerEvents:"auto"}}>
+                            <BenchMon entry={e} allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {mounted&&onFieldEnemy&&(
+                      <div style={{position:"absolute",bottom:0,right:"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
+                        <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
+                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldEnemy)}/>
+                          <StatusFX statuses={onFieldEnemy.statuses}/>
+                          <HazardMarkers hazards={hazards.enemy}/>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Enemy sprite row — sits right under its nameplate by
-                        default; only shrinks if the two groups together
-                        don't fit the stage. Its bench lane shares the row. */}
-                    <div style={{display:"flex",flexShrink:0,minHeight:0,alignItems:"flex-start",justifyContent:"space-between",
-                      gap:"clamp(6px, 2cqw, 16px)",padding:"0 clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad}}>
-                      {/* Everyone else still in the fight, on the field beside
-                          the focused slot: small and see-through, so they read
-                          as background without being decoration. Above the
-                          focused mon in z-order because a FieldMon's wrapper
-                          box is far larger than its visible sprite and
-                          swallows clicks over bare ground; underneath it these
-                          were unclickable. Size and opacity carry "not the
-                          subject" here, not paint order. benchFar is already
-                          fastest-first (a filter of `sorted`); row-reverse
-                          renders that first — the enemy up next — nearest the
-                          sprite at this row's end, with slower ones trailing
-                          away from it. */}
-                      {mounted&&benchFar.length>0?(
-                        <div style={{flex:1,minWidth:0,zIndex:4,
-                          display:"flex",flexDirection:"row-reverse",alignItems:"flex-start",justifyContent:"flex-start",
-                          gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
-                          {benchFar.map(e=>(
-                            <span key={e.id} style={{pointerEvents:"auto"}}>
-                              <BenchMon entry={e} allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
-                            </span>
-                          ))}
-                        </div>
-                      ):<div/>}
-
-                      {/* Enemy mon (glows red while selected as the FIGHT target) */}
-                      {mounted&&onFieldEnemy&&(
-                        <div style={{flexShrink:0,pointerEvents:"auto"}}>
-                          <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                            <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldEnemy)}/>
-                            <StatusFX statuses={onFieldEnemy.statuses}/>
-                            <HazardMarkers hazards={hazards.enemy}/>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Player group — nameplate then sprite, hugging the
-                      bottom edge (nameplate sits just above its sprite by
-                      default, sprite grounds at the true bottom edge). */}
-                  <div style={{display:"flex",flexDirection:"column",flexShrink:0,minHeight:0,justifyContent:"flex-end",gap:"clamp(4px, 1cqw, 10px)"}}>
-                    {/* Player nameplate row — compact */}
-                    <div ref={playerNameRef} style={{display:"flex",flexShrink:0,justifyContent:"flex-end",
-                      padding:"clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad,paddingBottom:0}}>
-                      {mounted&&battleStarted&&onFieldPlayer&&(
-                        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
-                          <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={stageContentW}/>
-                          <StatChangeBadges entry={onFieldPlayer} align="right"/>
-                          <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
+                  {/* Player half — sprite bottom-left (back sprite; turn-
+                      driven, so before the battle actually begins the setup
+                      trainer placeholder takes this spot instead), bench
+                      lane top-right, nameplate bottom-right. */}
+                  <div style={{flex:1,minHeight:0,position:"relative"}}>
+                    {mounted&&battleStarted&&onFieldPlayer?(
+                      <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
+                        <div style={{position:"relative"}}>
+                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldPlayer)}/>
+                          <StatusFX statuses={onFieldPlayer.statuses}/>
+                          <HazardMarkers hazards={hazards.player}/>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Player sprite row — its bench lane shares the row. */}
-                    <div style={{display:"flex",flexShrink:0,minHeight:0,alignItems:"flex-end",justifyContent:"space-between",
-                      gap:"clamp(6px, 2cqw, 16px)",padding:"0 clamp(8px, 2cqw, 16px) clamp(8px, 2cqw, 16px)",paddingLeft:sidebarPad}}>
-                      {/* Player mon (back sprite) — turn-driven, so it only
-                          makes sense once the battle has actually begun and
-                          there's a real turn order; before that the trainer
-                          placeholder takes this spot instead. */}
-                      {mounted&&battleStarted&&onFieldPlayer?(
-                        <div style={{flexShrink:0,pointerEvents:"auto"}}>
-                          <div style={{position:"relative"}}>
-                            <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldPlayer)}/>
-                            <StatusFX statuses={onFieldPlayer.statuses}/>
-                            <HazardMarkers hazards={hazards.player}/>
-                          </div>
-                        </div>
-                      ):mounted&&!battleStarted&&setupTrainerSpriteId?(
-                        /* Trainer placeholder — stands on the player platform
-                           during setup, same spot the real back sprite takes
-                           over once the battle begins. Purely visual, not a
-                           roster entry. */
-                        <div style={{flexShrink:0,pointerEvents:"auto"}}>
-                          <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
-                        </div>
-                      ):<div/>}
-
-                      {/* Your own side, behind the acting slot */}
-                      {mounted&&benchNear.length>0?(
-                        <div style={{flex:1,minWidth:0,zIndex:4,
-                          display:"flex",alignItems:"flex-end",justifyContent:"flex-end",
-                          gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
-                          {benchNear.map(e=>(
-                            <span key={e.id} style={{pointerEvents:"auto"}}>
-                              <BenchMon entry={e} back allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
-                            </span>
-                          ))}
-                        </div>
-                      ):<div/>}
-                    </div>
+                      </div>
+                    ):mounted&&!battleStarted&&setupTrainerSpriteId?(
+                      <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
+                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
+                      </div>
+                    ):null}
+                    {mounted&&benchNear.length>0&&(
+                      <div style={{position:"absolute",top:"clamp(4px, 1cqw, 10px)",right:16,width:"46%",zIndex:1,
+                        display:"flex",alignItems:"flex-start",justifyContent:"flex-end",
+                        gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
+                        {benchNear.map(e=>(
+                          <span key={e.id} style={{pointerEvents:"auto"}}>
+                            <BenchMon entry={e} back allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {mounted&&battleStarted&&onFieldPlayer&&(
+                      <div style={{position:"absolute",bottom:"clamp(8px, 2cqw, 16px)",right:16,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
+                        <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={stageContentW}/>
+                        <StatChangeBadges entry={onFieldPlayer} align="right"/>
+                        <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
+                      </div>
+                    )}
                   </div>
                 </div>
-                ) : (
-                /* DEFAULT (non-narrow) — the original fixed-position scene,
-                   unchanged since before this session's responsive work.
-                   Every offset/size here is a literal constant, matching
-                   the classic FRLG "Choose a Pokémon"-style composition
-                   exactly: enemy nameplate top-left, enemy sprite top-
-                   right, player sprite bottom-left, player nameplate
-                   bottom-right. See the isNarrow branch above for the
-                   mobile-only responsive version. */
-                <>
-                  {/* Enemy nameplate — top-left, with that side's field
-                      hazards below it. Padded clear of the floating
-                      sidebar's current width on a narrow viewport, since
-                      the sidebar overlays the scene there instead of
-                      taking flex width from it — without this the icon
-                      strip (or the expanded drawer) sits right on top of
-                      the health bar. (isNarrow is always false in this
-                      branch, so this is effectively just left:16 here —
-                      kept as-is since it's harmless and matches the
-                      original exactly.) */}
-                  {mounted&&onFieldEnemy&&(
-                    <div style={{position:"absolute",top:16,left:isNarrow?(sidebarCollapsed?SIDEBAR_W.collapsed:SIDEBAR_W.expandedNarrow)+16:16,zIndex:3,display:"flex",flexDirection:"column",gap:4}}>
-                      <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)}/>
-                      <StatChangeBadges entry={onFieldEnemy} align="left"/>
-                      <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
-                    </div>
-                  )}
-                  {/* Everyone else still in the fight, on the field beside the two
-                      focused slots: small and see-through, so they read as
-                      background without being decoration.
-
-                      Lanes are measured to clear each side's nameplate-plus-
-                      hazards block — the opponent's is 98px tall from top:16,
-                      the player's 112px above bottom:9%, both fixed-px, so the
-                      offsets hold as the stage resizes. Width caps a row at two
-                      so they wrap into open ground rather than behind the big
-                      sprites.
-
-                      They sit above the focused mons in z-order because a
-                      FieldMon's wrapper box is far larger than its visible
-                      sprite and swallows clicks over bare ground; underneath it
-                      these were unclickable. Size and opacity carry "not the
-                      subject" here, not paint order. */}
-                  {mounted&&benchFar.length>0&&(
-                    /* benchFar is already fastest-first (it's a filter of `sorted`).
-                       row-reverse renders that first — the enemy up next — at the
-                       lane's right edge, nearest the focused enemy sprite, with
-                       slower ones trailing off to the left; a plain row would have
-                       put the next-up mon farthest away instead.
-
-                       zIndex:1, under the active enemy FieldMon's zIndex:2 — on a
-                       squeezed stage this lane can reach under the sprite's
-                       footprint, and it should tuck behind the active mon there
-                       rather than float on top of it. */
-                    <div style={{position:"absolute",top:118,left:8,width:"46%",zIndex:1,
-                      display:"flex",flexDirection:"row-reverse",alignItems:"flex-end",justifyContent:"flex-start",
-                      gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
-                      {benchFar.map(e=>(
-                        <span key={e.id} style={{pointerEvents:"auto"}}>
-                          <BenchMon entry={e} allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {/* Your own side, behind the acting slot. zIndex:1 under the
-                      active player FieldMon's zIndex:2 — same reasoning as
-                      benchFar above. */}
-                  {mounted&&benchNear.length>0&&(
-                    <div style={{position:"absolute",bottom:"calc(9% + 116px)",right:8,width:"46%",zIndex:1,
-                      display:"flex",alignItems:"flex-end",justifyContent:"flex-end",
-                      gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
-                      {benchNear.map(e=>(
-                        <span key={e.id} style={{pointerEvents:"auto"}}>
-                          <BenchMon entry={e} back allEntries={entries} onClick={()=>setSceneEnemyId(e.id)} trainerSpriteId={trainerSpriteFor(e)}/>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
-                  {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
-                    <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                      <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} tint={isDittoTransformed(onFieldEnemy)}/>
-                      <StatusFX statuses={onFieldEnemy.statuses}/>
-                      <HazardMarkers hazards={hazards.enemy}/>
-                    </div>
-                  </div>}
-                  {/* Player mon — lower-left (back sprite). Turn-driven, so it
-                      only makes sense once the battle has actually begun and
-                      there's a real turn order; before that, nothing's been
-                      "sent out" yet regardless of what's first in the roster,
-                      so the trainer placeholder below takes this spot instead. */}
-                  {mounted&&battleStarted&&onFieldPlayer&&(
-                    <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
-                      <div style={{position:"relative"}}>
-                        <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} tint={isDittoTransformed(onFieldPlayer)}/>
-                        <StatusFX statuses={onFieldPlayer.statuses}/>
-                        <HazardMarkers hazards={hazards.player}/>
-                      </div>
-                    </div>
-                  )}
-                  {/* Trainer placeholder — stands on the player platform during
-                      setup, same spot the real back sprite takes over once the
-                      battle begins. Purely visual, not a roster entry. */}
-                  {mounted&&!battleStarted&&setupTrainerSpriteId&&(
-                    <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
-                      <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId}/>
-                    </div>
-                  )}
-                  {/* Player nameplate — lower-right, with that side's field hazards below it */}
-                  {mounted&&battleStarted&&onFieldPlayer&&(
-                    <div style={{position:"absolute",bottom:"9%",right:24,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                      <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)}/>
-                      <StatChangeBadges entry={onFieldPlayer} align="right"/>
-                      <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
-                    </div>
-                  )}
-                </>
-                )}
 
                 {/* POKéMON overlay — whoever's turn it is is always shown automatically (no send
                     needed); SEND here just picks who's focused in the "other" spotlight slot. */}
