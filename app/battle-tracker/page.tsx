@@ -4754,17 +4754,25 @@ export default function BattleTrackerPage(){
   // get a box sized for the whole stage and overflow past the actual
   // remaining room by however much the padding took.
   const stageContentW=Math.max(0,stageW-sidebarPad-16);
+  // Each half's nameplate is capped to roughly half the content width, not
+  // the whole thing — it's corner-anchored opposite the sprite within the
+  // same half (see spriteRowH below), sharing that half's horizontal space
+  // rather than a dedicated row of its own. Passing the full stageContentW
+  // here let the nameplate render at its default width even once a narrow
+  // stage no longer had room for both it and the sprite side by side, so
+  // the sprite's own body sat underneath — capping at half keeps the two
+  // sides apart on any width, and is generous enough not to bind at all on
+  // a normal desktop stage (defaultW is well under half of it there).
+  const nameplateMaxW=Math.max(0,stageContentW/2-8);
   // Each half of the stage (enemy / player) gets an even split of the
   // measured stage height as its sprite's size budget. Nameplates are
   // corner-anchored with position:absolute over their half (matching the
   // classic fixed layout's own technique) rather than stacked in flex flow
   // above the sprite, so they don't compete with the sprite for vertical
-  // room — a nameplate can only ever overlap its OWN half's sprite, never
-  // the other side's, and that's fine since they're anchored to opposite
-  // corners of that half. This is what an earlier universal-layout attempt
-  // got wrong: stacking nameplate-then-sprite as flex siblings subtracted
-  // both nameplates' full height from the sprite budget, so sprites read
-  // as too small/cramped even on a roomy desktop window. The ~20px covers
+  // room. This is what an earlier universal-layout attempt got wrong:
+  // stacking nameplate-then-sprite as flex siblings subtracted both
+  // nameplates' full height from the sprite budget, so sprites read as too
+  // small/cramped even on a roomy desktop window. The ~20px covers
   // each half's own edge padding.
   const spriteRowH=Math.max(60,stageH/2-20);
   const scrollRef=useRef<HTMLDivElement>(null);
@@ -5412,7 +5420,7 @@ export default function BattleTrackerPage(){
                   <div style={{flex:1,minHeight:0,position:"relative"}}>
                     {mounted&&onFieldEnemy&&(
                       <div style={{position:"absolute",top:"clamp(8px, 2cqw, 16px)",left:sidebarPad,zIndex:3,display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
-                        <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={stageContentW}/>
+                        <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={nameplateMaxW}/>
                         <StatChangeBadges entry={onFieldEnemy} align="left"/>
                         <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
                       </div>
@@ -5477,7 +5485,7 @@ export default function BattleTrackerPage(){
                     )}
                     {mounted&&battleStarted&&onFieldPlayer&&(
                       <div style={{position:"absolute",bottom:"clamp(8px, 2cqw, 16px)",right:16,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
-                        <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={stageContentW}/>
+                        <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={nameplateMaxW}/>
                         <StatChangeBadges entry={onFieldPlayer} align="right"/>
                         <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
                       </div>
