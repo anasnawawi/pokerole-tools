@@ -1817,8 +1817,10 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   const statusEffect=moveAppliesStatus(move);
   const userFaints=moveUserFaints(move);
 
-  // Target options
-  const others=allEntries.filter(e=>e.id!==attacker.id&&e.currentHp>0);
+  // Target options — sorted by initiative (highest first), matching turn
+  // order everywhere else, rather than whatever order they were added to
+  // the roster in.
+  const others=allEntries.filter(e=>e.id!==attacker.id&&e.currentHp>0).sort((a,b)=>b.initiative-a.initiative);
   const allCombatants=[attacker,...others];
   // Transform needs to pick a pokemon to copy — shows all entries
   const targetOptions=isTransformMove ? others
