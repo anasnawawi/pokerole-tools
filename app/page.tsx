@@ -338,12 +338,20 @@ export default function Home() {
             /* The dark teal + scanline treatment is landscape-only — this
                is the expanded FRLG list's own look, and portrait doesn't
                show that view (it's the compact strip instead), so it stays
-               on the shared pale C.bezel token like every other panel. */
-            background:portrait ? C.bezel
-              : "repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 2px,#226B64 2px,#226B64 11px)",
-            padding:narrow?8:10,display:"flex",flexDirection:"column",
-            justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
-            <PartyBar compact={portrait} onPanel dark={!portrait}/>
+               on the shared pale C.bezel token like every other panel.
+               Landscape gets a solid ring of the stripes' own light teal
+               between the black border and the scanlines themselves (this
+               padding, filled by the outer div's own solid background),
+               so the stripes read as stopping short of the border instead
+               of running straight into it. */
+            background:portrait?C.bezel:"#4CB1AB",
+            padding:portrait?0:(narrow?4:6),display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <div style={{flex:1,minHeight:0,borderRadius:portrait?0:4,
+              background:portrait?"transparent":"repeating-linear-gradient(180deg,#4CB1AB 0px,#4CB1AB 2px,#226B64 2px,#226B64 11px)",
+              padding:narrow?8:10,display:"flex",flexDirection:"column",
+              justifyContent:portrait?"center":undefined,overflowY:"auto"}}>
+              <PartyBar compact={portrait} onPanel dark={!portrait}/>
+            </div>
           </div>
 
           <div style={{flexShrink:0,display:"flex",alignItems:"center",gap:narrow?6:9,flexWrap:"wrap"}}>
