@@ -316,6 +316,16 @@ function nameOf(entry:BattleEntry,roster:BattleEntry[]):string{
   const{base,suffix}=nameParts(entry,roster);
   return base+suffix;
 }
+/* Transform swaps moves/attrs onto the entry (see morphedTo's own comment)
+   but every sprite lookup was still keying off entry.pokemon.number
+   directly, so a Transformed Ditto kept drawing as Ditto — the name plate
+   still correctly said DITTO (that's accurate: Transform changes what it
+   looks like, not what it's called), but the actual battler art never
+   followed. Every sprite-number lookup should go through this instead of
+   entry.pokemon.number directly. */
+function spriteNumberOf(entry:BattleEntry):number{
+  return entry.morphedTo?.number??entry.pokemon.number;
+}
 
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
 // (as in-game); player plates show HP n/n + WP n/n. maxW is only ever passed
@@ -498,7 +508,7 @@ function BenchMon({entry,back,allEntries,onClick,trainerSpriteId}:{entry:BattleE
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={entry.pokemon.number} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
+        <PokeSprite number={spriteNumberOf(entry)} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
       </div>
     </button>
   );
@@ -545,7 +555,7 @@ function CollapsedRoster({sorted,activeId,entries,onExpand,onPick,trainerSpriteF
                 background:fainted?"#B8B8A0":"#F8F8E8"}}>
                 {/* eslint-disable-next-line @next/next/no-img-element -- local
                     pixel art at a fixed tiny size; next/image would blur it. */}
-                <img src={e.pokemon.number>0?`/sprites/pokemon/${e.pokemon.number}.png`:trainerSpriteFor(e)?`/sprites/trainers/${trainerSpriteFor(e)}.png`:""} alt="" width={34} height={34}
+                <img src={e.pokemon.number>0?`/sprites/pokemon/${spriteNumberOf(e)}.png`:trainerSpriteFor(e)?`/sprites/trainers/${trainerSpriteFor(e)}.png`:""} alt="" width={34} height={34}
                   draggable={false}
                   style={{width:34,height:34,imageRendering:"pixelated",objectFit:"contain",
                     filter:fainted?"grayscale(1)":undefined}}
@@ -2043,7 +2053,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                   return<button key={t.id} onClick={()=>toggleTarget(t.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"6px 10px 5px",borderRadius:4,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${sel?(isSelf?"#a040a0":TYPE_COLORS[t.pokemon.types[0]]):"#3a4060"}`,background:sel?(isSelf?"rgba(160,64,160,0.2)":TYPE_COLORS[t.pokemon.types[0]]+"20"):"transparent",color:sel?"#e8eaf0":"#8b90a8"}}>
                     {/* eslint-disable-next-line @next/next/no-img-element -- local
                         pixel art at a fixed tiny size; next/image would blur it. */}
-                    <img src={`/sprites/pokemon/${t.pokemon.number}.png`} alt="" width={26} height={26}
+                    <img src={`/sprites/pokemon/${spriteNumberOf(t)}.png`} alt="" width={26} height={26}
                       style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0,filter:t.currentHp<=0?"grayscale(1)":undefined}}
                       onError={ev=>{(ev.currentTarget as HTMLImageElement).style.visibility="hidden";}}/>
                     <span>{isSelf?"(Self) ":""}{nameOf(t,allEntries)}</span>
@@ -5381,7 +5391,7 @@ export default function BattleTrackerPage(){
                       {mounted&&onFieldEnemy&&(
                         <div style={{flexShrink:0,pointerEvents:"auto"}}>
                           <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                            <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH}/>
+                            <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH}/>
                             <StatusFX statuses={onFieldEnemy.statuses}/>
                             <HazardMarkers hazards={hazards.enemy}/>
                           </div>
@@ -5416,7 +5426,7 @@ export default function BattleTrackerPage(){
                       {mounted&&battleStarted&&onFieldPlayer?(
                         <div style={{flexShrink:0,pointerEvents:"auto"}}>
                           <div style={{position:"relative"}}>
-                            <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH}/>
+                            <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH}/>
                             <StatusFX statuses={onFieldPlayer.statuses}/>
                             <HazardMarkers hazards={hazards.player}/>
                           </div>
@@ -5527,7 +5537,7 @@ export default function BattleTrackerPage(){
                   {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
                   {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
                     <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                      <FieldMon number={onFieldEnemy.pokemon.number} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)}/>
+                      <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)}/>
                       <StatusFX statuses={onFieldEnemy.statuses}/>
                       <HazardMarkers hazards={hazards.enemy}/>
                     </div>
@@ -5540,7 +5550,7 @@ export default function BattleTrackerPage(){
                   {mounted&&battleStarted&&onFieldPlayer&&(
                     <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
                       <div style={{position:"relative"}}>
-                        <FieldMon number={onFieldPlayer.pokemon.number} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
+                        <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
                         <StatusFX statuses={onFieldPlayer.statuses}/>
                         <HazardMarkers hazards={hazards.player}/>
                       </div>
@@ -5586,7 +5596,7 @@ export default function BattleTrackerPage(){
                                 const isFocused=onFieldEnemy?.id===e.id;
                                 return(
                                   <div key={e.id} style={{display:"flex",alignItems:"center",gap:5,background:isActing?"#F0ECD4":isFocused?"#C8D8F0":"#F0ECD4",border:`2px solid ${isActing?"#787018":isFocused?"#2858C0":"#181818"}`,padding:"3px 5px",opacity:e.currentHp<=0?0.5:1}}>
-                                    <img src={`/sprites/pokemon/${e.pokemon.number}.png`} alt="" width={28} height={28} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
+                                    <img src={`/sprites/pokemon/${spriteNumberOf(e)}.png`} alt="" width={28} height={28} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
                                     <div style={{flex:1,minWidth:0}}>
                                       <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#181818",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(nameOf(e,entries)).toUpperCase()}</div>
                                       <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:e.currentHp/e.maxHp>0.5?"#187028":e.currentHp/e.maxHp>0.25?"#807008":"#A00808"}}>{e.currentHp}/{e.maxHp}</div>
