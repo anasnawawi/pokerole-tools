@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { C } from "./components/PokedexFrame";
+import { C, HallOfFame } from "./components/PokedexFrame";
 import PartyBar from "./components/PartyBar";
 import { loadFromStorage, saveToStorage } from "./lib/storage";
 import { TrainerData, TrainerGender, makeBlankTrainer, setActiveTrainer, TRAINERS_KEY } from "./lib/trainer";
@@ -363,63 +363,6 @@ export default function Home() {
       </div>
 
       {showHOF && <HallOfFame onClose={()=>setShowHOF(false)}/>}
-    </div>
-  );
-}
-
-/* ── Hall of Fame easter egg ───────────────────────────────────────────────────
-   Clicking the lens is a no-op everywhere else this chrome is drawn, so it's a
-   safe, discoverable spot for a hidden extra — the GBA end-game screen, styled
-   for the credits it's actually carrying. Three fixed entries, not data-driven;
-   this isn't meant to reflect anyone's real save. */
-const HALL_OF_FAME: { num: number; name: string; caption: string }[] = [
-  { num: 155, name: "AHDA NAWAWI", caption: "The best Pokémon Trainer" },
-  { num: 928, name: "ANAS NAWAWI", caption: "Guy who needed to make this instead of remember rules" },
-  { num: 700, name: "AFIQ OMAR", caption: "First Champion Alpha Tester" },
-];
-
-function HallOfFame({ onClose }: { onClose: () => void }) {
-  const pixel = "'Press Start 2P',monospace";
-  return (
-    <div onClick={onClose} role="dialog" aria-modal aria-label="Hall of Fame"
-      style={{position:"fixed",inset:0,zIndex:500,background:"rgba(6,8,18,0.86)",
-        display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"pointer"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"min(760px,94vw)",cursor:"default",
-        position:"relative",overflow:"hidden",borderRadius:8,
-        border:"4px solid #14162A",boxShadow:"0 16px 48px rgba(0,0,0,0.65)",
-        background:"linear-gradient(180deg,#9098D0 0%,#7078B8 42%,#484868 42%,#383858 100%)",
-        padding:"30px 28px 26px"}}>
-        {/* Scanlines, the one texture every GBA cutscene shares */}
-        <div aria-hidden style={{position:"absolute",inset:0,pointerEvents:"none",opacity:0.5,
-          background:"repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 4px)"}}/>
-        <button onClick={onClose} title="Close" aria-label="Close"
-          style={{position:"absolute",top:10,right:10,zIndex:1,width:26,height:26,borderRadius:"50%",
-            border:"2px solid #14162A",background:"#F8F8E8",color:"#14162A",
-            fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-
-        {/* Three even columns — same width, same gap, regardless of name length */}
-        <div style={{position:"relative",zIndex:1,display:"grid",
-          gridTemplateColumns:"repeat(3, 1fr)",gap:14}}>
-          {HALL_OF_FAME.map(p=>(
-            <div key={p.num} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:7,minWidth:0}}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- local
-                  pixel art at a fixed small size; next/image would blur it. */}
-              <img src={`/sprites/pokemon/${p.num}.png`} alt="" width={104} height={104}
-                style={{imageRendering:"pixelated",objectFit:"contain",
-                  filter:"drop-shadow(2px 5px 3px rgba(0,0,0,0.5))"}}/>
-              <span style={{fontFamily:pixel,fontSize:10,color:"#FFFFFF",textAlign:"center",
-                textShadow:"1px 1px 0 #14162A",lineHeight:1.6}}>{p.name}</span>
-              <span style={{fontSize:10,color:"#E4E6FF",textAlign:"center",lineHeight:1.45}}>{p.caption}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{position:"relative",zIndex:1,marginTop:24,textAlign:"center"}}>
-          <span style={{fontFamily:pixel,fontSize:12,color:"#FFFFFF",textShadow:"1px 1px 0 #14162A"}}>
-            Welcome to the HALL OF FAME!
-          </span>
-        </div>
-      </div>
     </div>
   );
 }

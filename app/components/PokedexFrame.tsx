@@ -37,6 +37,65 @@ export const SITE_LINKS = [
   {href:"/reference/quick-ref",     label:"RULES",   match:"quick-ref"},
 ];
 
+/* ── Hall of Fame easter egg ───────────────────────────────────────────────────
+   Clicking the lens is a no-op everywhere else this chrome is drawn, so it's a
+   safe, discoverable spot for a hidden extra — the GBA end-game screen, styled
+   for the credits it's actually carrying. Three fixed entries, not data-driven;
+   this isn't meant to reflect anyone's real save. Lives here (not the landing
+   page, where it started) so the same lens button on every framed tool page
+   carries the same egg instead of it only existing on the front screen. */
+const HALL_OF_FAME: { num: number; name: string; caption: string }[] = [
+  { num: 155, name: "AHDA NAWAWI", caption: "The best Pokémon Trainer" },
+  { num: 928, name: "ANAS NAWAWI", caption: "Guy who needed to make this instead of remember rules" },
+  { num: 700, name: "AFIQ OMAR", caption: "First Champion Alpha Tester" },
+];
+
+export function HallOfFame({ onClose }: { onClose: () => void }) {
+  const pixel = "'Press Start 2P',monospace";
+  return (
+    <div onClick={onClose} role="dialog" aria-modal aria-label="Hall of Fame"
+      style={{position:"fixed",inset:0,zIndex:500,background:"rgba(6,8,18,0.86)",
+        display:"flex",alignItems:"center",justifyContent:"center",padding:20,cursor:"pointer"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"min(760px,94vw)",cursor:"default",
+        position:"relative",overflow:"hidden",borderRadius:8,
+        border:"4px solid #14162A",boxShadow:"0 16px 48px rgba(0,0,0,0.65)",
+        background:"linear-gradient(180deg,#9098D0 0%,#7078B8 42%,#484868 42%,#383858 100%)",
+        padding:"30px 28px 26px"}}>
+        {/* Scanlines, the one texture every GBA cutscene shares */}
+        <div aria-hidden style={{position:"absolute",inset:0,pointerEvents:"none",opacity:0.5,
+          background:"repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 4px)"}}/>
+        <button onClick={onClose} title="Close" aria-label="Close"
+          style={{position:"absolute",top:10,right:10,zIndex:1,width:26,height:26,borderRadius:"50%",
+            border:"2px solid #14162A",background:"#F8F8E8",color:"#14162A",
+            fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+
+        {/* Three even columns — same width, same gap, regardless of name length */}
+        <div style={{position:"relative",zIndex:1,display:"grid",
+          gridTemplateColumns:"repeat(3, 1fr)",gap:14}}>
+          {HALL_OF_FAME.map(p=>(
+            <div key={p.num} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:7,minWidth:0}}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- local
+                  pixel art at a fixed small size; next/image would blur it. */}
+              <img src={`/sprites/pokemon/${p.num}.png`} alt="" width={104} height={104}
+                style={{imageRendering:"pixelated",objectFit:"contain",
+                  filter:"drop-shadow(2px 5px 3px rgba(0,0,0,0.5))"}}/>
+              <span style={{fontFamily:pixel,fontSize:10,color:"#FFFFFF",textAlign:"center",
+                textShadow:"1px 1px 0 #14162A",lineHeight:1.6}}>{p.name}</span>
+              <span style={{fontSize:10,color:"#E4E6FF",textAlign:"center",lineHeight:1.45}}>{p.caption}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{position:"relative",zIndex:1,marginTop:24,textAlign:"center"}}>
+          <span style={{fontFamily:pixel,fontSize:12,color:"#FFFFFF",textShadow:"1px 1px 0 #14162A"}}>
+            Welcome to the HALL OF FAME!
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The device chassis every tool page runs inside, so the tools read as
  * software on the Pokédex rather than as separate web pages that happen to
@@ -61,6 +120,7 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
   const current = active ?? SITE_LINKS.find(l=>l.href===pathname)?.match;
   const [narrow,setNarrow] = useState(false);
   const [lamp,setLamp] = useState(0);
+  const [showHOF,setShowHOF] = useState(false);
 
   useEffect(()=>{
     const mq = window.matchMedia("(max-width: 820px)");
@@ -88,9 +148,14 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
 
         {/* ── Top chrome: lens, lamps, home, destination keys ────────────── */}
         <div style={{display:"flex",alignItems:"center",gap:narrow?6:9,flexShrink:0,minWidth:0}}>
-          {/* Lens */}
-          <div style={{width:narrow?24:30,height:narrow?24:30,borderRadius:"50%",flexShrink:0,
-            background:C.bezel,border:`2px solid ${C.outline}`,
+          {/* Lens — a real button here too, same quiet way in to the Hall of
+              Fame screen as the landing page's own lens (see HallOfFame in
+              this file). A no-op everywhere else this chrome is drawn, so
+              it's a safe, discoverable spot for the egg on every tool page,
+              not just the front screen. */}
+          <button onClick={()=>setShowHOF(true)} title="???" aria-label="???"
+            style={{width:narrow?24:30,height:narrow?24:30,borderRadius:"50%",flexShrink:0,
+            background:C.bezel,border:`2px solid ${C.outline}`,padding:0,cursor:"pointer",
             display:"flex",alignItems:"center",justifyContent:"center"}}>
             <div style={{width:"66%",height:"66%",borderRadius:"50%",position:"relative",
               background:`radial-gradient(circle at 34% 30%, ${C.cyanPale} 0%, ${C.cyan} 45%, ${C.cyanDeep} 100%)`,
@@ -98,7 +163,7 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
               <span style={{position:"absolute",top:"14%",left:"18%",width:"28%",height:"20%",
                 borderRadius:"50%",background:"rgba(255,255,255,0.9)"}}/>
             </div>
-          </div>
+          </button>
           <div style={{display:"flex",gap:4,flexShrink:0}}>
             {["#F2544F","#F5D33F","#5BD07A"].map((col,i)=>(
               <span key={col} style={{width:narrow?7:9,height:narrow?7:9,borderRadius:"50%",
@@ -163,6 +228,8 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
         <div style={{height:narrow?9:12,borderRadius:3,background:C.yellow,
           border:`2px solid ${C.outline}`,flexShrink:0}}/>
       </div>
+
+      {showHOF && <HallOfFame onClose={()=>setShowHOF(false)}/>}
     </div>
   );
 }
