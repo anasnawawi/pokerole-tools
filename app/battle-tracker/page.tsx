@@ -457,10 +457,10 @@ function StatChangeBadges({entry,align}:{entry:BattleEntry;align:"left"|"right"}
 // to render wider than the sprite box and quietly get cut by the stage's
 // own overflow:hidden, rather than shrinking the sprite to make room for it.
 //
-// stageW/maxRowH are only ever passed from the narrow/mobile branch of the
-// scene (see isNarrow in the parent) — omitting them (the default/desktop
-// branch) skips all of the above and renders at the exact original fixed
-// size, unconditionally, byte-for-byte what this component always was.
+// stageW/maxRowH are passed from every FieldMon call in the battle scene
+// now — omitting them (as the setup-phase empty-stage placeholder does)
+// skips all of the above and renders at the exact original fixed size,
+// unconditionally.
 function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,tint}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number;tint?:boolean}){
   const defaultW=back?300:250, defaultH=back?232:200;
   const platRatio=back?74/232:62/200;
