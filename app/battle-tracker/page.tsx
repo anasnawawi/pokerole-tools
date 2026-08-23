@@ -56,6 +56,11 @@ interface BattleEntry{
   morphedTo?:PokemonEntry;         // Transform: copied target's pokemon
   originalAttrs?:AttrSet;          // saved before transform to allow revert
   originalMoves?:Move[];           // saved before transform
+  illusionAs?:PokemonEntry;        // Zoroark/Zorua's Illusion: visual-only disguise
+                                    // as an ally — sprite changes, stats/moves don't
+  isSchooling?:boolean;            // Wishiwashi's Schooling: School-Form active
+  schoolingOriginalMaxHp?:number;  // saved pre-Schooling maxHp/currentHp to revert
+  schoolingOriginalCurrentHp?:number;
   hasSubstitute?:boolean;          // Substitute up
   substituteHp?:number;            // HP remaining in substitute
   // ── Advanced mechanics ──────────────────────────────────────
@@ -244,7 +249,7 @@ function loadSpriteBounds(src:string):Promise<SpriteBounds|null>{
   return p;
 }
 
-function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean;trainerSpriteId?:string}){
+function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId,tint}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean;trainerSpriteId?:string;tint?:boolean}){
   const [broken,setBroken]=useState(false);
   // A "trainer" combatant (added via + ADD TRAINER) carries a placeholder
   // Pokémon with number -1 — there's no species sprite for that, so fall
@@ -262,7 +267,12 @@ function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId}:{num
 
   if(broken||!src)return<div style={{width:boxW,height:boxH,pointerEvents:"none"}}/>;
 
-  const filter=fainted?"grayscale(1) brightness(1.15)":"drop-shadow(0 3px 2px rgba(0,0,0,0.35))";
+  // Ditto's own Transform recolors the copied sprite purple/lavender rather
+  // than drawing new art (see isDittoTransformed) — a hue-rotate+saturate
+  // filter on the same PNG everyone else already uses for that species.
+  // Skipped when fainted; grayscale already wins that fight visually.
+  const filter=fainted?"grayscale(1) brightness(1.15)"
+    :(tint?"hue-rotate(220deg) saturate(2.4) brightness(0.9) ":"")+"drop-shadow(0 3px 2px rgba(0,0,0,0.35))";
   const opacity=fainted?0.4:1;
 
   if(!bounds){
@@ -322,9 +332,22 @@ function nameOf(entry:BattleEntry,roster:BattleEntry[]):string{
    still correctly said DITTO (that's accurate: Transform changes what it
    looks like, not what it's called), but the actual battler art never
    followed. Every sprite-number lookup should go through this instead of
-   entry.pokemon.number directly. */
+   entry.pokemon.number directly. illusionAs (Zoroark/Zorua's Illusion —
+   see its own field comment) takes priority over morphedTo: a Pokémon
+   can't be both Transformed and disguised at once in practice, but if it
+   somehow were, the disguise is the more "current" appearance. */
 function spriteNumberOf(entry:BattleEntry):number{
-  return entry.morphedTo?.number??entry.pokemon.number;
+  return entry.illusionAs?.number??entry.morphedTo?.number??entry.pokemon.number;
+}
+/* Ditto's own Transform gets its signature purple/lavender recolor (the
+   games — and fan reimplementations like Showdown — never drew bespoke
+   "Ditto as X" art; they recolor the target's own sprite instead, which is
+   exactly what this does with a CSS filter rather than needing any new
+   asset). Scoped to Ditto specifically — Illusion and every other
+   Transform-user (Mew, Smeargle's Sketch-based sets, etc.) read as the
+   copied species with no tint, same as the real games. */
+function isDittoTransformed(entry:BattleEntry):boolean{
+  return entry.pokemon.name==="Ditto"&&!!entry.morphedTo;
 }
 
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
@@ -438,7 +461,7 @@ function StatChangeBadges({entry,align}:{entry:BattleEntry;align:"left"|"right"}
 // scene (see isNarrow in the parent) — omitting them (the default/desktop
 // branch) skips all of the above and renders at the exact original fixed
 // size, unconditionally, byte-for-byte what this component always was.
-function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number}){
+function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,tint}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number;tint?:boolean}){
   const defaultW=back?300:250, defaultH=back?232:200;
   const platRatio=back?74/232:62/200;
   let spriteBoxW=defaultW, spriteBoxH=defaultH, plat=back?74:62;
@@ -477,7 +500,7 @@ function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH}:{
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={number} back={back} boxW={spriteBoxW} boxH={spriteBoxH} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
+        <PokeSprite number={number} back={back} boxW={spriteBoxW} boxH={spriteBoxH} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={tint}/>
       </div>
     </div>
   );
@@ -508,7 +531,7 @@ function BenchMon({entry,back,allEntries,onClick,trainerSpriteId}:{entry:BattleE
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={spriteNumberOf(entry)} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId}/>
+        <PokeSprite number={spriteNumberOf(entry)} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={isDittoTransformed(entry)}/>
       </div>
     </button>
   );
@@ -3843,6 +3866,61 @@ function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
   );
 }
 
+/* Illusion (Zoroark/Zorua) — disguises as the last conscious Pokémon in the
+   trainer's own party, fooling the opponent until it takes a hit. Purely
+   visual (illusionAs only feeds spriteNumberOf — see its own comment):
+   stats, moves, and type stay Zoroark's own the whole time, unlike
+   Transform/morphedTo which copies all of that. GM-triggered on both ends
+   (pick who to disguise as; reveal whenever a hit should break it) rather
+   than auto-detecting "took direct damage," matching how every other
+   manual mechanic in this card already works. */
+function IllusionPopup({entry,allEntries,onClose,onApply}:{
+  entry:BattleEntry;allEntries:BattleEntry[];onClose:()=>void;
+  onApply:(id:string,u:Partial<BattleEntry>)=>void;
+}){
+  // Same side, conscious, not itself — the actual in-game rule ("the last
+  // Pokémon in the party") isn't something this tracker has a real party
+  // order for once things are mid-battle, so this offers every eligible
+  // ally and lets the GM pick, rather than guessing at an order.
+  const allies=allEntries.filter(e=>e.id!==entry.id&&e.side===entry.side&&e.currentHp>0);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#1e2235",border:"2px solid #a040c8",borderRadius:10,width:420,padding:24,fontFamily:"'Exo 2'"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h3 style={{color:"#a040c8",margin:0,fontSize:16}}>🎭 Illusion</h3>
+          <button onClick={onClose} title="Close" style={{background:"none",border:"none",color:"#5a6080",cursor:"pointer",fontSize:18}}>✕</button>
+        </div>
+        {entry.illusionAs?(
+          <div>
+            <div style={{color:"#a040c8",fontWeight:700,marginBottom:12}}>🎭 Disguised as {entry.illusionAs.name}</div>
+            <div style={{fontSize:11,color:"#8b90a8",marginBottom:16}}>Stats and moves are still {nameOf(entry,allEntries)}&apos;s own — only the sprite is borrowed. Reveal it once it takes a hit (or whenever you want the disguise to drop).</div>
+            <button onClick={()=>{onApply(entry.id,{illusionAs:undefined});onClose();}} style={{width:"100%",background:"#5a6080",color:"#fff",border:"none",borderRadius:6,padding:10,fontWeight:700,cursor:"pointer"}}>
+              Reveal — it&apos;s really {nameOf(entry,allEntries)}!
+            </button>
+          </div>
+        ):(
+          <div>
+            <div style={{fontSize:11,color:"#8b90a8",marginBottom:14}}>Pick a conscious ally to disguise as. The opponent sees this species until the illusion breaks.</div>
+            {allies.length===0?(
+              <div style={{fontSize:11,color:"#ff4757"}}>No other conscious Pokémon on this side to disguise as.</div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {allies.map(a=>(
+                  <button key={a.id} onClick={()=>{onApply(entry.id,{illusionAs:a.pokemon});onClose();}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,background:"rgba(160,64,200,0.12)",border:"1px solid #a040c840",color:"#e8eaf0",cursor:"pointer",textAlign:"left"}}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- local pixel art at a fixed tiny size */}
+                    <img src={`/sprites/pokemon/${a.pokemon.number}.png`} alt="" width={28} height={28} style={{imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>
+                    <span style={{flex:1}}>{nameOf(a,allEntries)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AttrModBadge({mod}:{mod:number}){
   if(mod===0)return null;
   const up=mod>0;
@@ -3868,6 +3946,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
   const [showDynamax,setShowDynamax]=useState(false);
   const [showTera,setShowTera]=useState(false);
   const [showZMove,setShowZMove]=useState(false);
+  const [showIllusion,setShowIllusion]=useState(false);
   const [showTrainerSkills,setShowTrainerSkills]=useState(false);
   const upd=(u:Partial<BattleEntry>)=>onUpdate(entry.id,u);
   const sc=STATUS_CONDITIONS[primaryStatus(entry)];
@@ -3898,6 +3977,7 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
       {showDynamax&&<DynamaxPopup entry={entry} onClose={()=>setShowDynamax(false)} onApply={onUpdate}/>}
       {showTera&&<TerastallizationPopup entry={entry} onClose={()=>setShowTera(false)} onApply={onUpdate}/>}
       {showZMove&&<ZMovePopup entry={entry} allEntries={allEntries} onClose={()=>setShowZMove(false)} onApply={onUpdate} onApplyDmg={(id,dmg)=>onUpdate(id,{currentHp:Math.max(0,(allEntries.find(e=>e.id===id)?.currentHp??0)-dmg)})}/>}
+      {showIllusion&&<IllusionPopup entry={entry} allEntries={allEntries} onClose={()=>setShowIllusion(false)} onApply={onUpdate}/>}
       {showTrainerSkills&&linkedTrainer&&<TrainerSkillPopup trainerData={linkedTrainer} entry={entry} allEntries={allEntries} onClose={()=>setShowTrainerSkills(false)}/>}
 
       {/* HORIZONTAL CARD — FireRed party-panel style. */}
@@ -3993,6 +4073,42 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
           {entry.isDynamaxed&&<button onClick={()=>setShowDynamax(true)} style={{background:"#E84040",border:"1px solid #181818",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title={`Dynamaxed — ${entry.dynamaxRoundsLeft} rounds left`}>MAX{entry.dynamaxRoundsLeft}</button>}
           {entry.isTerastallized&&<button onClick={()=>setShowTera(true)} style={{background:"#B040C0",border:"1px solid #181818",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title={`Terastallized (${entry.teraType})`}>TERA</button>}
           {entry.zMoveUsed&&<span style={{background:"#C8A800",border:"1px solid #181818",color:"#181818",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}}>Z✓</span>}
+          {/* Illusion (Zoroark/Zorua) — visual-only disguise as a conscious
+              ally, no stat/move change (unlike Transform/morphedTo, which
+              this deliberately doesn't touch). Innate, not item-gated like
+              Mega/Dynamax/Tera/Z-Move below, so it's offered whenever the
+              species actually has the ability rather than folded into that
+              gated group. */}
+          {entry.illusionAs?(
+            <button onClick={()=>setShowIllusion(true)} style={{background:"#8850C8",border:"1px solid #181818",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title={`Illusion — disguised as ${entry.illusionAs.name}`}>🎭 ILLUSION</button>
+          ):entry.abilities.some(a=>a.name==="Illusion")&&(
+            <button onClick={()=>setShowIllusion(true)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#D8A8F8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title="Illusion">🎭 ILLUSION</button>
+          )}
+          {/* Schooling (Wishiwashi) — same morphedTo mechanism as Transform
+              (species/attrs swap, REVERT button below reuses it for free),
+              plus HP tracking since the School-Form's max is much higher.
+              GM-triggered rather than auto-detecting the "half HP or less"
+              condition, same manual-trigger pattern as Mega/Dynamax/Tera. */}
+          {entry.isSchooling?(
+            <button onClick={()=>upd({
+              morphedTo:undefined,attrs:entry.originalAttrs||entry.attrs,originalAttrs:undefined,
+              isSchooling:false,maxHp:entry.schoolingOriginalMaxHp??entry.maxHp,
+              currentHp:Math.min(entry.currentHp,entry.schoolingOriginalMaxHp??entry.maxHp),
+              schoolingOriginalMaxHp:undefined,schoolingOriginalCurrentHp:undefined,
+            })} style={{background:"#3878C8",border:"1px solid #181818",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title="Schooling — School Form active, click to revert">🐟 SCHOOL</button>
+          ):entry.abilities.some(a=>a.name==="Schooling")&&(
+            <button onClick={()=>{
+              const swarmForm=POKEMON.find(p=>p.number===entry.pokemon.number&&p.name!==entry.pokemon.name&&/Swarm Form|School Form/i.test(p.name));
+              if(!swarmForm)return;
+              const newAttrs=pokemonRankAttrs(swarmForm);
+              const newMaxHp=swarmForm.baseHp+newAttrs.vitality;
+              upd({
+                morphedTo:swarmForm,attrs:newAttrs,originalAttrs:entry.originalAttrs||{...entry.attrs},
+                isSchooling:true,schoolingOriginalMaxHp:entry.maxHp,schoolingOriginalCurrentHp:entry.currentHp,
+                maxHp:newMaxHp,currentHp:newMaxHp,
+              });
+            }} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#A8D8F8",cursor:"pointer",fontSize:7,padding:"1px 4px",fontFamily:"'Press Start 2P',monospace"}} title="Schooling — forms the School (use around half HP)">🐟 SCHOOL</button>
+          )}
           {(()=>{
             const trainerBattleItem:string=(linkedTrainer as any)?.battleItem??"";
             const isLinked=!!entry.linkedTrainerId;
@@ -5015,8 +5131,9 @@ export default function BattleTrackerPage(){
     isMegaEvolved:false,megaOriginalAttrs:undefined,
     isDynamaxed:false,dynamaxRoundsLeft:0,dynamaxExtraHpCur:0,isGigamax:false,
     isTerastallized:false,teraFirstMoveBonusUsed:false,
-    // Clear transform
+    // Clear transform/illusion/schooling
     morphedTo:undefined,originalAttrs:undefined,originalMoves:undefined,
+    illusionAs:undefined,isSchooling:false,schoolingOriginalMaxHp:undefined,schoolingOriginalCurrentHp:undefined,
     // Clear notes
     notes:"",
     // Clear support move effects
@@ -5391,7 +5508,7 @@ export default function BattleTrackerPage(){
                       {mounted&&onFieldEnemy&&(
                         <div style={{flexShrink:0,pointerEvents:"auto"}}>
                           <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                            <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH}/>
+                            <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldEnemy)}/>
                             <StatusFX statuses={onFieldEnemy.statuses}/>
                             <HazardMarkers hazards={hazards.enemy}/>
                           </div>
@@ -5426,7 +5543,7 @@ export default function BattleTrackerPage(){
                       {mounted&&battleStarted&&onFieldPlayer?(
                         <div style={{flexShrink:0,pointerEvents:"auto"}}>
                           <div style={{position:"relative"}}>
-                            <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH}/>
+                            <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldPlayer)}/>
                             <StatusFX statuses={onFieldPlayer.statuses}/>
                             <HazardMarkers hazards={hazards.player}/>
                           </div>
@@ -5537,7 +5654,7 @@ export default function BattleTrackerPage(){
                   {/* Enemy mon — upper-right (glows red while selected as the FIGHT target) */}
                   {mounted&&onFieldEnemy&&<div style={{position:"absolute",top:"9%",right:"7%",zIndex:2}}>
                     <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                      <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)}/>
+                      <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} tint={isDittoTransformed(onFieldEnemy)}/>
                       <StatusFX statuses={onFieldEnemy.statuses}/>
                       <HazardMarkers hazards={hazards.enemy}/>
                     </div>
@@ -5550,7 +5667,7 @@ export default function BattleTrackerPage(){
                   {mounted&&battleStarted&&onFieldPlayer&&(
                     <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
                       <div style={{position:"relative"}}>
-                        <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)}/>
+                        <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} tint={isDittoTransformed(onFieldPlayer)}/>
                         <StatusFX statuses={onFieldPlayer.statuses}/>
                         <HazardMarkers hazards={hazards.player}/>
                       </div>
