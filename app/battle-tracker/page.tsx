@@ -249,7 +249,7 @@ function loadSpriteBounds(src:string):Promise<SpriteBounds|null>{
   return p;
 }
 
-function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId,tint}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean;trainerSpriteId?:string;tint?:boolean}){
+function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId,tint,heightScale=1}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean;trainerSpriteId?:string;tint?:boolean;heightScale?:number}){
   const [broken,setBroken]=useState(false);
   // A "trainer" combatant (added via + ADD TRAINER) carries a placeholder
   // Pokémon with number -1 — there's no species sprite for that, so fall
@@ -281,7 +281,7 @@ function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId,tint}
     return(
       <div style={{width:boxW,height:boxH,display:"flex",alignItems:"flex-end",justifyContent:"center",pointerEvents:"none"}}>
         <img src={src} alt="" draggable={false} onError={()=>setBroken(true)}
-          style={{width:"100%",height:"100%",imageRendering:"pixelated",objectFit:"contain",objectPosition:"center bottom",
+          style={{width:`${100*heightScale}%`,height:`${100*heightScale}%`,imageRendering:"pixelated",objectFit:"contain",objectPosition:"center bottom",
             filter,opacity,transition:"opacity 0.3s"}}/>
       </div>
     );
@@ -289,8 +289,11 @@ function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId,tint}
 
   // Scale the full source (including its padding) to fit the box, then shift
   // it so the tight content bounds — not the padded canvas — sit flush with
-  // the box's bottom edge and horizontal center.
-  const scale=Math.min(boxW/bounds.naturalWidth,boxH/bounds.naturalHeight);
+  // the box's bottom edge and horizontal center. heightScale shrinks that
+  // further (species-relative sizing — see its own comment); the box itself
+  // — and so every other element's layout budget — never changes, only how
+  // much of it this particular sprite's art fills.
+  const scale=Math.min(boxW/bounds.naturalWidth,boxH/bounds.naturalHeight)*heightScale;
   const dispW=bounds.naturalWidth*scale, dispH=bounds.naturalHeight*scale;
   const bottomPad=(bounds.naturalHeight-(bounds.top+bounds.height))*scale;
   const imgLeft=boxW/2-(bounds.left+bounds.width/2)*scale;
@@ -348,6 +351,39 @@ function spriteNumberOf(entry:BattleEntry):number{
    copied species with no tint, same as the real games. */
 function isDittoTransformed(entry:BattleEntry):boolean{
   return entry.pokemon.name==="Ditto"&&!!entry.morphedTo;
+}
+/* Species height, parsed from the data's "X.Ym / Y.Y'" string. Falls back to
+   a plausible mid-size default (1m) for anything that fails to parse (an
+   unexpected format, a missing/blank field) so a parse miss shrinks a
+   sprite modestly rather than collapsing it to nothing or blowing it up
+   unbounded. */
+function speciesHeightM(p:{height?:string}):number{
+  const m=p.height?.match(/^([\d.]+)m/);
+  const h=m?parseFloat(m[1]):NaN;
+  return Number.isFinite(h)&&h>0?h:1;
+}
+/* Every sprite used to fill its box at the same size regardless of species,
+   so Arceus (3.2m) and Charmander (0.6m) read as identical heights on the
+   field — this scales the art itself down within its (unchanged) box/
+   platform footprint so bigger species visibly read as bigger. Square-root,
+   not linear, so the spread reads as "notably bigger/smaller" rather than a
+   literal ratio — Wailord is really ~50x Pichu's height, and rendering that
+   literally would blow out the box or make Pichu unreadable. The tallest
+   realistic species (anything at or above MAX_H) maxes out at scale 1 —
+   fills its box exactly as every sprite always has — everything else scales
+   down from there, with a floor so nothing shrinks to nothing. */
+function spriteHeightScale(p:{height?:string}):number{
+  const MIN_H=0.3,MAX_H=3.5,MIN_SCALE=0.6;
+  const h=Math.min(MAX_H,Math.max(MIN_H,speciesHeightM(p)));
+  const t=(Math.sqrt(h)-Math.sqrt(MIN_H))/(Math.sqrt(MAX_H)-Math.sqrt(MIN_H));
+  return MIN_SCALE+t*(1-MIN_SCALE);
+}
+/* Whichever species is actually being drawn (see spriteNumberOf's own
+   comment on why that's not always entry.pokemon) — the height scale above
+   has to key off the same one, not the real species underneath a Transform
+   or Illusion. */
+function spriteSpeciesFor(entry:BattleEntry):{height?:string}{
+  return entry.illusionAs??entry.morphedTo??entry.pokemon;
 }
 
 // Cream HP nameplate in the FireRed battle-screen style. Enemy plates omit HP numbers
@@ -461,7 +497,7 @@ function StatChangeBadges({entry,align}:{entry:BattleEntry;align:"left"|"right"}
 // now — omitting them (as the setup-phase empty-stage placeholder does)
 // skips all of the above and renders at the exact original fixed size,
 // unconditionally.
-function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,tint}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number;tint?:boolean}){
+function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,tint,heightScale=1}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number;tint?:boolean;heightScale?:number}){
   const defaultW=back?300:250, defaultH=back?232:200;
   const platRatio=back?74/232:62/200;
   let spriteBoxW=defaultW, spriteBoxH=defaultH, plat=back?74:62;
@@ -500,7 +536,7 @@ function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,ti
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={number} back={back} boxW={spriteBoxW} boxH={spriteBoxH} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={tint}/>
+        <PokeSprite number={number} back={back} boxW={spriteBoxW} boxH={spriteBoxH} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={tint} heightScale={heightScale}/>
       </div>
     </div>
   );
@@ -531,7 +567,7 @@ function BenchMon({entry,back,allEntries,onClick,trainerSpriteId}:{entry:BattleE
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={spriteNumberOf(entry)} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={isDittoTransformed(entry)}/>
+        <PokeSprite number={spriteNumberOf(entry)} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={isDittoTransformed(entry)} heightScale={spriteHeightScale(spriteSpeciesFor(entry))}/>
       </div>
     </button>
   );
@@ -5446,7 +5482,7 @@ export default function BattleTrackerPage(){
                     {mounted&&onFieldEnemy&&(
                       <div style={{position:"absolute",bottom:0,right:"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldEnemy)}/>
+                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy))}/>
                           <StatusFX statuses={onFieldEnemy.statuses}/>
                           <HazardMarkers hazards={hazards.enemy}/>
                         </div>
@@ -5462,7 +5498,7 @@ export default function BattleTrackerPage(){
                     {mounted&&battleStarted&&onFieldPlayer?(
                       <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative"}}>
-                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldPlayer)}/>
+                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer))}/>
                           <StatusFX statuses={onFieldPlayer.statuses}/>
                           <HazardMarkers hazards={hazards.player}/>
                         </div>
