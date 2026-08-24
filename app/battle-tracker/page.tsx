@@ -883,10 +883,85 @@ function HazardMarkers({hazards}:{hazards:HazardSide}){
     </div>
   );
 }
-function rollDice(n:number):{rolls:number[];successes:number}{
-  const p=Math.max(1,n);
-  const rolls=Array.from({length:p},()=>Math.floor(Math.random()*6)+1);
-  return{rolls,successes:rolls.filter(r=>r>=4).length};
+/* Every "roll" in this file used to be simulated (Math.random). The GM runs
+   these tables with physical dice the players actually roll, so the app's
+   own random numbers just duplicated/conflicted with what happened at the
+   table — these now record what the GM read off that real roll instead.
+   `rolls` stays around only as a (usually empty) legacy display fallback;
+   every consumer below already keyed off `successes` alone, so recording a
+   manually-entered count here is a drop-in replacement for what rollDice
+   used to return. `brutal` is new: a manual damage entry has no individual
+   die faces to auto-detect "2+ sixes" from, so the GM flags it directly. */
+type RollResult={rolls:number[];successes:number;brutal?:boolean};
+function manualRoll(successes:number,brutal?:boolean):RollResult{
+  return{rolls:[],successes:Math.max(0,Math.floor(successes)),brutal};
+}
+function fmtRoll(r:RollResult):string{
+  return`${r.successes} ${r.successes===1?"success":"successes"}`;
+}
+// Manual entry for any dice-pool check the GM already resolved at the table —
+// accuracy, evasion, clash, loyalty, throw/seal, skill checks, chance dice.
+// Damage uses the richer ManualDamageEntry below instead.
+function ManualSuccessEntry({pool,onConfirm,accent,label}:{pool:number;onConfirm:(successes:number)=>void;accent:string;label?:string}){
+  const [val,setVal]=useState("");
+  const n=val===""?null:Math.max(0,Math.min(pool,Math.floor(Number(val))||0));
+  const confirm=()=>{if(n!=null)onConfirm(n);};
+  return(
+    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+      <input type="number" inputMode="numeric" min={0} max={pool} value={val}
+        onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirm();}}
+        placeholder={`0–${pool}`}
+        style={{width:52,background:"#0f1117",border:`1px solid ${accent}60`,borderRadius:4,color:accent,padding:"4px 6px",fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,textAlign:"center"}}/>
+      <button onClick={confirm} disabled={n==null}
+        style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:n==null?"#5a6080":accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:n==null?"default":"pointer"}}>
+        ✓ Enter {label||"Roll"} ({pool}d)
+      </button>
+    </div>
+  );
+}
+// A single d6 face value (1-6) — for checks that read one plain die against
+// a threshold (status wake-up rolls) rather than counting successes across
+// a pool.
+function ManualD6Entry({onConfirm,accent}:{onConfirm:(face:number)=>void;accent:string}){
+  const [val,setVal]=useState("");
+  const n=val===""?null:Math.max(1,Math.min(6,Math.floor(Number(val))||0));
+  const confirm=()=>{if(n!=null)onConfirm(n);};
+  return(
+    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+      <input type="number" inputMode="numeric" min={1} max={6} value={val} onChange={e=>setVal(e.target.value)}
+        onKeyDown={e=>{if(e.key==="Enter")confirm();}} placeholder="1–6"
+        style={{width:44,background:"#0f1117",border:`1px solid ${accent}60`,borderRadius:4,color:accent,padding:"4px 6px",fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,textAlign:"center"}}/>
+      <button onClick={confirm} disabled={n==null}
+        style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:n==null?"#5a6080":accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:n==null?"default":"pointer"}}>✓ Enter d6</button>
+    </div>
+  );
+}
+// Damage-specific manual entry. `finalPool` is the pool size AFTER Defense is
+// already subtracted (what the GM should physically roll), so the number
+// typed in is the raw successes/damage — no further Defense subtraction
+// happens downstream. Brutal (2+ sixes) can't be auto-detected without
+// individual die faces, so it's a manual flag here too.
+function ManualDamageEntry({finalPool,onConfirm,accent="#f08030"}:{finalPool:number;onConfirm:(successes:number,brutal:boolean)=>void;accent?:string}){
+  const [val,setVal]=useState("");
+  const [brutal,setBrutal]=useState(false);
+  const n=val===""?null:Math.max(0,Math.floor(Number(val))||0);
+  const confirm=()=>{if(n!=null)onConfirm(n,brutal);};
+  return(
+    <div>
+      <div style={{fontSize:10,color:"#8b90a8",marginBottom:4}}>Final Dice Pool (Defense already subtracted): <strong style={{color:accent}}>{finalPool}d</strong> — roll that many physically</div>
+      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <input type="number" inputMode="numeric" min={0} value={val} onChange={e=>setVal(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter")confirm();}} placeholder="successes"
+          style={{width:64,background:"#0f1117",border:`1px solid ${accent}60`,borderRadius:4,color:accent,padding:"4px 6px",fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,textAlign:"center"}}/>
+        <label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#ffd32a",cursor:"pointer"}}>
+          <input type="checkbox" checked={brutal} onChange={e=>setBrutal(e.target.checked)}/>⚡ Brutal (2+ sixes)
+        </label>
+        <button onClick={confirm} disabled={n==null}
+          style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:n==null?"#5a6080":accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:n==null?"default":"pointer"}}>✓ Enter Damage</button>
+      </div>
+      <div style={{fontSize:9,color:"#5a6080",marginTop:3,fontStyle:"italic"}}>1 success = 1 damage — Brutal Hits too, it's a flat +2 on top.</div>
+    </div>
+  );
 }
 // Struggle: the free fallback attack used when a Pokémon has no moves it can
 // afford — either it has no moves at all, or it's out of WP to use the ones it has.
@@ -1653,50 +1728,32 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
   onApplyDmg:(id:string,dmg:number)=>void;
   onApplyEffect?:(id:string,attr:string,amount:number,src:string,appliedBy?:string)=>void;
 }){
-  const [atkRoll,setAtkRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [atkRoll,setAtkRoll]=useState<RollResult|null>(null);
   const [defMoves,setDefMoves]=useState<Record<string,Move>>({});
-  const [defRolls,setDefRolls]=useState<Record<string,{rolls:number[];successes:number}>>({});
-  const [resolved,setResolved]=useState<string>("");
+  const [defRolls,setDefRolls]=useState<Record<string,RollResult>>({});
+  const [dmgRolls,setDmgRolls]=useState<Record<string,RollResult>>({});
+  const [applied,setApplied]=useState<Set<string>>(new Set());
 
-  const doAtkRoll=()=>setAtkRoll(rollDice(calcAccPool(move,attrs,undefined,attacker.pokemonSkills)));
   const pickDefMove=(tid:string,m:Move)=>{
     setDefMoves(p=>({...p,[tid]:m}));
-    const t=allEntries.find(e=>e.id===tid);
-    if(t){const da=getEffectiveAttrs(t);setDefRolls(p=>({...p,[tid]:rollDice(calcAccPool(m,da,undefined,t.pokemonSkills))}));}
+    setDefRolls(p=>{if(!(tid in p))return p;const n={...p};delete n[tid];return n;});
+    setDmgRolls(p=>{if(!(tid in p))return p;const n={...p};delete n[tid];return n;});
+    setApplied(p=>{if(!p.has(tid))return p;const n=new Set(p);n.delete(tid);return n;});
   };
-  const resolve=()=>{
-    if(!atkRoll)return;
-    const lines:string[]=[];
-    targets.forEach(tid=>{
-      const t=allEntries.find(e=>e.id===tid);const dr=defRolls[tid];
-      if(!t||!dr)return;
-      if(atkRoll.successes>dr.successes){
-        const pool=calcDmgPool(move,attrs,weather,stab,abilBonus,loyalty,happiness);
-        const dmgR=rollDice(pool);
-        const def=move.category==="Physical"?t.attrs.vitality:t.attrs.insight;
-        const finalDmg=Math.max(1,dmgR.successes-def);
-        onApplyDmg(tid,finalDmg);
-        // Auto-apply attacker's stat effects on clash win (e.g. Power-Up Punch +STR)
-        if(onApplyEffect){
-          const el=move.effect.toLowerCase();
-          if(el.includes("increase user")||el.includes("increase the user")||statAppliestoSelf(move)){
-            if(el.includes("strength")&&el.includes("increase"))onApplyEffect(attacker.id,"strength",1,move.name,nameOf(attacker,allEntries));
-            if(el.includes("special")&&el.includes("increase"))onApplyEffect(attacker.id,"special",1,move.name,nameOf(attacker,allEntries));
-            if(el.includes("defense")&&el.includes("increase")&&!el.includes("sp."))onApplyEffect(attacker.id,"vitality",1,move.name,nameOf(attacker,allEntries));
-          }
+  const applyClash=(tid:string,t:BattleEntry,attackerWins:boolean,finalDmg:number)=>{
+    if(attackerWins){
+      onApplyDmg(tid,finalDmg);
+      // Auto-apply attacker's stat effects on clash win (e.g. Power-Up Punch +STR)
+      if(onApplyEffect){
+        const el=move.effect.toLowerCase();
+        if(el.includes("increase user")||el.includes("increase the user")||statAppliestoSelf(move)){
+          if(el.includes("strength")&&el.includes("increase"))onApplyEffect(attacker.id,"strength",1,move.name,nameOf(attacker,allEntries));
+          if(el.includes("special")&&el.includes("increase"))onApplyEffect(attacker.id,"special",1,move.name,nameOf(attacker,allEntries));
+          if(el.includes("defense")&&el.includes("increase")&&!el.includes("sp."))onApplyEffect(attacker.id,"vitality",1,move.name,nameOf(attacker,allEntries));
         }
-        lines.push(`✓ ${nameOf(attacker,allEntries)} wins (${atkRoll.successes} vs ${dr.successes}) — ${finalDmg} dmg applied to ${nameOf(t,allEntries)}`);
-      } else if(dr.successes>atkRoll.successes){
-        const dm=defMoves[tid];const defA=getEffectiveAttrs(t);
-        const pool=calcDmgPool(dm,defA,weather,t.pokemon.types.includes(dm.type as PokemonType),0,t.loyalty,t.happiness);
-        const dmgR=rollDice(pool);
-        const def=dm.category==="Physical"?attacker.attrs.vitality:attacker.attrs.insight;
-        const finalDmg=Math.max(1,dmgR.successes-def);
-        onApplyDmg(attacker.id,finalDmg);
-        lines.push(`✗ ${nameOf(t,allEntries)} wins Clash (${dr.successes} vs ${atkRoll.successes}) — ${finalDmg} dmg applied to ${nameOf(attacker,allEntries)}`);
-      } else lines.push(`⚖ Tie (${atkRoll.successes} vs ${dr.successes}) — no damage`);
-    });
-    setResolved(lines.join("\n"));
+      }
+    } else onApplyDmg(attacker.id,finalDmg);
+    setApplied(p=>new Set([...p,tid]));
   };
 
   return(
@@ -1705,14 +1762,32 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
       <div style={{fontSize:10,color:"#8b90a8",marginBottom:10,lineHeight:1.5}}>Both sides roll their chosen move's accuracy simultaneously. Highest successes wins — winner deals full damage. Tie = no damage.</div>
       <div style={{marginBottom:10}}>
         <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>Attacker: {nameOf(attacker,allEntries)} — {move.name} ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <button onClick={doAtkRoll} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:"#6890f0",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Attacker ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</button>
-          {atkRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{atkRoll.rolls.join(",")}] = <span style={{color:"#6890f0"}}>{atkRoll.successes} hits</span></span>}
-        </div>
+        {!atkRoll
+          ?<ManualSuccessEntry pool={calcAccPool(move,attrs,undefined,attacker.pokemonSkills)} accent="#6890f0" onConfirm={n=>setAtkRoll(manualRoll(n))}/>
+          :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>{fmtRoll(atkRoll)}</span>}
       </div>
       {targets.map(tid=>{
         const t=allEntries.find(e=>e.id===tid);if(!t)return null;
         const dm=defMoves[tid];const dr=defRolls[tid];
+        const defPool=dm?calcAccPool(dm,getEffectiveAttrs(t),undefined,t.pokemonSkills):0;
+        const clash=atkRoll&&dr?(()=>{
+          const attackerWins=atkRoll.successes>dr.successes;
+          const tie=atkRoll.successes===dr.successes;
+          if(tie)return{tie:true as const};
+          const winMove=attackerWins?move:dm!;
+          const winAttrs=attackerWins?attrs:getEffectiveAttrs(t);
+          const winStab=attackerWins?stab:t.pokemon.types.includes(dm!.type as PokemonType);
+          const winAbil=attackerWins?abilBonus:0;
+          const winLoy=attackerWins?loyalty:t.loyalty;
+          const winHap=attackerWins?happiness:t.happiness;
+          const pool=calcDmgPool(winMove,winAttrs,weather,winStab,winAbil,winLoy,winHap);
+          const loser=attackerWins?t:attacker;
+          const def=winMove.category==="Physical"?loser.attrs.vitality:loser.attrs.insight;
+          const finalPool=Math.max(1,pool-def);
+          return{tie:false as const,attackerWins,finalPool};
+        })():null;
+        const dmgR=dmgRolls[tid];
+        const finalDmg=dmgR?Math.max(1,dmgR.successes)+(dmgR.brutal?2:0):null;
         return(
           <div key={tid} style={{background:"#13151f",borderRadius:5,padding:"8px 10px",marginBottom:8}}>
             <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:6}}>Defender: {nameOf(t,allEntries)} — pick counter move</div>
@@ -1722,14 +1797,21 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
               </button>)}
               {t.moves.length===0&&<span style={{fontSize:10,color:"#5a6080",fontStyle:"italic"}}>No moves in tracker</span>}
             </div>
-            {dm&&dr&&<div style={{fontSize:11,color:"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{nameOf(t,allEntries)}: [{dr.rolls.join(",")}] = {dr.successes} hits with {dm.name}</div>}
+            {dm&&!dr&&<ManualSuccessEntry pool={defPool} accent="#ff4757" onConfirm={n=>setDefRolls(p=>({...p,[tid]:manualRoll(n)}))}/>}
+            {dm&&dr&&<div style={{fontSize:11,color:"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{nameOf(t,allEntries)}: {fmtRoll(dr)} with {dm.name}</div>}
+            {clash&&!applied.has(tid)&&(clash.tie
+              ?<div style={{fontSize:11,color:"#8b90a8",marginTop:6}}>⚖ Tie ({atkRoll!.successes} vs {dr.successes}) — no damage</div>
+              :<div style={{marginTop:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:clash.attackerWins?"#00d4aa":"#ff4757",marginBottom:4}}>
+                  {clash.attackerWins?`✓ ${nameOf(attacker,allEntries)} wins`:`✗ ${nameOf(t,allEntries)} wins Clash`} ({atkRoll!.successes} vs {dr.successes})
+                </div>
+                {!dmgR&&<ManualDamageEntry finalPool={clash.finalPool} accent={clash.attackerWins?"#f08030":"#ff4757"} onConfirm={(s,b)=>setDmgRolls(p=>({...p,[tid]:manualRoll(s,b)}))}/>}
+                {dmgR&&<button onClick={()=>applyClash(tid,t,clash.attackerWins,finalDmg!)} style={{width:"100%",background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:5,padding:7,fontWeight:700,fontSize:11,cursor:"pointer"}}>⚡ Apply {finalDmg} dmg to {clash.attackerWins?nameOf(t,allEntries):nameOf(attacker,allEntries)}</button>}
+              </div>)}
+            {applied.has(tid)&&<div style={{fontSize:11,color:"#00d4aa",fontWeight:700,marginTop:6}}>✓ Applied</div>}
           </div>
         );
       })}
-      {atkRoll&&Object.keys(defRolls).length>0&&!resolved&&(
-        <button onClick={resolve} style={{width:"100%",background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:5,padding:8,fontWeight:700,fontSize:12,cursor:"pointer"}}>⚡ Resolve Clash & Apply Damage</button>
-      )}
-      {resolved&&<div style={{background:"#13151f",borderRadius:4,padding:"8px 10px",fontSize:11,color:"#e8eaf0",whiteSpace:"pre-line",lineHeight:1.6}}>{resolved}</div>}
     </div>
   );
 }
@@ -1738,8 +1820,8 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
 function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:any;entry:BattleEntry;allEntries:BattleEntry[];onClose:()=>void;}){
   const [selSkill,setSelSkill]=useState<string|null>(null);
   const [targets,setTargets]=useState<string[]>([]);
-  const [roll,setRoll]=useState<{rolls:number[];successes:number}|null>(null);
-  const [brawlDmg,setBrawlDmg]=useState<{rolls:number[];successes:number}|null>(null);
+  const [roll,setRoll]=useState<RollResult|null>(null);
+  const [brawlDmg,setBrawlDmg]=useState<RollResult|null>(null);
   const attrs=trainerData?.attributes||{strength:1,dexterity:1,vitality:1,insight:1};
   const skills=trainerData?.skills||{};
   const actReq=[1,2,3,4,5][Math.min(entry.actionCount,4)];
@@ -1783,21 +1865,22 @@ function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:a
             </div>}
             <div>
               <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Roll {selSkill} ({pool}d) · Need {actReq}+</div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <button onClick={()=>setRoll(rollDice(pool))} style={{background:"#3d8bff20",border:"1px solid #3d8bff60",borderRadius:4,color:"#3d8bff",padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({pool}d)</button>
-                {roll&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>[{roll.rolls.join(",")}]={roll.successes} {roll.successes>=actReq?"✓ Success":"✗ Fail"}</span>}
-              </div>
+              {!roll
+                ?<ManualSuccessEntry pool={pool} accent="#3d8bff" onConfirm={n=>setRoll(manualRoll(n))}/>
+                :<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>{fmtRoll(roll)} {roll.successes>=actReq?"✓ Success":"✗ Fail"}</span>}
             </div>
-            {roll&&roll.successes>=actReq&&selSkill==="brawl"&&targets.length>0&&(
+            {roll&&roll.successes>=actReq&&selSkill==="brawl"&&targets.length>0&&(()=>{
+              const t=allEntries.find(e=>e.id===targets[0]);const def2=t?.attrs.vitality??1;
+              const finalPool=Math.max(1,av("strength")-def2);
+              const dmg=brawlDmg?Math.max(1,brawlDmg.successes)+(brawlDmg.brutal?2:0):null;
+              return(
               <div style={{background:"#13151f",borderRadius:5,padding:"10px 12px"}}>
                 <div style={{fontSize:11,color:"#e8eaf0",fontWeight:700,marginBottom:6}}>Damage (STR {av("strength")}d vs target VIT)</div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <button onClick={()=>setBrawlDmg(rollDice(av("strength")))} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:"#f08030",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Damage</button>
-                  {brawlDmg&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700}}>[{brawlDmg.rolls.join(",")}]={brawlDmg.successes}</span>}
-                </div>
-                {brawlDmg&&targets.length>0&&(()=>{const t=allEntries.find(e=>e.id===targets[0]);const def2=t?.attrs.vitality??1;const dmg=Math.max(1,brawlDmg.successes-def2);return t?<div style={{fontSize:11,color:"#8b90a8",marginTop:5}}>{brawlDmg.successes} − {def2} DEF = <strong style={{color:"#ff4757"}}>{dmg} damage</strong></div>:null;})()}
+                {!brawlDmg
+                  ?<ManualDamageEntry finalPool={finalPool} accent="#f08030" onConfirm={(s,b)=>setBrawlDmg(manualRoll(s,b))}/>
+                  :t&&<div style={{fontSize:11,color:"#8b90a8",marginTop:5}}><strong style={{color:"#ff4757"}}>{dmg} damage</strong></div>}
               </div>
-            )}
+              );})()}
           </>}
         </div>
       </div>
@@ -1845,8 +1928,8 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     return[];
   });
   useEffect(()=>{onTargetsChange?.(targets);},[targets]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [accResult,setAccResult]=useState<{rolls:number[];successes:number}|null>(null);
-  const [dmgResults,setDmgResults]=useState<Record<string,{rolls:number[];successes:number}>>({});
+  const [accResult,setAccResult]=useState<RollResult|null>(null);
+  const [dmgResults,setDmgResults]=useState<Record<string,RollResult>>({});
   const [applied,setApplied]=useState<Set<string>>(new Set());
   // "Roll 1 Chance Die to increase/reduce..." — a stat effect worded this
   // way isn't guaranteed the way a dedicated support move's (Growl,
@@ -1854,7 +1937,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   // status does. Tracked separately from dmgResults since it isn't tied to
   // any one target — it governs whether the move's stat effect triggers
   // at all, once, for the whole move.
-  const [statFxChanceRoll,setStatFxChanceRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [statFxChanceRoll,setStatFxChanceRoll]=useState<RollResult|null>(null);
   // Each step (pick a target, roll accuracy, roll damage) reveals the next
   // section below the fold in the inline (mobile) layout, where the panel's
   // own scroll area is short — nothing scrolled there automatically, so the
@@ -1889,7 +1972,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     el.scrollTo({top:el.scrollHeight,behavior:"smooth"});
   },[inline,targets,accResult,dmgResults]);
   // Defender reactions: each target can choose Clash or Evasion as their reaction
-  const [defReactions,setDefReactions]=useState<Record<string,{type:"clash"|"evasion";move?:Move;roll?:{rolls:number[];successes:number};atkRoll?:{rolls:number[];successes:number};resolved?:boolean;clashOutcome?:"attackerWins"|"defenderWins"|"tie";clashDmgRoll?:{rolls:number[];successes:number}}>>({});
+  const [defReactions,setDefReactions]=useState<Record<string,{type:"clash"|"evasion";move?:Move;roll?:RollResult;atkRoll?:RollResult;resolved?:boolean;clashOutcome?:"attackerWins"|"defenderWins"|"tie";clashDmgRoll?:RollResult}>>({});
   const isPriority=fromPriorityPhase===true;
   const isSubstitute=move.name==="Substitute"||move.effect.toLowerCase().includes("substitute");
   const isProtectMove=move.name==="Protect"||move.name==="Detect"||move.name==="King's Shield"||move.name==="Spiky Shield"||move.effect.toLowerCase().includes("user protects itself");
@@ -1938,7 +2021,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
     primaryStatus(attacker)==="Flinched"?{canAct:false,detail:"Flinched — cannot act this turn."}:
     !(STATUS_CONDITIONS[primaryStatus(attacker)]?.requiresRollToAct)?{canAct:true,detail:""}:null
   );
-  const [loyaltyRoll,setLoyaltyRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [loyaltyRoll,setLoyaltyRoll]=useState<RollResult|null>(null);
   // MovePopup is only ever mounted for one move at a time (the popup
   // unmounts on close before a different move's popup opens), so this
   // resets naturally per-move without needing an effect.
@@ -2030,30 +2113,31 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
   // Pre-select all for AOE moves
   const selectAllTargets=()=>setTargets(targetOptions.map(e=>e.id));
 
-  const doPreRoll=()=>{
+  const doPreRoll=(val:number)=>{
     const s=primaryStatus(attacker);
-    if(s==="Asleep"||s==="Frozen"){const r=Math.floor(Math.random()*6)+1;const ok=s==="Asleep"?r>=4:r>=5;const woke=s==="Asleep"?"Woke up":"Thawed";setPreRollDone({canAct:ok,detail:"Rolled "+r+" — "+(ok?"✓ "+woke+"!":"✗ Still "+s+".")});}
-    else if(s==="Paralyzed"){const r=Math.floor(Math.random()*6)+1;setPreRollDone({canAct:r>=3,detail:`Paralysis: ${r} — ${r>=3?"✓ Can act (−2 acc).":"✗ Cannot act."}`});}
-    else if(s==="Confused"){const r=Math.floor(Math.random()*6)+1;setPreRollDone({canAct:r>=4,detail:`Confusion: ${r} — ${r>=4?"✓ Acts normally.":"✗ Hits itself!"}`});}
-    else if(s==="Infatuated"){const res=rollDice(attacker.currentWill);setPreRollDone({canAct:res.successes>=2,detail:`WP [${res.rolls.join(",")}]=${res.successes} — ${res.successes>=2?"✓ Can act.":"✗ Distracted!"}`});}
+    if(s==="Asleep"||s==="Frozen"){const ok=s==="Asleep"?val>=4:val>=5;const woke=s==="Asleep"?"Woke up":"Thawed";setPreRollDone({canAct:ok,detail:"Rolled "+val+" — "+(ok?"✓ "+woke+"!":"✗ Still "+s+".")});}
+    else if(s==="Paralyzed"){setPreRollDone({canAct:val>=3,detail:`Paralysis: ${val} — ${val>=3?"✓ Can act (−2 acc).":"✗ Cannot act."}`});}
+    else if(s==="Confused"){setPreRollDone({canAct:val>=4,detail:`Confusion: ${val} — ${val>=4?"✓ Acts normally.":"✗ Hits itself!"}`});}
+    else if(s==="Infatuated"){setPreRollDone({canAct:val>=2,detail:`WP ${val} successes — ${val>=2?"✓ Can act.":"✗ Distracted!"}`});}
   };
-  const doDmg=(tid:string)=>setDmgResults(p=>({...p,[tid]:rollDice(dmgPool)}));
+  const doDmg=(tid:string,successes:number,brutal:boolean)=>setDmgResults(p=>({...p,[tid]:manualRoll(successes,brutal)}));
   const applyDmg=(tid:string)=>{
     const isSelf=tid===attacker.id;
     const t=isSelf?attacker:allEntries.find(e=>e.id===tid);
     const dr=dmgResults[tid];if(!t||!dr)return;
     if(isSelf){
-      onApplyDmg(tid,dr.successes);
+      onApplyDmg(tid,Math.max(1,dr.successes));
       if(applied.size===0&&statFxReady)statFx.forEach(se=>{if(se.toSelf)onApplyEffect(attacker.id,se.attr,se.amount,move.name,nameOf(attacker,allEntries));});
       setApplied(p=>new Set([...p,tid]));return;
     }
     const tm=getTypeMult(move.type as PokemonType,t.pokemon.types);
     if(tm.mod===-999){alert(`${nameOf(t,allEntries)} is immune!`);return;}
-    const def=defBreakdown(t,move.category==="Physical"?"vitality":"insight").value;
-    let succ=Math.max(1,dr.successes);
-    const brutalBonus2=dr.rolls.filter(r=>r===6).length>=2?2:0;
-    const rawDmg=Math.max(1,succ-def);
-    const typeAdj=tm.mod===2?rawDmg+2:tm.mod===-1?Math.max(1,rawDmg-2):rawDmg;
+    // dr.successes is already Defense-adjusted — the GM rolled the
+    // Final Dice Pool shown in ManualDamageEntry, which already subtracted
+    // Defense, so no further subtraction happens here.
+    const succ=Math.max(1,dr.successes);
+    const brutalBonus2=dr.brutal?2:0;
+    const typeAdj=tm.mod===2?succ+2:tm.mod===-1?Math.max(1,succ-2):succ;
     const finalDmg=typeAdj+brutalBonus2;
     onApplyDmg(tid,finalDmg);
     /* A damaging move with its own stat effects (e.g. an accuracy-lowering
@@ -2120,7 +2204,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
      this wording, and always land) — it needs its own die roll first,
      same as inflicting a status already does. */
   const isChanceStatFx=statFx.length>0&&el.includes("chance die");
-  const statFxReady=!isChanceStatFx||(statFxChanceRoll!=null&&statFxChanceRoll.rolls[0]>=4);
+  const statFxReady=!isChanceStatFx||(statFxChanceRoll!=null&&statFxChanceRoll.successes>0);
   // Heal (HP restore)
   const isHeal=healsUser||healsTarget;
   const healAmount=attacker.maxHp-attacker.currentHp; // restore to full by default
@@ -2177,9 +2261,10 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 {disobedience==="high"?"⚠ High Disobedience":"⚠ Low Disobedience"}
                 <span style={{fontSize:9,color:"#8b90a8",fontWeight:400,marginLeft:6}}>(rolls are still available — GM decides if action proceeds)</span>
               </div>
-              {disobedience==="low"&&<div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <button onClick={()=>setLoyaltyRoll(rollDice(attacker.loyalty||1))} style={{background:"rgba(255,211,42,0.15)",border:"1px solid #ffd32a40",borderRadius:4,color:"#ffd32a",padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Loyalty ({attacker.loyalty||1}d, need 3+)</button>
-                {loyaltyRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:loyaltyRoll.successes>=3?"#00d4aa":"#ff4757"}}>[{loyaltyRoll.rolls.join(",")}]={loyaltyRoll.successes} {loyaltyRoll.successes>=3?"✓":"✗"}</span>}
+              {disobedience==="low"&&<div>
+                {!loyaltyRoll
+                  ?<ManualSuccessEntry pool={attacker.loyalty||1} accent="#ffd32a" label="Loyalty" onConfirm={n=>setLoyaltyRoll(manualRoll(n))}/>
+                  :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:loyaltyRoll.successes>=3?"#00d4aa":"#ff4757"}}>{fmtRoll(loyaltyRoll)} {loyaltyRoll.successes>=3?"✓":"✗"} (need 3+)</span>}
               </div>}
             </div>
           )}
@@ -2189,7 +2274,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
             <div style={{background:"rgba(168,64,160,0.1)",border:"1px solid #a040a040",borderRadius:4,padding:"8px 10px"}}>
               <div style={{fontSize:11,fontWeight:700,color:STATUS_CONDITIONS[primaryStatus(attacker)]?.color,marginBottom:4}}>{primaryStatus(attacker)}</div>
               <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>{STATUS_CONDITIONS[primaryStatus(attacker)]?.rollToActDesc}</div>
-              <button onClick={doPreRoll} style={{background:"rgba(168,64,160,0.15)",border:"1px solid #a040a040",borderRadius:4,color:"#a040a0",padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Pre-Action Check</button>
+              {!preRollDone&&(primaryStatus(attacker)==="Infatuated"
+                ?<ManualSuccessEntry pool={attacker.currentWill} accent="#a040a0" label="WP" onConfirm={doPreRoll}/>
+                :<ManualD6Entry accent="#a040a0" onConfirm={doPreRoll}/>)}
               {preRollDone&&<div style={{fontSize:12,fontWeight:700,color:preRollDone.canAct?"#00d4aa":"#ff4757",marginBottom:preRollDone.canAct?0:8}}>{preRollDone.detail}</div>}
               {preRollDone&&!preRollDone.canAct&&<button onClick={()=>{onIncrementAction(attacker.id,isPriority);onClose();if(onEndTurn)onEndTurn();}} style={{background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>⏭ End Turn</button>}
             </div>
@@ -2296,20 +2383,20 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                             <div style={{fontSize:9,color:"#f08030",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(attacker,allEntries)} — Accuracy</div>
                             <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{accBreakdown}{attackerPain>0?` − Pain ${attackerPain}`:""} = {atkAccPool}d</div>
                             {accResult?(
-                              <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030"}}>[{accResult.rolls.join(",")}]={accResult.successes} <span style={{fontSize:9,color:"#5a6080"}}>(Phase 1)</span></div>
+                              <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030"}}>{fmtRoll(accResult)} <span style={{fontSize:9,color:"#5a6080"}}>(Phase 1)</span></div>
+                            ):!react.atkRoll?(
+                              <ManualSuccessEntry pool={atkAccPool} accent="#f08030" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:manualRoll(n)}}))}/>
                             ):(
-                              <>
-                                <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:rollDice(atkAccPool)}}))} style={{width:"100%",background:"#f0803020",border:"1px solid #f0803050",borderRadius:4,color:"#f08030",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({atkAccPool}d)</button>
-                                {react.atkRoll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030",marginTop:4}}>[{react.atkRoll.rolls.join(",")}]={react.atkRoll.successes}</div>}
-                              </>
+                              <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030",marginTop:4}}>{fmtRoll(react.atkRoll)}</div>
                             )}
                           </div>
                           {/* Defender clash roll */}
                           <div style={{background:"rgba(240,128,48,0.06)",border:"1px solid #f0803030",borderRadius:5,padding:"6px 8px"}}>
                             <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(t,allEntries)} — Clash</div>
                             <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{(()=>{const acc=react.move.accuracy.toLowerCase();const da2=getEffectiveAttrs(t);const parts:string[]=[];if(acc.includes("strength"))parts.push(`STR ${da2.strength}`);if(acc.includes("dexterity"))parts.push(`DEX ${da2.dexterity}`);if(acc.includes("special"))parts.push(`SPC ${da2.special}`);if(acc.includes("insight"))parts.push(`INS ${da2.insight}`);if(acc.includes("vitality"))parts.push(`VIT ${da2.vitality}`);const sk=acc.includes("brawl")?"Brawl":acc.includes("athletic")?"Athletic":acc.includes("channel")?"Channel":acc.includes("perform")?"Perform":acc.includes("clash")?"Clash":acc.includes("alert")?"Alert":acc.includes("evasion")?"Evasion":"Skill";const sv=t.pokemonSkills?.[sk.toLowerCase() as keyof PokemonSkills]||2;parts.push(`${sk} ${sv}`);if(defPainC>0)parts.push(`Pain −${defPainC}`);return parts.join(" + ");})() } = {defClashPool}d</div>
-                            <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:rollDice(defClashPool??1)}}))} style={{width:"100%",background:"#00d4aa20",border:"1px solid #00d4aa50",borderRadius:4,color:"#00d4aa",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({defClashPool}d)</button>
-                            {react.roll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>[{react.roll.rolls.join(",")}]={react.roll.successes}</div>}
+                            {!react.roll
+                              ?<ManualSuccessEntry pool={defClashPool??1} accent="#00d4aa" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:manualRoll(n)}}))}/>
+                              :<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>{fmtRoll(react.roll)}</div>}
                           </div>
                         </div>
                       )}
@@ -2421,22 +2508,20 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                           <div style={{fontSize:9,color:"#6890f0",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(attacker,allEntries)} — Accuracy</div>
                           <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{atkAttrLabel} ({atkAttrVal}) + {atkSkLabel} ({atkSkVal}){attackerPain>0?` − Pain ${attackerPain}`:""} = {atkPool}d</div>
                           {accResult?(
-                            <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>[{accResult.rolls.join(",")}]={accResult.successes} <span style={{fontSize:9,color:"#5a6080"}}>(from Phase 1)</span></div>
+                            <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>{fmtRoll(accResult)} <span style={{fontSize:9,color:"#5a6080"}}>(from Phase 1)</span></div>
+                          ):!react.atkRoll?(
+                            <ManualSuccessEntry pool={atkPool} accent="#6890f0" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:manualRoll(n)}}))}/>
                           ):(
-                            <>
-                              <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:rollDice(atkPool)}}))} style={{width:"100%",background:"#6890f020",border:"1px solid #6890f050",borderRadius:4,color:"#6890f0",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll ({atkPool}d)</button>
-                              {react.atkRoll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0",marginTop:4}}>[{react.atkRoll.rolls.join(",")}]={react.atkRoll.successes}</div>}
-                            </>
+                            <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0",marginTop:4}}>{fmtRoll(react.atkRoll)}</div>
                           )}
                         </div>
                         {/* Target evasion roll */}
                         <div style={{background:"rgba(104,144,240,0.06)",border:"1px solid #6890f030",borderRadius:5,padding:"6px 8px"}}>
                           <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(t,allEntries)} — Evasion</div>
                           <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>DEX ({da.dexterity}) + Evasion ({evasionRank}){defPain>0?` − Pain ${defPain}`:""} = {evasPool}d</div>
-                          <button onClick={()=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:rollDice(evasPool)}}))} style={{width:"100%",background:"#00d4aa20",border:"1px solid #00d4aa50",borderRadius:4,color:"#00d4aa",padding:"4px 6px",fontSize:10,fontWeight:700,cursor:"pointer"}}>
-                            🎲 Roll ({evasPool}d)
-                          </button>
-                          {react.roll&&<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>[{react.roll.rolls.join(",")}]={react.roll.successes}</div>}
+                          {!react.roll
+                            ?<ManualSuccessEntry pool={evasPool} accent="#00d4aa" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:manualRoll(n)}}))}/>
+                            :<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>{fmtRoll(react.roll)}</div>}
                         </div>
                       </div>
                       {bothRolled&&(
@@ -2501,11 +2586,11 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     Clash win/lose/tie line) is what actually decided the
                     outcome, not this roll vs actReq. */}
                 {!accResult&&reactionAtkRoll?(
-                  <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>[{reactionAtkRoll.rolls.join(",")}]={reactionAtkRoll.successes} <span style={{fontSize:9,color:"#5a6080",fontWeight:400}}>(already rolled — see the reaction check above)</span></span>
-                ):(
-                  <button onClick={()=>setAccResult(rollDice(accPool))} disabled={accPool<=0} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:accPool<=0?"#5a6080":"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:accPool<=0?"default":"pointer"}}>🎲 Roll Accuracy ({accPool}d)</button>
-                )}
-                {accResult&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:accResult.successes>=actReq?"#00d4aa":"#ff4757"}}>[{accResult.rolls.join(",")}]={accResult.successes} {accResult.successes>=actReq?"✓ HIT":"✗ MISS"}</span>}
+                  <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>{fmtRoll(reactionAtkRoll)} <span style={{fontSize:9,color:"#5a6080",fontWeight:400}}>(already rolled — see the reaction check above)</span></span>
+                ):!accResult?(
+                  <ManualSuccessEntry pool={Math.max(0,accPool)} accent="#6890f0" label="Accuracy" onConfirm={n=>setAccResult(manualRoll(n))}/>
+                ):null}
+                {accResult&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:accResult.successes>=actReq?"#00d4aa":"#ff4757"}}>{fmtRoll(accResult)} {accResult.successes>=actReq?"✓ HIT":"✗ MISS"}</span>}
               </div>
               {targets.filter(tid=>{const t=allEntries.find(e=>e.id===tid);return t&&t.reactionUsed;}).map(tid=>{const t=allEntries.find(e=>e.id===tid)!;return<div key={tid} style={{marginTop:5,background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:10,color:"#ff4757"}}>⚠ {nameOf(t,allEntries)} has already used their reaction — Clash &amp; Evasion unavailable.</div>;})}
               {/* Miss button — shown when rolled a miss and no pending unresolved reactions */}
@@ -2540,10 +2625,9 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               {isChanceStatFx&&(
                 <div style={{marginBottom:8,paddingBottom:8,borderBottom:"1px solid #2a2f45"}}>
                   <div style={{fontSize:10,color:"#a040a0",fontWeight:700,marginBottom:4}}>Chance Die (succeeds on 4+)</div>
-                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                    <button onClick={()=>setStatFxChanceRoll(rollDice(1))} style={{background:"rgba(160,64,160,0.15)",border:"1px solid #a040a040",borderRadius:3,color:"#a040a0",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll Chance Die</button>
-                    {statFxChanceRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:statFxChanceRoll.rolls[0]>=4?"#a040a0":"#5a6080"}}>[{statFxChanceRoll.rolls[0]}] = {statFxChanceRoll.rolls[0]>=4?"✓ Effect triggers!":"✗ No effect"}</span>}
-                  </div>
+                  {statFxChanceRoll==null
+                    ?<ManualSuccessEntry pool={1} accent="#a040a0" label="Chance Die" onConfirm={n=>setStatFxChanceRoll(manualRoll(n))}/>
+                    :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:statFxChanceRoll.successes>0?"#a040a0":"#5a6080"}}>{statFxChanceRoll.successes>0?"✓ Effect triggers!":"✗ No effect"}</span>}
                 </div>
               )}
               {statFxReady&&statFx.map((se,i)=>{
@@ -2576,23 +2660,23 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
             const defB=isSelf?null:defBreakdown(t,move.category==="Physical"?"vitality":"insight");
             const def=defB?.value??0;
             const dr=dmgResults[tid];
-            const brutalHit=dr?(dr.rolls.filter(r=>r===6).length>=2):false;
+            const brutalHit=dr?.brutal===true;
             const brutalBonus=brutalHit?2:0;
-            const rawDmg=dr&&!isSelf?Math.max(1,dr.successes-def):null;
+            const finalPool=isSelf?dmgPool:Math.max(1,dmgPool-def);
+            const rawDmg=dr&&!isSelf?Math.max(1,dr.successes):null;
             const typeAdj=rawDmg!=null?(tm.mod===2?rawDmg+2:tm.mod===-1?Math.max(1,rawDmg-2):rawDmg):null;
-            const baseDmg=dr?(isSelf?dr.successes:typeAdj??0):null;
+            const baseDmg=dr?(isSelf?Math.max(1,dr.successes):typeAdj??0):null;
             const finalDmg=baseDmg!=null?baseDmg+brutalBonus:null;
             const wasApplied=applied.has(tid);
             return<div key={tid} style={{background:"#13151f",borderRadius:6,padding:"10px 12px",border:brutalHit?"1px solid #ffd32a60":"none"}}>
               <div style={{fontSize:9,fontWeight:700,color:"#f08030",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>② Damage → {isSelf?"SELF":nameOf(t,allEntries)} ({dmgPool}d)</div>
-              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
-                <button onClick={()=>doDmg(tid)} disabled={!!dr} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:dr?"#5a6080":"#f08030",padding:"5px 10px",fontSize:11,fontWeight:700,cursor:dr?"default":"pointer"}}>🎲 Roll Damage ({dmgPool}d)</button>
-                {dr&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#e8eaf0"}}>[{dr.rolls.map(r=>{const s=String(r);return r===6?"★"+s:s;}).join(",")}]={dr.successes}</span>}
-              </div>
               {!isSelf&&defB&&<div style={{fontSize:10,color:"#8b90a8",marginBottom:6,fontStyle:"italic"}}>Defense: {defB.text} = <strong style={{color:"#f08030"}}>{defB.value}</strong></div>}
-              {brutalHit&&<div style={{background:"rgba(255,211,42,0.12)",border:"1px solid #ffd32a60",borderRadius:4,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#ffd32a",marginBottom:6,textAlign:"center",letterSpacing:"1px"}}>⚡ BRUTAL HIT! +2 damage</div>}
-              {dr&&tm.mod!==-999&&<div>
-                <div style={{fontSize:11,color:"#8b90a8",marginBottom:6}}>{isSelf?dr.successes:`${dr.successes} − ${def} DEF${tm.mod===2?" +2 SE":tm.mod===-1?" −2 NVE":""}${brutalHit?" +2 Brutal":""}`} = <strong style={{color:"#ff4757"}}>{finalDmg} damage</strong></div>
+              {!dr
+                ?<ManualDamageEntry finalPool={finalPool} accent="#f08030" onConfirm={(s,b)=>doDmg(tid,s,b)}/>
+                :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#e8eaf0"}}>{fmtRoll(dr)}</span>}
+              {brutalHit&&<div style={{background:"rgba(255,211,42,0.12)",border:"1px solid #ffd32a60",borderRadius:4,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#ffd32a",marginTop:6,marginBottom:6,textAlign:"center",letterSpacing:"1px"}}>⚡ BRUTAL HIT! +2 damage</div>}
+              {dr&&tm.mod!==-999&&<div style={{marginTop:6}}>
+                <div style={{fontSize:11,color:"#8b90a8",marginBottom:6}}>{isSelf?dr.successes:`${dr.successes}${tm.mod===2?" +2 SE":tm.mod===-1?" −2 NVE":""}${brutalHit?" +2 Brutal":""}`} = <strong style={{color:"#ff4757"}}>{finalDmg} damage</strong></div>
                 {/* Status chance — inline, before apply button */}
                 {statusToInflict&&!isSelf&&!t.isProtected&&(()=>{
                   const chanceKey=`status-${tid}`;
@@ -2601,11 +2685,10 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                     <div style={{fontSize:10,color:"#a040a0",fontWeight:700,marginBottom:4}}>
                       Status Chance: {statusToInflict} (if 4+ on d6)
                     </div>
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                      <button onClick={()=>{const r=rollDice(1);setDmgResults(p=>({...p,[chanceKey]:r}));}} style={{background:"rgba(160,64,160,0.15)",border:"1px solid #a040a040",borderRadius:3,color:"#a040a0",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll Chance (d6)</button>
-                      {chanceRoll&&<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:chanceRoll.successes>0?"#a040a0":"#5a6080"}}>[{chanceRoll.rolls[0]}] = {chanceRoll.rolls[0]>=4?"✓ Inflict!":"✗ No effect"}</span>}
-                    </div>
-                    {chanceRoll&&chanceRoll.rolls[0]>=4&&onApplySpecial&&(
+                    {chanceRoll==null
+                      ?<ManualSuccessEntry pool={1} accent="#a040a0" label="Chance" onConfirm={n=>setDmgResults(p=>({...p,[chanceKey]:manualRoll(n)}))}/>
+                      :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:chanceRoll.successes>0?"#a040a0":"#5a6080"}}>{chanceRoll.successes>0?"✓ Inflict!":"✗ No effect"}</span>}
+                    {chanceRoll&&chanceRoll.successes>0&&onApplySpecial&&(
                       <button onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||[],statusToInflict!),statusTurnsLeft:statusToInflict==="Asleep"?3:0});}} style={{marginTop:4,width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                         💢 Apply {statusToInflict} to {nameOf(t,allEntries)}
                       </button>
@@ -3211,8 +3294,8 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
   const [throwerId,setThrowerId]=useState<string>("");
   const [targetId,setTargetId]=useState<string>(defaultTargetId||"");
   const [ballKey,setBallKey]=useState<string>("");
-  const [throwRoll,setThrowRoll]=useState<{rolls:number[];successes:number}|null>(null);
-  const [sealRoll,setSealRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [throwRoll,setThrowRoll]=useState<RollResult|null>(null);
+  const [sealRoll,setSealRoll]=useState<RollResult|null>(null);
 
   const thrower=trainers.find(t=>t.id===throwerId);
   const target=allEntries.find(e=>e.id===targetId);
@@ -3362,10 +3445,9 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
             <div>
               <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>4. Throw Roll: SPC + Channel + 2 Skill = {throwPool}d · Need {required} total successes</div>
               {throwPool<required&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Throw pool ({throwPool}d) is less than required successes ({required}) — bonus from sealing and target condition needed</div>}
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <button onClick={()=>setThrowRoll(rollDice(throwPool))} style={{background:"#6890f020",border:"1px solid #6890f060",borderRadius:4,color:"#6890f0",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Throw ({throwPool}d)</button>
-                {throwRoll&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:throwRoll.successes>0?"#00d4aa":"#ff4757"}}>[{throwRoll.rolls.join(",")}] = {throwRoll.successes} hits {throwRoll.successes===0?"✗ Miss — ball fails to reach":"✓ Ball lands"}</span>}
-              </div>
+              {!throwRoll
+                ?<ManualSuccessEntry pool={throwPool} accent="#6890f0" label="Throw" onConfirm={n=>setThrowRoll(manualRoll(n))}/>
+                :<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:throwRoll.successes>0?"#00d4aa":"#ff4757"}}>{fmtRoll(throwRoll)} {throwRoll.successes===0?"✗ Miss — ball fails to reach":"✓ Ball lands"}</span>}
             </div>
           )}
 
@@ -3373,10 +3455,9 @@ function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntrie
           {throwRoll&&throwRoll.successes>0&&(
             <div>
               <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>5. Seal Potency: {selectedBall?.name} = {sealDice}d</div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <button onClick={()=>setSealRoll(rollDice(sealDice))} style={{background:"#f0803020",border:"1px solid #f0803060",borderRadius:4,color:"#f08030",padding:"6px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Seal ({sealDice}d)</button>
-                {sealRoll&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700}}>[{sealRoll.rolls.join(",")}] = {sealRoll.successes}</span>}
-              </div>
+              {!sealRoll
+                ?<ManualSuccessEntry pool={sealDice} accent="#f08030" label="Seal" onConfirm={n=>setSealRoll(manualRoll(n))}/>
+                :<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700}}>{fmtRoll(sealRoll)}</span>}
             </div>
           )}
 
@@ -3539,7 +3620,7 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
   onUpdate?:(id:string,u:Partial<BattleEntry>)=>void;
 }){
   const [selSkill,setSelSkill]=useState<string|null>(null);
-  const [roll,setRoll]=useState<{rolls:number[];successes:number}|null>(null);
+  const [roll,setRoll]=useState<RollResult|null>(null);
   const [targets,setTargets]=useState<string[]>([]);
   const [showBag,setShowBag]=useState(false);
   const attrs=trainer?.attributes||{strength:1,dexterity:1,vitality:1,insight:1};
@@ -3621,8 +3702,9 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
                     {others.map(t=><button key={t.id} onClick={()=>setTargets(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])} style={{padding:"2px 6px",borderRadius:3,fontSize:9,cursor:"pointer",border:`1px solid ${targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]:"#3a4060"}`,background:targets.includes(t.id)?TYPE_COLORS[t.pokemon.types[0]]+"20":"transparent",color:targets.includes(t.id)?"#e8eaf0":"#8b90a8"}}>{nameOf(t,allEntries)}</button>)}
                   </div>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                    <button onClick={()=>setRoll(rollDice(Math.max(1,pool)))} style={{background:"#3d8bff20",border:"1px solid #3d8bff50",borderRadius:3,color:"#3d8bff",padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>🎲 Roll {sk} ({pool}d)</button>
-                    {roll&&<span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>[{roll.rolls.join(",")}]={roll.successes} {roll.successes>=actReq?"✓":"✗"} (need {actReq})</span>}
+                    {!roll
+                      ?<ManualSuccessEntry pool={Math.max(1,pool)} accent="#3d8bff" label={sk} onConfirm={n=>setRoll(manualRoll(n))}/>
+                      :<span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>{fmtRoll(roll)} {roll.successes>=actReq?"✓":"✗"} (need {actReq})</span>}
                     {roll&&roll.successes>=actReq&&<button onClick={()=>{onIncrementAction(entry.id);setRoll(null);setSelSkill(null);}} style={{background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:3,padding:"3px 6px",fontSize:9,fontWeight:700,cursor:"pointer"}}>✓ +Action</button>}
                   </div>
                 </div>
@@ -3921,7 +4003,7 @@ function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
   // Z-Crystal type must match base move type.
   const [selMove,setSelMove]=useState<Move|null>(null);
   const [selTarget,setSelTarget]=useState<string|null>(null);
-  const [rolled,setRolled]=useState<{rolls:number[];successes:number}|null>(null);
+  const [rolled,setRolled]=useState<RollResult|null>(null);
   const others=allEntries.filter(e=>e.id!==entry.id&&e.currentHp>0);
   const eligibleMoves=entry.moves; // should filter by Z-Crystal type, but we let GM decide
   const zPower=(selMove?parseInt(selMove.power)||1:1)+(entry.loyalty||0)+(entry.happiness||0);
@@ -3973,30 +4055,28 @@ function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
                   ))}
                 </div>
               </div>
-              {/* Roll + Apply */}
-              <button onClick={()=>setRolled(rollDice(totalDmgPool))} style={{background:"#ffd32a",color:"#0f1117",border:"none",borderRadius:5,padding:"8px 16px",fontWeight:700,cursor:"pointer",marginBottom:8}}>
-                🎲 Roll Z-Move Damage ({totalDmgPool}d)
-              </button>
-              {rolled&&(
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#ffd32a"}}>[{rolled.rolls.join(",")}] = {rolled.successes} successes</div>
-                  {selTarget&&(()=>{
-                    const t=allEntries.find(e=>e.id===selTarget);
-                    if(!t)return null;
-                    const def=selMove.category==="Physical"?t.attrs.vitality:t.attrs.insight;
-                    const finalDmg=Math.max(1,rolled.successes-def);
-                    return(
-                      <button onClick={()=>{
-                        onApplyDmg(selTarget,finalDmg);
-                        onApply(entry.id,{zMoveUsed:true,currentWill:alreadyUsed?Math.max(0,entry.currentWill-repeatCost):entry.currentWill});
-                        onClose();
-                      }} style={{width:"100%",background:"#ffd32a",color:"#0f1117",border:"none",borderRadius:5,padding:"8px",fontWeight:700,cursor:"pointer",marginTop:6}}>
-                        ⭐ Apply {finalDmg} damage to {nameOf(t,allEntries)}{alreadyUsed?` (−${repeatCost} WP)`:""}
-                      </button>
-                    );
-                  })()}
-                </div>
-              )}
+              {/* Roll + Apply — needs a target first, since the Final Dice Pool already subtracts their Defense */}
+              {!selTarget&&<div style={{fontSize:11,color:"#8b90a8",fontStyle:"italic",marginBottom:8}}>Select a target above to compute the damage pool.</div>}
+              {selTarget&&(()=>{
+                const t=allEntries.find(e=>e.id===selTarget);
+                if(!t)return null;
+                const def=selMove.category==="Physical"?t.attrs.vitality:t.attrs.insight;
+                const finalPool=Math.max(1,totalDmgPool-def);
+                const finalDmg=rolled?Math.max(1,rolled.successes)+(rolled.brutal?2:0):null;
+                return(
+                  <div style={{marginBottom:12}}>
+                    {!rolled
+                      ?<ManualDamageEntry finalPool={finalPool} accent="#ffd32a" onConfirm={(s,b)=>setRolled(manualRoll(s,b))}/>
+                      :<button onClick={()=>{
+                          onApplyDmg(selTarget,finalDmg!);
+                          onApply(entry.id,{zMoveUsed:true,currentWill:alreadyUsed?Math.max(0,entry.currentWill-repeatCost):entry.currentWill});
+                          onClose();
+                        }} style={{width:"100%",background:"#ffd32a",color:"#0f1117",border:"none",borderRadius:5,padding:"8px",fontWeight:700,cursor:"pointer",marginTop:6}}>
+                          ⭐ Apply {finalDmg} damage to {nameOf(t,allEntries)}{alreadyUsed?` (−${repeatCost} WP)`:""}
+                        </button>}
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>
