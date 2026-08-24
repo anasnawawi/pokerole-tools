@@ -400,7 +400,7 @@ function speciesHeightM(p:{height?:string}):number{
    fills its box exactly as every sprite always has — everything else scales
    down from there, with a floor so nothing shrinks to nothing. */
 function spriteHeightScale(p:{height?:string}):number{
-  const MIN_H=0.3,MAX_H=3.5,MIN_SCALE=0.6;
+  const MIN_H=0.3,MAX_H=3.5,MIN_SCALE=0.4;
   const h=Math.min(MAX_H,Math.max(MIN_H,speciesHeightM(p)));
   const t=(Math.sqrt(h)-Math.sqrt(MIN_H))/(Math.sqrt(MAX_H)-Math.sqrt(MIN_H));
   return MIN_SCALE+t*(1-MIN_SCALE);
@@ -432,7 +432,20 @@ function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry
   // name span's own ellipsis only kicks in once its flex parent is
   // actually constrained. Capping here keeps the nameplate's own footprint
   // stable regardless of nickname length; the name itself still truncates.
-  const widthStyle=maxW===undefined?{width:defaultW}:{width:Math.round(clampPx(enemy?85:95,maxW,defaultW))};
+  const boxW=maxW===undefined?defaultW:Math.round(clampPx(enemy?85:95,maxW,defaultW));
+  const widthStyle={width:boxW};
+  // Rank is the first thing to go once the box is genuinely tight — the
+  // name is what actually identifies who's on the field, and truncating
+  // IT to keep a rank label around had it backwards. hideRank clears space
+  // for the name's own flex width instead of ellipsis eating into it.
+  // hideBars goes further, for a box tight enough that the bar graphics
+  // themselves would be a sliver — plain "HP n/n" text says exactly the
+  // same thing in a fraction of the height and doesn't need to be wide to
+  // read. Only applies to the player plate: the enemy plate already omits
+  // numbers by design (matching the real games — you don't get an exact
+  // wild HP reading), so there's no numeric fallback for it to drop to.
+  const hideRank=boxW<defaultW*0.8;
+  const hideBars=!enemy&&boxW<defaultW*0.62;
   return(
     <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"5px 9px 6px",
       ...widthStyle,
@@ -440,20 +453,29 @@ function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
         <span style={{fontSize:9,fontWeight:700,color:"#181818",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
         <GenderIcon gender={entry.gender} size={10}/>
-        <span style={{fontSize:7,color:entry.side==="player"?"#2858C0":"#D82808"}}>{rank}</span>
+        {!hideRank&&<span style={{fontSize:7,color:entry.side==="player"?"#2858C0":"#D82808"}}>{rank}</span>}
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:5}}>
-        <span style={{fontSize:8,fontWeight:700,color:"#C8A000",WebkitTextStroke:"0.4px #705000"}}>HP</span>
-        <div style={{flex:1}}><HpBar cur={entry.currentHp} max={entry.maxHp}/></div>
-      </div>
-      {!enemy&&(
-        <div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
-          <span style={{fontSize:8,fontWeight:700,color:"#2858C0"}}>WP</span>
-          <div style={{flex:1}}><HpBar cur={entry.currentWill} max={entry.maxWill} isWp/></div>
+      {hideBars?(
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          <span style={{fontSize:8,fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#807008":"#A00808"}}>HP {entry.currentHp}/{entry.maxHp}</span>
+          <span style={{fontSize:8,fontWeight:700,color:"#2858C0"}}>WP {entry.currentWill}/{entry.maxWill}</span>
         </div>
+      ):(
+        <>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <span style={{fontSize:8,fontWeight:700,color:"#C8A000",WebkitTextStroke:"0.4px #705000"}}>HP</span>
+            <div style={{flex:1}}><HpBar cur={entry.currentHp} max={entry.maxHp}/></div>
+          </div>
+          {!enemy&&(
+            <div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
+              <span style={{fontSize:8,fontWeight:700,color:"#2858C0"}}>WP</span>
+              <div style={{flex:1}}><HpBar cur={entry.currentWill} max={entry.maxWill} isWp/></div>
+            </div>
+          )}
+        </>
       )}
       <div style={{display:"flex",justifyContent:enemy?"flex-end":"space-between",alignItems:"center",gap:4,marginTop:4}}>
-        {!enemy&&<span style={{fontSize:8,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#807008":"#A00808",fontWeight:700}}>{entry.currentHp}/{entry.maxHp}</span>}
+        {!enemy&&!hideBars&&<span style={{fontSize:8,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#807008":"#A00808",fontWeight:700}}>{entry.currentHp}/{entry.maxHp}</span>}
         <div style={{display:"flex",gap:3,alignItems:"center",flexWrap:"wrap"}}>
           {sts.map(s=><StatusBadge key={s} status={s}/>)}
           {entry.isProtected&&<span style={{fontSize:7,color:"#F8F8E8",background:"#2858C0",border:"1px solid #181818",padding:"1px 3px"}}>PROT</span>}
@@ -524,17 +546,24 @@ function StatChangeBadges({entry,align}:{entry:BattleEntry;align:"left"|"right"}
 // now — omitting them (as the setup-phase empty-stage placeholder does)
 // skips all of the above and renders at the exact original fixed size,
 // unconditionally.
-function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,tint,heightScale=1}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number;tint?:boolean;heightScale?:number}){
-  const defaultW=back?300:250, defaultH=back?232:200;
+function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,tint,heightScale=1,growthScale=1}:{number:number;back?:boolean;fainted?:boolean;onClick?:()=>void;trainerSpriteId?:string;stageW?:number;maxRowH?:number;tint?:boolean;heightScale?:number;growthScale?:number}){
+  // The classic 300/232 (back) and 250/200 (front) sizes were tuned for a
+  // small GBA-style screen and never grew past that even with a huge
+  // monitor's worth of stage to spare — sprites read as small there not
+  // because anything was actively shrinking them, but because the ceiling
+  // itself never moved. growthScale (from the parent, based on how much
+  // wider the stage measures than a normal laptop's) raises that ceiling
+  // on a roomy stage; it's 1 (no change) at any ordinary size.
+  const defaultW=Math.round((back?300:250)*growthScale), defaultH=Math.round((back?232:200)*growthScale);
   const platRatio=back?74/232:62/200;
-  let spriteBoxW=defaultW, spriteBoxH=defaultH, plat=back?74:62;
+  let spriteBoxW=defaultW, spriteBoxH=defaultH, plat=Math.round((back?74:62)*growthScale);
   // Default mode's wrapper is wider than the sprite box (340/300 vs
   // 300/250) and only as tall as the sprite box itself — the disc sits
   // inside that same box (bottom:0, shorter than the box), not added on
   // top of it. Narrow mode's wrapper is exactly the sprite box, with the
   // disc's height added on top instead (see spriteRowHEnemy/spriteRowHPlayer
   // in the parent, which budget for box+disc as one total).
-  let wrapperW=back?340:300, wrapperH=defaultH;
+  let wrapperW=Math.round((back?340:300)*growthScale), wrapperH=defaultH;
   if(stageW!==undefined&&maxRowH!==undefined){
     const widthCappedW=clampPx(back?85:70,stageW,defaultW);
     // maxRowH has to cover the sprite box AND its disc together, so convert
@@ -4737,6 +4766,18 @@ export default function BattleTrackerPage(){
   // browser window can sit under that and got treated as mobile. This
   // should only fire for an actually narrow (phone-width) viewport.
   const [isNarrow,setIsNarrow]=useState(false);
+  // A landscape phone (e.g. 812×375) is wide enough to miss isNarrow
+  // entirely but nowhere near tall enough for the toolbar + stage's own
+  // minHeight + bottom command bar to all fit — every one of those was
+  // sized off width alone, so on a short-but-wide window the command bar
+  // (FIGHT/BAG/POKéMON/RUN) rendered entirely below the visible viewport
+  // with no scroll to reach it, and the sidebar's own squeezed-to-nothing
+  // list area let the page's dark chassis background show through where
+  // the roster list should have been. isShort tracks the one thing that
+  // actually matters for those — real window height, not width — so the
+  // toolbar, sidebar, and stage floor can all shed height independently of
+  // whether the viewport is also narrow.
+  const [isShort,setIsShort]=useState(false);
   useEffect(()=>{
     // The expanded sidebar (220px) is an overlay on narrow viewports, not a
     // squeeze — but on an actual phone it still covers more than half the
@@ -4754,12 +4795,17 @@ export default function BattleTrackerPage(){
     // Starts false (not window.innerWidth<480) so a page that loads already
     // narrow — the common case, arriving fresh on a phone — is itself
     // treated as a transition into narrow and collapses on the first check.
-    let wasNarrow=false;
+    // isShort collapses the sidebar the same way, for the same reason: its
+    // list area is what starved down to nothing and exposed the chassis
+    // background on a short window.
+    let wasNarrow=false,wasShort=false;
     const check=()=>{
       const narrow=window.innerWidth<480;
+      const short=window.innerHeight<500;
       setIsNarrow(narrow);
-      if(narrow&&!wasNarrow)setSidebarCollapsed(true);
-      wasNarrow=narrow;
+      setIsShort(short);
+      if((narrow&&!wasNarrow)||(short&&!wasShort))setSidebarCollapsed(true);
+      wasNarrow=narrow;wasShort=short;
     };
     check();
     window.addEventListener("resize",check);
@@ -4823,16 +4869,24 @@ export default function BattleTrackerPage(){
   // get a box sized for the whole stage and overflow past the actual
   // remaining room by however much the padding took.
   const stageContentW=Math.max(0,stageW-sidebarPad-16);
-  // Each half's nameplate is capped to roughly half the content width, not
-  // the whole thing — it's corner-anchored opposite the sprite within the
-  // same half (see spriteRowHEnemy/spriteRowHPlayer below), sharing that half's horizontal space
-  // rather than a dedicated row of its own. Passing the full stageContentW
-  // here let the nameplate render at its default width even once a narrow
-  // stage no longer had room for both it and the sprite side by side, so
-  // the sprite's own body sat underneath — capping at half keeps the two
-  // sides apart on any width, and is generous enough not to bind at all on
-  // a normal desktop stage (defaultW is well under half of it there).
-  const nameplateMaxW=Math.max(0,stageContentW/2-8);
+  // Each half's nameplate AND its sprite are each capped to roughly half
+  // the content width, not the whole thing — they're corner-anchored
+  // opposite each other within the same half (see spriteRowHEnemy/
+  // spriteRowHPlayer below), sharing that half's horizontal space rather
+  // than a dedicated row of its own. Passing the full stageContentW to
+  // just the nameplate let IT render at full default width even once a
+  // narrow stage no longer had room for both side by side, so the
+  // sprite's own body sat underneath — capping the nameplate at half
+  // fixed that. But the sprite's own width was never given the same cap,
+  // only its own defaultW ceiling — on a moderately narrow stage (a
+  // tablet with the sidebar expanded, say) the sprite's box could still
+  // grow wide enough to visibly crowd the nameplate it's supposed to
+  // share the half with, even though neither one was technically
+  // overlapping the OTHER half. Both get the same half-width ceiling now,
+  // for the same reason: generous enough not to bind at all on a normal
+  // desktop stage, and what actually keeps the two apart everywhere else.
+  const halfContentW=Math.max(0,stageContentW/2-8);
+  const nameplateMaxW=halfContentW;
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4989,6 +5043,21 @@ export default function BattleTrackerPage(){
     :Math.max(30,contentBudget/2);
   const spriteRowHEnemy=Math.min(9999,(frontContentBudget/enemyContentFrac)*(1+FRONT_PLAT_RATIO));
   const spriteRowHPlayer=Math.min(9999,(backContentBudget/playerContentFrac)*(1+BACK_PLAT_RATIO));
+  // The classic sprite ceiling (FieldMon's own defaultW/H) never grew past
+  // its original GBA-screen size no matter how much stage there was to
+  // spare, so a big desktop monitor — plenty of width and height left over
+  // once both sides were already at full classic size — still read as
+  // small. 1070 is roughly a normal laptop's own content width (1366×768,
+  // where sizing already looked right); past that, let the ceiling itself
+  // grow, capped so it can't run away on an ultrawide.
+  const growthScale=Math.min(1.6,Math.max(1,stageContentW/1070));
+  // Bench Pokémon are already the lowest-priority thing on the stage —
+  // fine to lose first if it means the two focused sprites and their
+  // nameplates read cleanly. On a narrow or short stage they were mostly
+  // adding clutter anyway (small, semi-transparent icons competing for the
+  // same corner room the sprite/nameplate need), so they drop out entirely
+  // there rather than just shrinking further.
+  const hideBench=isNarrow||isShort;
   const focusedTargetIdSet=useMemo(()=>new Set(sceneTargetIds),[sceneTargetIds]);
   /* Everyone in the fight who isn't one of the two mons the turn is about.
      Split by whether they belong to a trainer's roster, not by the side
@@ -5242,10 +5311,22 @@ export default function BattleTrackerPage(){
   // height the bar itself uses below so the sidebar's box stops exactly
   // where the bar begins, leaving that whole row to the bar alone. No bar
   // is rendered at all until there's at least one combatant, hence "0px".
+  // The command box's own comfortable size — big enough to keep every
+  // button a real tap target, but previously maxed out at 250px even on an
+  // ordinary laptop window, claiming height the stage badly needed and
+  // reading as oversized for what's just four short button labels. Trimmed
+  // down across the board; isShort trims it further still, since on a
+  // short-but-wide window (a landscape phone) this bar was the thing that
+  // rendered entirely below the visible viewport, with no scroll to reach
+  // it — every other dimension here (STAGE minHeight, sidebar clearance)
+  // has to shrink in step with whatever this resolves to, which is why
+  // it's computed once and shared as commandBarH rather than re-guessed at
+  // each call site.
+  const commandBarH=isShort?"clamp(90px, 20vw, 130px)":isNarrow?"clamp(260px, 40vw, 420px)":"clamp(120px, 16vw, 170px)";
   const bottomBarH=(!mounted||entries.length===0)?"0px"
-    :battleStarted&&scenePopup&&onFieldPlayer?"40vh"
-    :battleStarted?(isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)")
-    :"clamp(130px, 20vw, 210px)";
+    :battleStarted&&scenePopup&&onFieldPlayer?(isShort?"35vh":"40vh")
+    :battleStarted?commandBarH
+    :(isShort?"clamp(80px, 16vw, 110px)":"clamp(130px, 20vw, 210px)");
 
   return(
     <PokedexFrame active="battle-tracker" hideParty>
@@ -5443,7 +5524,7 @@ export default function BattleTrackerPage(){
           })()}
 
           {(!mounted||entries.length===0)?(
-            <div ref={stageRef} style={{flex:1,position:"relative",overflow:"hidden",minHeight:260,display:"flex",alignItems:"center",justifyContent:"center",padding:40,containerType:"inline-size"}}>
+            <div ref={stageRef} style={{flex:1,position:"relative",overflow:"hidden",minHeight:isShort?140:260,display:"flex",alignItems:"center",justifyContent:"center",padding:40,containerType:"inline-size"}}>
               <StageBackdrop/>
               <TerrainFX terrain={terrain}/>
               <WeatherFX weather={weather}/>
@@ -5455,7 +5536,7 @@ export default function BattleTrackerPage(){
               {mounted&&setupTrainerSpriteId&&(
                 isNarrow?(
                   <div style={{position:"absolute",bottom:"3%",left:sidebarPad,zIndex:2}}>
-                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowHPlayer}/>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={halfContentW} maxRowH={spriteRowHPlayer}/>
                   </div>
                 ):(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
@@ -5481,7 +5562,7 @@ export default function BattleTrackerPage(){
                   scrolling internally (it already does — see bodyRef) if it
                   doesn't fit in what's left. */}
               <div ref={stageRef} style={{flex:1,position:"relative",overflow:"hidden",
-                minHeight:battleStarted&&scenePopup&&onFieldPlayer?220:260,containerType:"inline-size"}}>
+                minHeight:isShort?140:battleStarted&&scenePopup&&onFieldPlayer?220:260,containerType:"inline-size"}}>
                 <StageBackdrop/>
                 {/* Weather + terrain FX — scoped to the stage */}
                 <TerrainFX terrain={terrain}/>
@@ -5528,7 +5609,7 @@ export default function BattleTrackerPage(){
                         over bare ground otherwise. benchFar is already
                         fastest-first; row-reverse puts the enemy up next
                         nearest the sprite, slower ones trailing away. */}
-                    {mounted&&benchFar.length>0&&(
+                    {mounted&&!hideBench&&benchFar.length>0&&(
                       <div style={{position:"absolute",bottom:"clamp(4px, 1cqw, 10px)",left:sidebarPad,width:"46%",zIndex:1,
                         display:"flex",flexDirection:"row-reverse",alignItems:"flex-end",justifyContent:"flex-start",
                         gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
@@ -5540,9 +5621,9 @@ export default function BattleTrackerPage(){
                       </div>
                     )}
                     {mounted&&onFieldEnemy&&(
-                      <div style={{position:"absolute",bottom:0,right:"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
+                      <div style={{position:"absolute",bottom:0,right:isNarrow?"clamp(4px, 2cqw, 16px)":"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy))}/>
+                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={halfContentW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy))} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldEnemy.statuses}/>
                           <HazardMarkers hazards={hazards.enemy}/>
                         </div>
@@ -5558,17 +5639,17 @@ export default function BattleTrackerPage(){
                     {mounted&&battleStarted&&onFieldPlayer?(
                       <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative"}}>
-                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer))}/>
+                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={halfContentW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer))} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldPlayer.statuses}/>
                           <HazardMarkers hazards={hazards.player}/>
                         </div>
                       </div>
                     ):mounted&&!battleStarted&&setupTrainerSpriteId?(
                       <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
-                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowHPlayer}/>
+                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={halfContentW} maxRowH={spriteRowHPlayer}/>
                       </div>
                     ):null}
-                    {mounted&&benchNear.length>0&&(
+                    {mounted&&!hideBench&&benchNear.length>0&&(
                       <div style={{position:"absolute",top:"clamp(4px, 1cqw, 10px)",right:16,width:"46%",zIndex:1,
                         display:"flex",alignItems:"flex-start",justifyContent:"flex-end",
                         gap:2,flexWrap:"wrap",pointerEvents:"none"}}>
@@ -5712,7 +5793,7 @@ export default function BattleTrackerPage(){
                     onSetHazard={(side,updater)=>setHazards(prev=>({...prev,[side]:updater(prev[side])}))}/>
                 </div>
               ) : battleStarted ? (
-              <div style={{flexShrink:0,height:isNarrow?"clamp(260px, 40vw, 420px)":"clamp(160px, 24vw, 250px)",display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31,...fullWidthBarStyle}}>
+              <div style={{flexShrink:0,height:commandBarH,display:"flex",gap:0,borderTop:"3px solid #181818",position:"relative",zIndex:31,...fullWidthBarStyle}}>
                 {/* Text box */}
                 <div style={{flex:1,padding:"clamp(4px,0.8vw,8px)",background:"#283030",borderRight:"3px solid #181818"}}>
                   <div className="frw-battle" style={{height:"100%",padding:"clamp(10px,1.6vw,16px) clamp(12px,2vw,18px)",display:"flex",flexDirection:"column",justifyContent:"center"}}>
