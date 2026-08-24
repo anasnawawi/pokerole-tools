@@ -119,12 +119,26 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
   const pathname = usePathname();
   const current = active ?? SITE_LINKS.find(l=>l.href===pathname)?.match;
   const [narrow,setNarrow] = useState(false);
+  // Portrait (height > width) is a different axis than narrow (a plain
+  // width breakpoint) — a tall phone and a wide-but-short landscape phone
+  // can both be narrow by width alone, but only the tall one is what the
+  // cream margin around the shell actually costs real space on. Edge-to-
+  // edge (see isPortrait below) is scoped to this, not narrow, on purpose.
+  const [isPortrait,setIsPortrait] = useState(false);
   const [lamp,setLamp] = useState(0);
   const [showHOF,setShowHOF] = useState(false);
 
   useEffect(()=>{
     const mq = window.matchMedia("(max-width: 820px)");
     const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  },[]);
+
+  useEffect(()=>{
+    const mq = window.matchMedia("(orientation: portrait)");
+    const sync = () => setIsPortrait(mq.matches);
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
@@ -138,13 +152,18 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
 
   return (
     <div style={{height:"100dvh",width:"100vw",overflow:"hidden",display:"flex",
-      background:C.cream,padding:narrow?6:12,
+      background:C.cream,padding:isPortrait?0:(narrow?6:12),
       fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
 
+      {/* isPortrait drops the outer padding above and, to match, the
+          rounded corners/floating shadow here — those read as "a card
+          sitting on a surface," which only makes sense once there's a
+          surface (the cream margin) visible around it. Edge-to-edge, the
+          shell IS the surface, so it goes flush and square instead. */}
       <div style={{flex:1,minWidth:0,minHeight:0,display:"flex",flexDirection:"column",
-        gap:narrow?6:8,padding:narrow?7:11,
-        background:C.shell,border:`4px solid ${C.outline}`,borderRadius:14,
-        boxShadow:`0 5px 0 ${C.shellDeep}, 0 9px 20px rgba(0,0,0,0.28)`,overflow:"hidden"}}>
+        gap:narrow?6:8,padding:isPortrait?3:(narrow?7:11),
+        background:C.shell,border:`4px solid ${C.outline}`,borderRadius:isPortrait?0:14,
+        boxShadow:isPortrait?"none":`0 5px 0 ${C.shellDeep}, 0 9px 20px rgba(0,0,0,0.28)`,overflow:"hidden"}}>
 
         {/* ── Top chrome: lens, lamps, home, destination keys ────────────── */}
         <div style={{display:"flex",alignItems:"center",gap:narrow?6:9,flexShrink:0,minWidth:0}}>
