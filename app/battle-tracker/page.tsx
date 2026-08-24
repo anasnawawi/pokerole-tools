@@ -392,17 +392,28 @@ function speciesHeightM(p:{height?:string}):number{
 /* Every sprite used to fill its box at the same size regardless of species,
    so Arceus (3.2m) and Charmander (0.6m) read as identical heights on the
    field — this scales the art itself down within its (unchanged) box/
-   platform footprint so bigger species visibly read as bigger. Square-root,
-   not linear, so the spread reads as "notably bigger/smaller" rather than a
-   literal ratio — Wailord is really ~50x Pichu's height, and rendering that
-   literally would blow out the box or make Pichu unreadable. The tallest
-   realistic species (anything at or above MAX_H) maxes out at scale 1 —
-   fills its box exactly as every sprite always has — everything else scales
-   down from there, with a floor so nothing shrinks to nothing. */
-function spriteHeightScale(p:{height?:string}):number{
-  const MIN_H=0.3,MAX_H=3.5,MIN_SCALE=0.4;
-  const h=Math.min(MAX_H,Math.max(MIN_H,speciesHeightM(p)));
-  const t=(Math.sqrt(h)-Math.sqrt(MIN_H))/(Math.sqrt(MAX_H)-Math.sqrt(MIN_H));
+   platform footprint so bigger species visibly read as bigger.
+
+   Scaled against matchupMaxH — the taller of the two species actually on
+   the field — rather than a fixed absolute ceiling. An absolute ceiling
+   (originally the tallest species game-wide) meant two similarly-sized
+   Pokémon facing each other — Charmander vs Bulbasaur, say, both under a
+   metre — were BOTH scaled down hard against Wailord-scale height that
+   had nothing to do with the fight actually on screen, so neither ever
+   looked like it was using the room it had. The taller one on the field
+   right now always renders at scale 1 — fills its box exactly as every
+   sprite always has — and the other scales relative to just that one, so
+   two evenly-matched Pokémon both read as appropriately large, while a
+   real size mismatch (Arceus vs Charmander, Wailord vs Charmander) still
+   reads as one. Square-root, not linear, so the spread reads as "notably
+   bigger/smaller" rather than a literal ratio — Wailord is really ~50x
+   Pichu's height, and rendering that literally would blow out the box or
+   make Pichu unreadable. Floored so nothing shrinks to nothing even
+   against a genuine giant. */
+function spriteHeightScale(p:{height?:string},matchupMaxH:number):number{
+  const MIN_SCALE=0.4;
+  const h=Math.min(matchupMaxH,speciesHeightM(p));
+  const t=matchupMaxH>0?Math.sqrt(h/matchupMaxH):1;
   return MIN_SCALE+t*(1-MIN_SCALE);
 }
 /* Whichever species is actually being drawn (see spriteNumberOf's own
@@ -623,7 +634,13 @@ function BenchMon({entry,back,allEntries,onClick,trainerSpriteId}:{entry:BattleE
           the platform's height lands the feet at the disk's vertical
           middle, not its bottom tip. */}
       <div style={{position:"absolute",bottom:Math.round(plat/2),left:0,right:0,display:"flex",justifyContent:"center"}}>
-        <PokeSprite number={spriteNumberOf(entry)} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={isDittoTransformed(entry)} heightScale={spriteHeightScale(spriteSpeciesFor(entry))}/>
+        {/* A fixed 3.5m reference rather than the current matchup's tallest
+            side — a bench mon isn't sized relative to whoever's actually
+            focused, and picking one arbitrary bench entry as "the" matchup
+            reference to compare every other bench entry against would be
+            its own kind of arbitrary. These are small, semi-transparent
+            background icons; absolute sizing reads fine here. */}
+        <PokeSprite number={spriteNumberOf(entry)} back={back} boxW={back?74:62} boxH={back?60:48} fainted={fainted} trainerSpriteId={trainerSpriteId} tint={isDittoTransformed(entry)} heightScale={spriteHeightScale(spriteSpeciesFor(entry),3.5)}/>
       </div>
     </button>
   );
@@ -5043,6 +5060,18 @@ export default function BattleTrackerPage(){
     :Math.max(30,contentBudget/2);
   const spriteRowHEnemy=Math.min(9999,(frontContentBudget/enemyContentFrac)*(1+FRONT_PLAT_RATIO));
   const spriteRowHPlayer=Math.min(9999,(backContentBudget/playerContentFrac)*(1+BACK_PLAT_RATIO));
+  // The taller of the two species actually facing off right now — see
+  // spriteHeightScale's own comment for why this replaced a fixed
+  // absolute ceiling: two evenly-matched Pokémon (Charmander vs
+  // Bulbasaur) were both being scaled down against Wailord-scale height
+  // that had nothing to do with the fight on screen, so neither ever
+  // looked like it filled its box. Falls back to 1 (matching
+  // speciesHeightM's own fallback) when a side isn't on the field yet, so
+  // the still-focused side isn't held hostage by a missing opponent.
+  const matchupMaxH=Math.max(
+    onFieldEnemy?speciesHeightM(spriteSpeciesFor(onFieldEnemy)):1,
+    onFieldPlayer?speciesHeightM(spriteSpeciesFor(onFieldPlayer)):1,
+  );
   // The classic sprite ceiling (FieldMon's own defaultW/H) never grew past
   // its original GBA-screen size no matter how much stage there was to
   // spare, so a big desktop monitor — plenty of width and height left over
@@ -5623,7 +5652,7 @@ export default function BattleTrackerPage(){
                     {mounted&&onFieldEnemy&&(
                       <div style={{position:"absolute",bottom:0,right:isNarrow?"clamp(4px, 2cqw, 16px)":"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={halfContentW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy))} growthScale={growthScale}/>
+                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={halfContentW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy),matchupMaxH)} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldEnemy.statuses}/>
                           <HazardMarkers hazards={hazards.enemy}/>
                         </div>
@@ -5639,7 +5668,7 @@ export default function BattleTrackerPage(){
                     {mounted&&battleStarted&&onFieldPlayer?(
                       <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative"}}>
-                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={halfContentW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer))} growthScale={growthScale}/>
+                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={halfContentW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer),matchupMaxH)} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldPlayer.statuses}/>
                           <HazardMarkers hazards={hazards.player}/>
                         </div>
