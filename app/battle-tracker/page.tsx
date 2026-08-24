@@ -214,6 +214,14 @@ function StatusBadge({status,onRemove}:{status:string;onRemove?:()=>void}){
    across every field position on the page. */
 type SpriteBounds = {top:number;left:number;width:number;height:number;naturalWidth:number;naturalHeight:number};
 const spriteBoundsCache=new Map<string,Promise<SpriteBounds|null>>();
+// A plain, synchronously-readable mirror of the promise cache above,
+// populated the moment each promise resolves. The stage's own height
+// budget (see contentFractionOf/spriteRowH in the main component) needs to
+// read a sprite's real content-vs-canvas ratio during a normal render, not
+// await a promise — this is what lets it do that once the bounds are
+// already known, falling back to "unknown yet" (undefined) on the very
+// first render of a given sprite.
+const spriteBoundsSyncCache=new Map<string,SpriteBounds|null>();
 function loadSpriteBounds(src:string):Promise<SpriteBounds|null>{
   const cached=spriteBoundsCache.get(src);
   if(cached)return cached;
@@ -222,11 +230,11 @@ function loadSpriteBounds(src:string):Promise<SpriteBounds|null>{
     img.onload=()=>{
       try{
         const w=img.naturalWidth,h=img.naturalHeight;
-        if(w===0||h===0){resolve(null);return;}
+        if(w===0||h===0){spriteBoundsSyncCache.set(src,null);resolve(null);return;}
         const canvas=document.createElement("canvas");
         canvas.width=w;canvas.height=h;
         const ctx=canvas.getContext("2d");
-        if(!ctx){resolve(null);return;}
+        if(!ctx){spriteBoundsSyncCache.set(src,null);resolve(null);return;}
         ctx.drawImage(img,0,0);
         const {data}=ctx.getImageData(0,0,w,h);
         let minX=w,minY=h,maxX=-1,maxY=-1;
@@ -238,15 +246,34 @@ function loadSpriteBounds(src:string):Promise<SpriteBounds|null>{
             }
           }
         }
-        if(maxX<minX||maxY<minY){resolve(null);return;}
-        resolve({top:minY,left:minX,width:maxX-minX+1,height:maxY-minY+1,naturalWidth:w,naturalHeight:h});
-      }catch{resolve(null);}
+        if(maxX<minX||maxY<minY){spriteBoundsSyncCache.set(src,null);resolve(null);return;}
+        const b={top:minY,left:minX,width:maxX-minX+1,height:maxY-minY+1,naturalWidth:w,naturalHeight:h};
+        spriteBoundsSyncCache.set(src,b);
+        resolve(b);
+      }catch{spriteBoundsSyncCache.set(src,null);resolve(null);}
     };
-    img.onerror=()=>resolve(null);
+    img.onerror=()=>{spriteBoundsSyncCache.set(src,null);resolve(null);};
     img.src=src;
   });
   spriteBoundsCache.set(src,p);
   return p;
+}
+/* What fraction of a sprite's own padded canvas its actual drawn (non-
+   transparent) pixels occupy vertically — a standing Pokémon rendered on a
+   normalized canvas often has real headroom above it, so the box needed to
+   fit its full HEIGHT budget is usually smaller than the box needed to fit
+   its full CANVAS. Used to size the stage's sprite boxes off what's
+   actually drawn rather than the padded canvas everything shares, so a
+   sprite with a lot of headroom can render in a taller box (bigger,
+   clearer art) without its real pixels reaching any further into
+   neighboring space than a tightly-cropped sprite's would. Defaults to a
+   conservative 1 (assume no headroom — the padded-canvas behavior this
+   replaces) until the source image has actually loaded and been measured,
+   so nothing renders oversized only to shrink a moment later. */
+function contentFractionOf(src:string):number{
+  const b=spriteBoundsSyncCache.get(src);
+  if(!b||b.naturalHeight<=0)return 1;
+  return Math.min(1,Math.max(0.2,b.height/b.naturalHeight));
 }
 
 function PokeSprite({number,back,boxW=160,boxH=150,fainted,trainerSpriteId,tint,heightScale=1}:{number:number;back?:boolean;boxW?:number;boxH?:number;fainted?:boolean;trainerSpriteId?:string;tint?:boolean;heightScale?:number}){
@@ -505,8 +532,8 @@ function FieldMon({number,back,fainted,onClick,trainerSpriteId,stageW,maxRowH,ti
   // 300/250) and only as tall as the sprite box itself — the disc sits
   // inside that same box (bottom:0, shorter than the box), not added on
   // top of it. Narrow mode's wrapper is exactly the sprite box, with the
-  // disc's height added on top instead (see spriteRowH in the parent,
-  // which budgets for box+disc as one total).
+  // disc's height added on top instead (see spriteRowHEnemy/spriteRowHPlayer
+  // in the parent, which budget for box+disc as one total).
   let wrapperW=back?340:300, wrapperH=defaultH;
   if(stageW!==undefined&&maxRowH!==undefined){
     const widthCappedW=clampPx(back?85:70,stageW,defaultW);
@@ -4683,6 +4710,12 @@ export default function BattleTrackerPage(){
   const [round,setRound]=useState(1);
   const [mounted,setMounted]=useState(false);
   useEffect(()=>setMounted(true),[]);
+  // Bumped once a sprite's content bounds finish loading (see
+  // contentFractionOf below) — the bounds themselves live in a plain
+  // module-scope cache, not React state, so nothing re-renders on their
+  // own when a lookup that used to return "unknown yet" would now return
+  // a real ratio. This is the trigger for that one re-render.
+  const [,forceStageTick]=useState(0);
   const [showEOR,setShowEOR]=useState(false);
   const [showPriority,setShowPriority]=useState(false);
   const [battleType,setBattleType]=useState<"default"|"gym"|"boss"|"raid"|"danger">("default");
@@ -4792,7 +4825,7 @@ export default function BattleTrackerPage(){
   const stageContentW=Math.max(0,stageW-sidebarPad-16);
   // Each half's nameplate is capped to roughly half the content width, not
   // the whole thing — it's corner-anchored opposite the sprite within the
-  // same half (see spriteRowH below), sharing that half's horizontal space
+  // same half (see spriteRowHEnemy/spriteRowHPlayer below), sharing that half's horizontal space
   // rather than a dedicated row of its own. Passing the full stageContentW
   // here let the nameplate render at its default width even once a narrow
   // stage no longer had room for both it and the sprite side by side, so
@@ -4800,33 +4833,6 @@ export default function BattleTrackerPage(){
   // sides apart on any width, and is generous enough not to bind at all on
   // a normal desktop stage (defaultW is well under half of it there).
   const nameplateMaxW=Math.max(0,stageContentW/2-8);
-  // A flat half-and-half split of the stage's measured height (the
-  // simplest safe budget: two halves can never together exceed the whole)
-  // was the first version of this, but it meant the two halves' sprites
-  // were shrunk by the same amount even once one of them (the front/enemy
-  // sprite, whose default footprint including its disc is only ~262px vs.
-  // the back/player sprite's ~306px) had already hit its own real ceiling
-  // and had no more room left to give back — so a normal, moderately-sized
-  // desktop window (not maximized, not squeezed by the move popup) still
-  // read as visibly smaller than the original fixed layout's sprites, even
-  // though there was more height available than a flat half-split assumed.
-  // FRONT_FULL/BACK_FULL are each side's real full-size footprint (see
-  // FieldMon's own conversion from maxRowH to a sprite height, which this
-  // mirrors): once the front side is capped at FRONT_FULL, every
-  // additional pixel of stage height goes entirely to the back side until
-  // IT also reaches its own full size — only past that combined point does
-  // this stop mattering and both sides are simply at classic size. This is
-  // still exactly as safe as the flat split (the two sides' actual
-  // consumed heights can never sum past the stage's real height, at any
-  // stage size, so the original cross-half overlap this system exists to
-  // prevent can't recur) — it just stops "wasting" slack once one side
-  // stops needing it, instead of taxing both sides evenly regardless of
-  // whether they'd actually use the extra room.
-  const FRONT_FULL=200*(1+62/200), BACK_FULL=232*(1+74/232), ROW_MARGIN=40;
-  const spriteRowBudget=stageH-ROW_MARGIN;
-  const spriteRowH=spriteRowBudget>=FRONT_FULL+BACK_FULL?9999
-    :spriteRowBudget>=2*FRONT_FULL?spriteRowBudget-FRONT_FULL
-    :Math.max(60,spriteRowBudget/2);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -4945,6 +4951,44 @@ export default function BattleTrackerPage(){
     return otherEntries.find(e=>e.currentHp>0)||otherEntries[0]||null;
   },[sceneTargetIds,nextOtherInOrder,sceneEnemyId,entries,otherEntries,activeEntry]);
   const onFieldEnemy=focusedOther;
+  // The stage's sprite-height budget used to protect each side's full
+  // padded canvas (defaultH, ~200/232px) — but a standing Pokémon's actual
+  // drawn pixels usually don't reach that canvas's own top edge; there's
+  // real headroom baked into the source art. Protecting the padded canvas
+  // rather than what's actually drawn meant a sprite with a lot of
+  // headroom (e.g. a short, wide Pokémon on a tall canvas) was budgeted as
+  // if it needed just as much vertical room as one with none, capping its
+  // box — and so its real, visible art — far smaller than it safely could
+  // have been. contentFractionOf (async-measured, synchronously readable
+  // once known) gives each side's actual content-height ratio; dividing
+  // the true per-side content budget by it before converting to what
+  // FieldMon expects (maxRowH, still "box+platform" in its own terms —
+  // see its own comment) inflates the box just enough that the ACTUAL
+  // drawn pixels, not the padding around them, stay within budget. Still
+  // exactly as overlap-safe as before: it's the real content heights, not
+  // the boxes, that are guaranteed to never sum past the stage's real
+  // height, and that's the only thing that was ever visually at risk.
+  const enemySrc=onFieldEnemy?`/sprites/pokemon/${spriteNumberOf(onFieldEnemy)}.png`:"";
+  const playerSrc=onFieldPlayer?`/sprites/pokemon/back/${spriteNumberOf(onFieldPlayer)}.png`:"";
+  useEffect(()=>{if(enemySrc)loadSpriteBounds(enemySrc).then(()=>forceStageTick(t=>t+1));},[enemySrc]);
+  useEffect(()=>{if(playerSrc)loadSpriteBounds(playerSrc).then(()=>forceStageTick(t=>t+1));},[playerSrc]);
+  const enemyContentFrac=enemySrc?contentFractionOf(enemySrc):1;
+  const playerContentFrac=playerSrc?contentFractionOf(playerSrc):1;
+  const FRONT_PLAT_RATIO=62/200, BACK_PLAT_RATIO=74/232, ROW_MARGIN=40;
+  const CONTENT_TARGET_FRONT=200, CONTENT_TARGET_BACK=232;
+  const contentBudget=stageH-ROW_MARGIN;
+  // Same proportional split as before (front caps first, every extra
+  // pixel goes to back until it also caps, both uncapped past that) but
+  // now operating on real content-height targets rather than padded-canvas
+  // ones.
+  const frontContentBudget=contentBudget>=CONTENT_TARGET_FRONT+CONTENT_TARGET_BACK?CONTENT_TARGET_FRONT
+    :contentBudget>=2*CONTENT_TARGET_FRONT?CONTENT_TARGET_FRONT
+    :Math.max(30,contentBudget/2);
+  const backContentBudget=contentBudget>=CONTENT_TARGET_FRONT+CONTENT_TARGET_BACK?CONTENT_TARGET_BACK
+    :contentBudget>=2*CONTENT_TARGET_FRONT?contentBudget-CONTENT_TARGET_FRONT
+    :Math.max(30,contentBudget/2);
+  const spriteRowHEnemy=Math.min(9999,(frontContentBudget/enemyContentFrac)*(1+FRONT_PLAT_RATIO));
+  const spriteRowHPlayer=Math.min(9999,(backContentBudget/playerContentFrac)*(1+BACK_PLAT_RATIO));
   const focusedTargetIdSet=useMemo(()=>new Set(sceneTargetIds),[sceneTargetIds]);
   /* Everyone in the fight who isn't one of the two mons the turn is about.
      Split by whether they belong to a trainer's roster, not by the side
@@ -5411,7 +5455,7 @@ export default function BattleTrackerPage(){
               {mounted&&setupTrainerSpriteId&&(
                 isNarrow?(
                   <div style={{position:"absolute",bottom:"3%",left:sidebarPad,zIndex:2}}>
-                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowHPlayer}/>
                   </div>
                 ):(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
@@ -5498,7 +5542,7 @@ export default function BattleTrackerPage(){
                     {mounted&&onFieldEnemy&&(
                       <div style={{position:"absolute",bottom:0,right:"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy))}/>
+                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={stageContentW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy))}/>
                           <StatusFX statuses={onFieldEnemy.statuses}/>
                           <HazardMarkers hazards={hazards.enemy}/>
                         </div>
@@ -5514,14 +5558,14 @@ export default function BattleTrackerPage(){
                     {mounted&&battleStarted&&onFieldPlayer?(
                       <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative"}}>
-                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowH} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer))}/>
+                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={stageContentW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer))}/>
                           <StatusFX statuses={onFieldPlayer.statuses}/>
                           <HazardMarkers hazards={hazards.player}/>
                         </div>
                       </div>
                     ):mounted&&!battleStarted&&setupTrainerSpriteId?(
                       <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
-                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowH}/>
+                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={stageContentW} maxRowH={spriteRowHPlayer}/>
                       </div>
                     ):null}
                     {mounted&&benchNear.length>0&&(
