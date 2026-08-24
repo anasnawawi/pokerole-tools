@@ -428,11 +428,35 @@ function spriteSpeciesFor(entry:BattleEntry):{height?:string}{
 // (as in-game); player plates show HP n/n + WP n/n. maxW is only ever passed
 // from the narrow/mobile scene branch — omitting it (the default/desktop
 // branch) renders at the exact original fixed minWidth, unconditionally.
-function SceneNameplate({entry,enemy,allEntries,onClick,maxW}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void;maxW?:number}){
+function SceneNameplate({entry,enemy,allEntries,onClick,maxW,minimal}:{entry:BattleEntry;enemy?:boolean;allEntries:BattleEntry[];onClick?:()=>void;maxW?:number;minimal?:boolean}){
   const name=nameOf(entry,allEntries).toUpperCase();
   const sts=(entry.statuses||[]).filter(s=>s!=="Healthy");
   const rank=entry.trainerRank||entry.pokemon.suggestedRank;
   const defaultW=enemy?188:210;
+  // minimal drops name/rank/gender entirely — not a width squeeze like
+  // hideRank/hideBars below, an explicit caller choice (only ever passed
+  // from the narrow scene, where reclaiming the nameplate's own real
+  // height back for the sprite mattered more than keeping the name
+  // visible on the plate — it's still shown elsewhere, on the roster
+  // strip and the drawer this click opens).
+  if(minimal){
+    return(
+      <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"4px 7px",
+        width:maxW===undefined?defaultW:Math.round(clampPx(enemy?60:70,maxW,defaultW)),
+        cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+          <span style={{fontSize:9,fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#807008":"#A00808"}}>HP {entry.currentHp}/{entry.maxHp}</span>
+          {!enemy&&<span style={{fontSize:9,fontWeight:700,color:"#2858C0"}}>WP {entry.currentWill}/{entry.maxWill}</span>}
+        </div>
+        {(sts.length>0||entry.isProtected)&&(
+          <div style={{display:"flex",gap:3,alignItems:"center",flexWrap:"wrap",justifyContent:enemy?"flex-start":"flex-end",marginTop:3}}>
+            {sts.map(s=><StatusBadge key={s} status={s}/>)}
+            {entry.isProtected&&<span style={{fontSize:7,color:"#F8F8E8",background:"#2858C0",border:"1px solid #181818",padding:"1px 3px"}}>PROT</span>}
+          </div>
+        )}
+      </div>
+    );
+  }
   // width, not minWidth, in narrow mode — a minWidth floor still lets the
   // HP bar/name/rank's own natural content width win out and push the box
   // wider than the row has room for. Renders at its full default width
@@ -5131,7 +5155,13 @@ export default function BattleTrackerPage(){
   // stack of hazard badges was never enough to actually reach the sprite
   // — scoped to isNarrow, like the player-side version, rather than
   // risking a desktop regression nothing has ever reported.
-  const frontContentBudgetForSprite=isNarrow?Math.max(30,frontContentBudget-enemyNameH):frontContentBudget;
+  // The extra 14px is slack for the gap between the group and the
+  // measured height not perfectly matching the sprite's own final pixel
+  // size — the box→content→canvas conversion (contentFrac, aspect-fit
+  // centering) isn't exact enough to trust to the pixel, and a few
+  // stray px of sprite reaching a hazard badge read as a real bug the way
+  // a few px of extra gap never would.
+  const frontContentBudgetForSprite=isNarrow?Math.max(30,frontContentBudget-enemyNameH-14):frontContentBudget;
   const spriteRowHEnemy=Math.min(9999,(frontContentBudgetForSprite/enemyContentFrac)*(1+FRONT_PLAT_RATIO));
   // isNarrow moves the player nameplate to the top of the player half
   // (see the Player half JSX), sharing a column with the sprite instead
@@ -5141,7 +5171,7 @@ export default function BattleTrackerPage(){
   // sprite tall enough to use its full budget reaches up into it. Not
   // needed when nameplate stays in its own corner (not narrow), so this
   // only ever subtracts anything on a phone-width stage.
-  const backContentBudgetForSprite=isNarrow?Math.max(30,backContentBudget-playerNameH):backContentBudget;
+  const backContentBudgetForSprite=isNarrow?Math.max(30,backContentBudget-playerNameH-14):backContentBudget;
   const spriteRowHPlayer=Math.min(9999,(backContentBudgetForSprite/playerContentFrac)*(1+BACK_PLAT_RATIO));
   // The taller of the two species actually facing off right now — see
   // spriteHeightScale's own comment for why this replaced a fixed
@@ -5709,7 +5739,7 @@ export default function BattleTrackerPage(){
                   <div style={{flex:1,minHeight:0,position:"relative"}}>
                     {mounted&&onFieldEnemy&&(
                       <div ref={enemyNameRef} style={{position:"absolute",top:"clamp(8px, 2cqw, 16px)",left:sidebarPad,maxWidth:nameplateMaxW,zIndex:3,display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
-                        <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={nameplateMaxW}/>
+                        <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={nameplateMaxW} minimal={isNarrow}/>
                         <StatChangeBadges entry={onFieldEnemy} align="left"/>
                         <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left" maxW={nameplateMaxW}/>
                       </div>
@@ -5779,7 +5809,7 @@ export default function BattleTrackerPage(){
                       // no reason left to keep it pinned to the same
                       // corner instead of using the spare row above.
                       <div ref={isNarrow?playerNameRef:undefined} style={{position:"absolute",...(isNarrow?{top:"clamp(8px, 2cqw, 16px)"}:{bottom:"clamp(8px, 2cqw, 16px)"}),right:16,maxWidth:nameplateMaxW,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
-                        <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={nameplateMaxW}/>
+                        <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={nameplateMaxW} minimal={isNarrow}/>
                         <StatChangeBadges entry={onFieldPlayer} align="right"/>
                         <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right" maxW={nameplateMaxW}/>
                       </div>
