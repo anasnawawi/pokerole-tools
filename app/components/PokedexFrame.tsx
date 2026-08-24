@@ -30,7 +30,6 @@ export const C = {
    those tabs was the same destination pressed twice, so DEX now points at
    the page itself and lets its own sub-nav pick the tab. */
 export const SITE_LINKS = [
-  {href:"/",                        label:"HOME",    match:"home"},
   {href:"/characters",              label:"TRAINER", match:"characters"},
   {href:"/battle-tracker",          label:"BATTLE",  match:"battle-tracker"},
   {href:"/gm-screen",               label:"GM",      match:"gm-screen"},
@@ -191,6 +190,20 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
             ))}
           </div>
 
+          {/* Home — back to the device's own front screen. A drawn house
+              (roof + walls, both centered strokes) reads cleanly at this
+              size; the ⌂ glyph it replaced sat off-center and blurred into
+              a squiggle at Press Start 2P's pixel size. */}
+          <Link href="/" title="Pokédex home" aria-label="Pokédex home"
+            style={{flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",
+              width:narrow?22:26,height:narrow?22:26,borderRadius:4,textDecoration:"none",
+              background:C.yellow,border:`2px solid ${C.outline}`}}>
+            <svg width={narrow?13:15} height={narrow?13:15} viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path d="M4 11.5 12 4l8 7.5" stroke={C.navy} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M6 10.5V20h12v-9.5" stroke={C.navy} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M9.75 20v-5.5h4.5V20" stroke={C.navy} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </Link>
 
           {/* Destination keys. Scrolls rather than clipping — a nav that
               silently hides its tail is worse than one that scrolls. */}
