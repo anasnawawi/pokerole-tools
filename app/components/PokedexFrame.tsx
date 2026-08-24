@@ -30,10 +30,10 @@ export const C = {
    those tabs was the same destination pressed twice, so DEX now points at
    the page itself and lets its own sub-nav pick the tab. */
 export const SITE_LINKS = [
-  {href:"/reference",               label:"DEX",     match:"reference"},
+  {href:"/",                        label:"HOME",    match:"home"},
+  {href:"/characters",              label:"TRAINER", match:"characters"},
   {href:"/battle-tracker",          label:"BATTLE",  match:"battle-tracker"},
   {href:"/gm-screen",               label:"GM",      match:"gm-screen"},
-  {href:"/characters",              label:"TRAINER", match:"characters"},
   {href:"/reference/quick-ref",     label:"RULES",   match:"quick-ref"},
 ];
 
@@ -165,7 +165,7 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
         background:C.shell,border:`4px solid ${C.outline}`,borderRadius:isPortrait?0:14,
         boxShadow:isPortrait?"none":`0 5px 0 ${C.shellDeep}, 0 9px 20px rgba(0,0,0,0.28)`,overflow:"hidden"}}>
 
-        {/* ── Top chrome: lens, lamps, home, destination keys ────────────── */}
+        {/* ── Top chrome: lens, lamps, destination keys ─────────────────── */}
         <div style={{display:"flex",alignItems:"center",gap:narrow?6:9,flexShrink:0,minWidth:0}}>
           {/* Lens — a real button here too, same quiet way in to the Hall of
               Fame screen as the landing page's own lens (see HallOfFame in
@@ -191,16 +191,6 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
             ))}
           </div>
 
-          {/* Home — back to the device's own front screen. The house glyph
-              reads as a faint squiggle at Press Start 2P's pixel size, so it
-              renders in a plain sans-serif at a much larger size instead —
-              bold and unmistakable rather than in-theme but illegible. */}
-          <Link href="/" title="Pokédex home" aria-label="Pokédex home"
-            style={{flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center",
-              width:narrow?22:26,height:narrow?22:26,borderRadius:4,textDecoration:"none",
-              background:C.yellow,border:`2px solid ${C.outline}`,
-              fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-              fontSize:narrow?15:18,fontWeight:900,lineHeight:1,color:C.navy}}>⌂</Link>
 
           {/* Destination keys. Scrolls rather than clipping — a nav that
               silently hides its tail is worse than one that scrolls. */}
