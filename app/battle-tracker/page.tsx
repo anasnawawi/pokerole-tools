@@ -4800,17 +4800,33 @@ export default function BattleTrackerPage(){
   // sides apart on any width, and is generous enough not to bind at all on
   // a normal desktop stage (defaultW is well under half of it there).
   const nameplateMaxW=Math.max(0,stageContentW/2-8);
-  // Each half of the stage (enemy / player) gets an even split of the
-  // measured stage height as its sprite's size budget. Nameplates are
-  // corner-anchored with position:absolute over their half (matching the
-  // classic fixed layout's own technique) rather than stacked in flex flow
-  // above the sprite, so they don't compete with the sprite for vertical
-  // room. This is what an earlier universal-layout attempt got wrong:
-  // stacking nameplate-then-sprite as flex siblings subtracted both
-  // nameplates' full height from the sprite budget, so sprites read as too
-  // small/cramped even on a roomy desktop window. The ~20px covers
-  // each half's own edge padding.
-  const spriteRowH=Math.max(60,stageH/2-20);
+  // A flat half-and-half split of the stage's measured height (the
+  // simplest safe budget: two halves can never together exceed the whole)
+  // was the first version of this, but it meant the two halves' sprites
+  // were shrunk by the same amount even once one of them (the front/enemy
+  // sprite, whose default footprint including its disc is only ~262px vs.
+  // the back/player sprite's ~306px) had already hit its own real ceiling
+  // and had no more room left to give back — so a normal, moderately-sized
+  // desktop window (not maximized, not squeezed by the move popup) still
+  // read as visibly smaller than the original fixed layout's sprites, even
+  // though there was more height available than a flat half-split assumed.
+  // FRONT_FULL/BACK_FULL are each side's real full-size footprint (see
+  // FieldMon's own conversion from maxRowH to a sprite height, which this
+  // mirrors): once the front side is capped at FRONT_FULL, every
+  // additional pixel of stage height goes entirely to the back side until
+  // IT also reaches its own full size — only past that combined point does
+  // this stop mattering and both sides are simply at classic size. This is
+  // still exactly as safe as the flat split (the two sides' actual
+  // consumed heights can never sum past the stage's real height, at any
+  // stage size, so the original cross-half overlap this system exists to
+  // prevent can't recur) — it just stops "wasting" slack once one side
+  // stops needing it, instead of taxing both sides evenly regardless of
+  // whether they'd actually use the extra room.
+  const FRONT_FULL=200*(1+62/200), BACK_FULL=232*(1+74/232), ROW_MARGIN=40;
+  const spriteRowBudget=stageH-ROW_MARGIN;
+  const spriteRowH=spriteRowBudget>=FRONT_FULL+BACK_FULL?9999
+    :spriteRowBudget>=2*FRONT_FULL?spriteRowBudget-FRONT_FULL
+    :Math.max(60,spriteRowBudget/2);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
