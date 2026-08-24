@@ -101,6 +101,30 @@ interface BattleEntry{
 function clampPx(minPx:number,valuePx:number,maxPx:number):number{
   return Math.max(minPx,Math.min(maxPx,valuePx));
 }
+/* A sprite and its own corner-anchored nameplate sit on diagonally
+   opposite corners of the same half, not stacked in one shared row or
+   column — so the sprite only actually risks reaching the nameplate if
+   it's grown BOTH wide enough to reach that column AND tall enough to
+   reach that row. Capping just one of those two dimensions (to the room
+   left once the nameplate's own real, measured size is reserved) is
+   enough to guarantee no overlap on its own; capping both, the way an
+   earlier version of this did, was double-protection that left real
+   visible empty space the sprite could safely have used. Since front
+   (200×200-ish) and back (232×300-ish) sprites have different natural
+   aspect ratios, which dimension is more worth keeping unconstrained
+   differs per call — rather than guess, the caller builds both
+   candidates (full width/height-capped vs. full height/width-capped) and
+   this picks whichever leaves the sprite bigger, run through the same
+   box-fit math FieldMon itself uses internally. */
+function pickWiderSpriteBudget(configA:{stageW:number;maxRowH:number},configB:{stageW:number;maxRowH:number},defaultW:number,defaultH:number,platRatio:number):{stageW:number;maxRowH:number}{
+  const resultW=({stageW,maxRowH}:{stageW:number;maxRowH:number})=>{
+    const widthCappedW=clampPx(0,stageW,defaultW);
+    const heightCappedH=Math.max(0,maxRowH/(1+platRatio));
+    const heightCappedW=heightCappedH*(defaultW/defaultH);
+    return Math.min(widthCappedW,heightCappedW);
+  };
+  return resultW(configA)>=resultW(configB)?configA:configB;
+}
 
 /* Relative luminance (WCAG) of a #rrggbb colour, used to pick readable label ink. */
 function luminance(hex:string){
@@ -440,9 +464,14 @@ function SceneNameplate({entry,enemy,allEntries,onClick,maxW,minimal}:{entry:Bat
   // visible on the plate — it's still shown elsewhere, on the roster
   // strip and the drawer this click opens).
   if(minimal){
+    // width:fit-content, not a maxW-driven fixed width like the full
+    // plate below — the whole point of dropping to just "HP n/n" is a
+    // small box, and stretching it out to the same generous ceiling the
+    // sprite now gets (see spriteMaxW/nameplateMaxW's own comment) would
+    // waste most of that width on empty background.
     return(
       <div onClick={onClick} style={{background:"#F0ECD4",border:"2px solid #181818",boxShadow:"3px 3px 0 rgba(24,16,8,0.45)",padding:"4px 7px",
-        width:maxW===undefined?defaultW:Math.round(clampPx(enemy?60:70,maxW,defaultW)),
+        width:"fit-content",maxWidth:maxW,
         cursor:onClick?"pointer":"default",fontFamily:"'Press Start 2P',monospace"}}>
         <div style={{display:"flex",flexDirection:"column",gap:2}}>
           <span style={{fontSize:9,fontWeight:700,color:entry.currentHp/entry.maxHp>0.5?"#187028":entry.currentHp/entry.maxHp>0.25?"#807008":"#A00808"}}>HP {entry.currentHp}/{entry.maxHp}</span>
@@ -840,7 +869,7 @@ function StatusFX({statuses}:{statuses:string[]}){
   );
 }
 // Compact clickable hazard badges — placed near a side's nameplate. Click cycles the stack.
-function HazardRow({hazards,onChange,align,maxW=210}:{hazards:HazardSide;onChange:(h:HazardSide)=>void;align:"left"|"right";maxW?:number}){
+function HazardRow({hazards,onChange,align,maxW=210,stacked}:{hazards:HazardSide;onChange:(h:HazardSide)=>void;align:"left"|"right";maxW?:number;stacked?:boolean}){
   const items:{key:keyof HazardSide;label:string;active:boolean;icon:string}[]=[
     {key:"spikes",label:hazards.spikes>0?`SPIKES ${hazards.spikes}`:"SPIKES",active:hazards.spikes>0,icon:"▲"},
     {key:"toxicSpikes",label:hazards.toxicSpikes>0?`T.SPIKES ${hazards.toxicSpikes}`:"T.SPIKES",active:hazards.toxicSpikes>0,icon:"☠"},
@@ -855,7 +884,9 @@ function HazardRow({hazards,onChange,align,maxW=210}:{hazards:HazardSide;onChang
     onChange(next);
   };
   return(
-    <div style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:maxW}}>
+    <div style={{display:"flex",flexDirection:stacked?"column":"row",gap:3,flexWrap:stacked?"nowrap":"wrap",
+      alignItems:stacked?(align==="right"?"flex-end":"flex-start"):undefined,
+      justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:stacked?undefined:maxW}}>
       {items.map(it=>(
         <button key={it.key} onClick={()=>cycle(it.key)} title="Click to cycle"
           style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",padding:"2px 4px",cursor:"pointer",
@@ -4882,48 +4913,47 @@ export default function BattleTrackerPage(){
     ro.observe(el);
     stageObsRef.current=ro;
   },[]);
-  // The enemy nameplate group's own real rendered height. The enemy half
-  // has always put the nameplate at the top and the sprite at the bottom
-  // of the same column (unlike the player half, which only stacks that
-  // way on isNarrow — see playerNameH below) — with few or no active
-  // hazards it's small enough that the sprite's existing budget never
-  // came close to reaching it, but a full stack of hazard badges wrapping
-  // onto extra rows makes the nameplate group tall enough that a sprite
-  // using its full budget could grow up into it on a phone-width stage
-  // (see frontContentBudgetForSprite, scoped to isNarrow like the
-  // player-side version).
+  // The enemy/player nameplate groups' own real rendered size (both
+  // dimensions — see chooseSpriteBudget below for why). Both corner-
+  // anchor a nameplate diagonally opposite from where the sprite grows —
+  // enemy nameplate top-left vs sprite bottom-right always; on isNarrow
+  // the player nameplate also moves to the top (see the Player half
+  // JSX below), top-right vs sprite bottom-left. Since they're diagonal
+  // corners, not stacked in one column or row, the sprite only actually
+  // risks reaching its nameplate if it's BOTH tall enough to reach that
+  // row AND wide enough to reach that column — it's enough to cap
+  // EITHER dimension on its own, whichever leaves the sprite bigger; see
+  // chooseSpriteBudget, which tries both and keeps the winner.
+  const [enemyNameW,setEnemyNameW]=useState(90);
   const [enemyNameH,setEnemyNameH]=useState(74);
   const enemyNameObsRef=useRef<ResizeObserver|null>(null);
   const enemyNameRef=useCallback((el:HTMLDivElement|null)=>{
     enemyNameObsRef.current?.disconnect();
     if(!el)return;
-    const h0=el.getBoundingClientRect().height;
-    if(h0)setEnemyNameH(h0);
+    const r0=el.getBoundingClientRect();
+    if(r0.width)setEnemyNameW(r0.width);
+    if(r0.height)setEnemyNameH(r0.height);
     const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect.height;
-      if(h)setEnemyNameH(h);
+      const r=entries[0]?.contentRect;
+      if(r?.width)setEnemyNameW(r.width);
+      if(r?.height)setEnemyNameH(r.height);
     });
     ro.observe(el);
     enemyNameObsRef.current=ro;
   },[]);
-  // The player nameplate group's own real rendered height — only needed
-  // once isNarrow moves it to the top of the player half (see the Player
-  // half JSX below), sharing a column with the sprite instead of a row.
-  // Once they share a column, the sprite's height budget has to give up
-  // whatever room the nameplate actually takes at the top, the same way
-  // the stage's own top/bottom chrome already gets subtracted elsewhere —
-  // a guessed constant undershoots whenever hazards add extra wrapped
-  // rows and the sprite grows tall enough to reach up into them.
+  const [playerNameW,setPlayerNameW]=useState(90);
   const [playerNameH,setPlayerNameH]=useState(90);
   const playerNameObsRef=useRef<ResizeObserver|null>(null);
   const playerNameRef=useCallback((el:HTMLDivElement|null)=>{
     playerNameObsRef.current?.disconnect();
     if(!el)return;
-    const h0=el.getBoundingClientRect().height;
-    if(h0)setPlayerNameH(h0);
+    const r0=el.getBoundingClientRect();
+    if(r0.width)setPlayerNameW(r0.width);
+    if(r0.height)setPlayerNameH(r0.height);
     const ro=new ResizeObserver(entries=>{
-      const h=entries[0]?.contentRect.height;
-      if(h)setPlayerNameH(h);
+      const r=entries[0]?.contentRect;
+      if(r?.width)setPlayerNameW(r.width);
+      if(r?.height)setPlayerNameH(r.height);
     });
     ro.observe(el);
     playerNameObsRef.current=ro;
@@ -4985,16 +5015,10 @@ export default function BattleTrackerPage(){
   // On an isNarrow stage specifically, the player nameplate moves to the
   // TOP of its half instead of sharing the bottom row with the sprite
   // (see the Player half JSX below) — mirroring how the enemy nameplate
-  // already sits top-left while the enemy sprite sits bottom-right, on a
-  // different row from the start. Once nameplate and sprite are never on
-  // the same row, they're never actually competing for the same
-  // horizontal space, so splitting the width between them was only ever
-  // needed while they shared a row — a tall phone screen has height to
-  // spare for a second row (bench, the usual occupant of that space, is
-  // already hidden on isNarrow — see hideBench) but not width to spare
-  // for a second column, which is exactly backwards from what the split
-  // assumed.
-  const spriteMaxW=isNarrow?Math.max(0,stageContentW-16):Math.max(0,stageContentW*0.6-8);
+  // already sits top-left while the enemy sprite sits bottom-right. Each
+  // side's actual sprite budget (spriteMaxWEnemy/spriteRowHEnemy etc.) is
+  // resolved further down, once the per-side content budgets are known —
+  // see chooseSpriteBudget.
   const nameplateMaxW=isNarrow?Math.max(0,stageContentW-16):Math.max(0,stageContentW*0.4-8);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
@@ -5150,29 +5174,37 @@ export default function BattleTrackerPage(){
   const backContentBudget=contentBudget>=CONTENT_TARGET_FRONT+CONTENT_TARGET_BACK?CONTENT_TARGET_BACK
     :contentBudget>=2*CONTENT_TARGET_FRONT?contentBudget-CONTENT_TARGET_FRONT
     :Math.max(30,contentBudget/2);
-  // The enemy nameplate always shares a column with the enemy sprite (top
-  // vs bottom of the same half), but on a roomy desktop stage a full
-  // stack of hazard badges was never enough to actually reach the sprite
-  // — scoped to isNarrow, like the player-side version, rather than
-  // risking a desktop regression nothing has ever reported.
-  // The extra 14px is slack for the gap between the group and the
-  // measured height not perfectly matching the sprite's own final pixel
-  // size — the box→content→canvas conversion (contentFrac, aspect-fit
-  // centering) isn't exact enough to trust to the pixel, and a few
-  // stray px of sprite reaching a hazard badge read as a real bug the way
-  // a few px of extra gap never would.
-  const frontContentBudgetForSprite=isNarrow?Math.max(30,frontContentBudget-enemyNameH-14):frontContentBudget;
-  const spriteRowHEnemy=Math.min(9999,(frontContentBudgetForSprite/enemyContentFrac)*(1+FRONT_PLAT_RATIO));
-  // isNarrow moves the player nameplate to the top of the player half
-  // (see the Player half JSX), sharing a column with the sprite instead
-  // of sitting in the opposite corner from it — so unlike every other
-  // case here, the sprite's own height budget has to give back whatever
-  // room the nameplate group actually measures at (playerNameH), or a
-  // sprite tall enough to use its full budget reaches up into it. Not
-  // needed when nameplate stays in its own corner (not narrow), so this
-  // only ever subtracts anything on a phone-width stage.
-  const backContentBudgetForSprite=isNarrow?Math.max(30,backContentBudget-playerNameH-14):backContentBudget;
-  const spriteRowHPlayer=Math.min(9999,(backContentBudgetForSprite/playerContentFrac)*(1+BACK_PLAT_RATIO));
+  // On isNarrow, each half's sprite gets that half's full real share of
+  // the stage height (stageH/2), not a share reduced by its own
+  // nameplate's measured height — an earlier version subtracted the
+  // nameplate's height here on the theory that they share a column, but
+  // the nameplate and sprite are diagonal corners (see
+  // spriteMaxWEnemy/spriteMaxWPlayer's own comment), so the WIDTH cap
+  // there is what actually keeps them apart; subtracting height too was
+  // redundant and left real, visible empty space between the nameplate
+  // and a sprite that had genuine room to grow taller.
+  const isNarrowHalfBudget=Math.max(30,stageH/2-8);
+  // Not-narrow keeps the existing behavior byte-for-byte: full
+  // stageContentW-derived width cap (see the old spriteMaxW comment,
+  // still true there), height from the shared/proportional split above.
+  // isNarrow instead builds both single-dimension-capped candidates (see
+  // pickWiderSpriteBudget) and keeps whichever renders bigger.
+  const enemyConfig=isNarrow
+    ?pickWiderSpriteBudget(
+      {stageW:stageContentW,maxRowH:Math.min(9999,(Math.max(30,isNarrowHalfBudget-enemyNameH-16)/enemyContentFrac)*(1+FRONT_PLAT_RATIO))},
+      {stageW:Math.max(60,stageContentW-enemyNameW-16),maxRowH:Math.min(9999,(isNarrowHalfBudget/enemyContentFrac)*(1+FRONT_PLAT_RATIO))},
+      250,200,FRONT_PLAT_RATIO)
+    :{stageW:Math.max(0,stageContentW*0.6-8),maxRowH:Math.min(9999,(frontContentBudget/enemyContentFrac)*(1+FRONT_PLAT_RATIO))};
+  const spriteMaxWEnemy=enemyConfig.stageW;
+  const spriteRowHEnemy=enemyConfig.maxRowH;
+  const playerConfig=isNarrow
+    ?pickWiderSpriteBudget(
+      {stageW:stageContentW,maxRowH:Math.min(9999,(Math.max(30,isNarrowHalfBudget-playerNameH-16)/playerContentFrac)*(1+BACK_PLAT_RATIO))},
+      {stageW:Math.max(60,stageContentW-playerNameW-16),maxRowH:Math.min(9999,(isNarrowHalfBudget/playerContentFrac)*(1+BACK_PLAT_RATIO))},
+      300,232,BACK_PLAT_RATIO)
+    :{stageW:Math.max(0,stageContentW*0.6-8),maxRowH:Math.min(9999,(backContentBudget/playerContentFrac)*(1+BACK_PLAT_RATIO))};
+  const spriteMaxWPlayer=playerConfig.stageW;
+  const spriteRowHPlayer=playerConfig.maxRowH;
   // The taller of the two species actually facing off right now — see
   // spriteHeightScale's own comment for why this replaced a fixed
   // absolute ceiling: two evenly-matched Pokémon (Charmander vs
@@ -5678,7 +5710,7 @@ export default function BattleTrackerPage(){
               {mounted&&setupTrainerSpriteId&&(
                 isNarrow?(
                   <div style={{position:"absolute",bottom:"3%",left:sidebarPad,zIndex:2}}>
-                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={spriteMaxW} maxRowH={spriteRowHPlayer}/>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={spriteMaxWPlayer} maxRowH={spriteRowHPlayer}/>
                   </div>
                 ):(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
@@ -5738,10 +5770,10 @@ export default function BattleTrackerPage(){
                       FIGHT target). */}
                   <div style={{flex:1,minHeight:0,position:"relative"}}>
                     {mounted&&onFieldEnemy&&(
-                      <div ref={enemyNameRef} style={{position:"absolute",top:"clamp(8px, 2cqw, 16px)",left:sidebarPad,maxWidth:nameplateMaxW,zIndex:3,display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
+                      <div ref={enemyNameRef} style={{position:"absolute",top:"clamp(8px, 2cqw, 16px)",left:sidebarPad,maxWidth:nameplateMaxW,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-start",gap:4,pointerEvents:"auto"}}>
                         <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={nameplateMaxW} minimal={isNarrow}/>
                         <StatChangeBadges entry={onFieldEnemy} align="left"/>
-                        <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left" maxW={nameplateMaxW}/>
+                        <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left" maxW={nameplateMaxW} stacked={isNarrow}/>
                       </div>
                     )}
                     {/* Everyone else still in the fight, small and see-through
@@ -5765,7 +5797,7 @@ export default function BattleTrackerPage(){
                     {mounted&&onFieldEnemy&&(
                       <div style={{position:"absolute",bottom:0,right:isNarrow?"clamp(4px, 2cqw, 16px)":"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={spriteMaxW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy),matchupMaxH)} growthScale={growthScale}/>
+                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={spriteMaxWEnemy} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy),matchupMaxH)} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldEnemy.statuses}/>
                           <HazardMarkers hazards={hazards.enemy}/>
                         </div>
@@ -5781,14 +5813,14 @@ export default function BattleTrackerPage(){
                     {mounted&&battleStarted&&onFieldPlayer?(
                       <div style={{position:"absolute",bottom:0,left:isNarrow?sidebarPad:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative"}}>
-                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={spriteMaxW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer),matchupMaxH)} growthScale={growthScale}/>
+                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={spriteMaxWPlayer} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer),matchupMaxH)} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldPlayer.statuses}/>
                           <HazardMarkers hazards={hazards.player}/>
                         </div>
                       </div>
                     ):mounted&&!battleStarted&&setupTrainerSpriteId?(
                       <div style={{position:"absolute",bottom:0,left:isNarrow?sidebarPad:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
-                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={spriteMaxW} maxRowH={spriteRowHPlayer}/>
+                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={spriteMaxWPlayer} maxRowH={spriteRowHPlayer}/>
                       </div>
                     ):null}
                     {mounted&&!hideBench&&benchNear.length>0&&(
@@ -5811,7 +5843,7 @@ export default function BattleTrackerPage(){
                       <div ref={isNarrow?playerNameRef:undefined} style={{position:"absolute",...(isNarrow?{top:"clamp(8px, 2cqw, 16px)"}:{bottom:"clamp(8px, 2cqw, 16px)"}),right:16,maxWidth:nameplateMaxW,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
                         <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={nameplateMaxW} minimal={isNarrow}/>
                         <StatChangeBadges entry={onFieldPlayer} align="right"/>
-                        <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right" maxW={nameplateMaxW}/>
+                        <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right" maxW={nameplateMaxW} stacked={isNarrow}/>
                       </div>
                     )}
                   </div>
