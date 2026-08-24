@@ -18,6 +18,14 @@ type MenuItem = { id: string; icon: string; label: string; href: string; desc: s
 
 function menuFor(trainer: TrainerData | null, party: number): MenuItem[] {
   const who = (trainer?.name || "").trim();
+  /* An empty party means the save hasn't really started yet — the games
+     don't let you wander the menu before picking a starter, so neither
+     does this one. Every other row collapses down to the one that gets
+     you a first Pokémon. */
+  if (party === 0) {
+    return [{ id:"starter", icon:"🔴", label:"CHOOSE YOUR STARTER POKéMON", href:"/characters?tab=pokemon",
+      desc:"Pick your first Pokémon partner to begin your journey." }];
+  }
   return [
     /* The player's own name leads the menu — it's the row that says whose save
        this is, and the card behind it is the one they'll open most often. */
@@ -61,6 +69,7 @@ export default function Home() {
   // the trainer's name or party size actually changes the rows.
   const menu = useMemo(() => menuFor(trainer, party.length), [trainer, party.length]);
   const caption = menu[hover ?? idx];
+  const needsStarter = registered && party.length === 0;
 
   /* Two separate questions, which a single width breakpoint was conflating:
      `narrow` is how much room there is for type and padding, `portrait` is
@@ -212,6 +221,30 @@ export default function Home() {
                   fontSize:narrow?8:10,color:C.navy}}>LOADING…</div>
               ) : !registered ? (
                 <NewGame narrow={narrow} name={newName} setName={setNewName} onBegin={register}/>
+              ) : needsStarter ? (
+                /* No Pokémon yet, no menu — same held-back moment as the
+                   games before you leave the table with your starter.
+                   One big central icon standing in for "choose", three
+                   small Poké Ball icons underneath standing in for the
+                   three choices you're about to make. */
+                <div style={{position:"relative",zIndex:1,height:"100%",display:"flex",
+                  flexDirection:"column",alignItems:"center",justifyContent:"center",
+                  gap:narrow?14:18,padding:narrow?"14px 10px":"20px 14px"}}>
+                  <button onClick={open} title={menu[0].desc} aria-label={`${menu[0].label} — ${menu[0].desc}`}
+                    style={{width:narrow?64:84,height:narrow?64:84,borderRadius:"50%",flexShrink:0,
+                      cursor:"pointer",touchAction:"manipulation",border:"none",padding:0,
+                      background:"none",filter:`drop-shadow(0 4px 0 ${C.shellDeep})`,
+                      display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <PokeballDot size={narrow?64:84}/>
+                  </button>
+                  <span style={{fontFamily:pixel,fontSize:narrow?9:11,lineHeight:1.7,
+                    color:C.navy,textAlign:"center"}}>
+                    {menu[0].label}
+                  </span>
+                  <div style={{display:"flex",gap:narrow?10:14}}>
+                    {[0,1,2].map(i=><PokeballDot key={i} size={narrow?14:18}/>)}
+                  </div>
+                </div>
               ) : (
                 /* The menu box: cream panel with a heavy navy border and a ▶
                    cursor on the current row, the way the start menu is drawn
@@ -371,6 +404,19 @@ export default function Home() {
       </div>
 
       {showHOF && <HallOfFame onClose={()=>setShowHOF(false)}/>}
+    </div>
+  );
+}
+
+/* A small drawn Poké Ball, standing in for the three choices on the table in
+   the games' own starter scene — decorative, not clickable. */
+function PokeballDot({ size = 14 }: { size?: number }) {
+  return (
+    <div style={{width:size,height:size,borderRadius:"50%",flexShrink:0,position:"relative",
+      background:`linear-gradient(to bottom, #F2544F 0%, #F2544F 46%, ${C.outline} 46%, ${C.outline} 54%, #F8F8F8 54%, #F8F8F8 100%)`,
+      border:`1.5px solid ${C.outline}`}}>
+      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        width:size*0.4,height:size*0.4,borderRadius:"50%",background:"#F8F8F8",border:`1px solid ${C.outline}`}}/>
     </div>
   );
 }
