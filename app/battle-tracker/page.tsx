@@ -816,7 +816,7 @@ function StatusFX({statuses}:{statuses:string[]}){
   );
 }
 // Compact clickable hazard badges — placed near a side's nameplate. Click cycles the stack.
-function HazardRow({hazards,onChange,align}:{hazards:HazardSide;onChange:(h:HazardSide)=>void;align:"left"|"right"}){
+function HazardRow({hazards,onChange,align,maxW=210}:{hazards:HazardSide;onChange:(h:HazardSide)=>void;align:"left"|"right";maxW?:number}){
   const items:{key:keyof HazardSide;label:string;active:boolean;icon:string}[]=[
     {key:"spikes",label:hazards.spikes>0?`SPIKES ${hazards.spikes}`:"SPIKES",active:hazards.spikes>0,icon:"▲"},
     {key:"toxicSpikes",label:hazards.toxicSpikes>0?`T.SPIKES ${hazards.toxicSpikes}`:"T.SPIKES",active:hazards.toxicSpikes>0,icon:"☠"},
@@ -831,7 +831,7 @@ function HazardRow({hazards,onChange,align}:{hazards:HazardSide;onChange:(h:Haza
     onChange(next);
   };
   return(
-    <div style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:210}}>
+    <div style={{display:"flex",gap:3,flexWrap:"wrap",justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:maxW}}>
       {items.map(it=>(
         <button key={it.key} onClick={()=>cycle(it.key)} title="Click to cycle"
           style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",padding:"2px 4px",cursor:"pointer",
@@ -4899,11 +4899,20 @@ export default function BattleTrackerPage(){
   // tablet with the sidebar expanded, say) the sprite's box could still
   // grow wide enough to visibly crowd the nameplate it's supposed to
   // share the half with, even though neither one was technically
-  // overlapping the OTHER half. Both get the same half-width ceiling now,
-  // for the same reason: generous enough not to bind at all on a normal
-  // desktop stage, and what actually keeps the two apart everywhere else.
-  const halfContentW=Math.max(0,stageContentW/2-8);
-  const nameplateMaxW=halfContentW;
+  // overlapping the OTHER half.
+  //
+  // The two don't split it evenly, though — the sprite is the highest-
+  // priority thing on the stage, the nameplate the lowest (explicitly, per
+  // the original layout brief), so on a stage tight enough for the split
+  // to actually bind, the sprite gets the bigger share. On a normal
+  // desktop stage neither ceiling binds at all — both sides hit their own
+  // defaultW/nameplate-defaultW long before either cap does — so this
+  // only ever matters on a phone-width stage, which is exactly where it's
+  // needed: the nameplate still has its own floor (see SceneNameplate's
+  // own clampPx min) below which it won't shrink further, it just gives up
+  // its slack above that floor first.
+  const spriteMaxW=Math.max(0,stageContentW*0.6-8);
+  const nameplateMaxW=Math.max(0,stageContentW*0.4-8);
   const scrollRef=useRef<HTMLDivElement>(null);
   const cardRefs=useRef<Record<string,HTMLDivElement|null>>({});
   // ── FireRed battle-scene state ──────────────────────────────────────────────
@@ -5351,7 +5360,7 @@ export default function BattleTrackerPage(){
   // has to shrink in step with whatever this resolves to, which is why
   // it's computed once and shared as commandBarH rather than re-guessed at
   // each call site.
-  const commandBarH=isShort?"clamp(90px, 20vw, 130px)":isNarrow?"clamp(260px, 40vw, 420px)":"clamp(120px, 16vw, 170px)";
+  const commandBarH=isShort?"clamp(90px, 20vw, 130px)":isNarrow?"clamp(180px, 34vw, 260px)":"clamp(120px, 16vw, 170px)";
   const bottomBarH=(!mounted||entries.length===0)?"0px"
     :battleStarted&&scenePopup&&onFieldPlayer?(isShort?"35vh":"40vh")
     :battleStarted?commandBarH
@@ -5565,7 +5574,7 @@ export default function BattleTrackerPage(){
               {mounted&&setupTrainerSpriteId&&(
                 isNarrow?(
                   <div style={{position:"absolute",bottom:"3%",left:sidebarPad,zIndex:2}}>
-                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={halfContentW} maxRowH={spriteRowHPlayer}/>
+                    <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={spriteMaxW} maxRowH={spriteRowHPlayer}/>
                   </div>
                 ):(
                   <div style={{position:"absolute",bottom:"3%",left:"5%",zIndex:2}}>
@@ -5625,10 +5634,10 @@ export default function BattleTrackerPage(){
                       FIGHT target). */}
                   <div style={{flex:1,minHeight:0,position:"relative"}}>
                     {mounted&&onFieldEnemy&&(
-                      <div style={{position:"absolute",top:"clamp(8px, 2cqw, 16px)",left:sidebarPad,zIndex:3,display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
+                      <div style={{position:"absolute",top:"clamp(8px, 2cqw, 16px)",left:sidebarPad,maxWidth:nameplateMaxW,zIndex:3,display:"flex",flexDirection:"column",gap:4,pointerEvents:"auto"}}>
                         <SceneNameplate entry={onFieldEnemy} enemy allEntries={entries} onClick={()=>setDrawerId(onFieldEnemy.id)} maxW={nameplateMaxW}/>
                         <StatChangeBadges entry={onFieldEnemy} align="left"/>
-                        <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left"/>
+                        <HazardRow hazards={hazards.enemy} onChange={h=>setHazards(prev=>({...prev,enemy:h}))} align="left" maxW={nameplateMaxW}/>
                       </div>
                     )}
                     {/* Everyone else still in the fight, small and see-through
@@ -5652,7 +5661,7 @@ export default function BattleTrackerPage(){
                     {mounted&&onFieldEnemy&&(
                       <div style={{position:"absolute",bottom:0,right:isNarrow?"clamp(4px, 2cqw, 16px)":"clamp(8px, 3cqw, 7%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative",filter:focusedTargetIdSet.has(onFieldEnemy.id)?"drop-shadow(0 0 10px #FF3838) drop-shadow(0 0 4px #FF3838)":undefined,transition:"filter .15s"}}>
-                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={halfContentW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy),matchupMaxH)} growthScale={growthScale}/>
+                          <FieldMon number={spriteNumberOf(onFieldEnemy)} fainted={onFieldEnemy.currentHp<=0} onClick={()=>setDrawerId(onFieldEnemy.id)} trainerSpriteId={trainerSpriteFor(onFieldEnemy)} stageW={spriteMaxW} maxRowH={spriteRowHEnemy} tint={isDittoTransformed(onFieldEnemy)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldEnemy),matchupMaxH)} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldEnemy.statuses}/>
                           <HazardMarkers hazards={hazards.enemy}/>
                         </div>
@@ -5666,16 +5675,16 @@ export default function BattleTrackerPage(){
                       lane top-right, nameplate bottom-right. */}
                   <div style={{flex:1,minHeight:0,position:"relative"}}>
                     {mounted&&battleStarted&&onFieldPlayer?(
-                      <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
+                      <div style={{position:"absolute",bottom:0,left:isNarrow?sidebarPad:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
                         <div style={{position:"relative"}}>
-                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={halfContentW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer),matchupMaxH)} growthScale={growthScale}/>
+                          <FieldMon number={spriteNumberOf(onFieldPlayer)} back fainted={onFieldPlayer.currentHp<=0} onClick={()=>setDrawerId(onFieldPlayer.id)} trainerSpriteId={trainerSpriteFor(onFieldPlayer)} stageW={spriteMaxW} maxRowH={spriteRowHPlayer} tint={isDittoTransformed(onFieldPlayer)} heightScale={spriteHeightScale(spriteSpeciesFor(onFieldPlayer),matchupMaxH)} growthScale={growthScale}/>
                           <StatusFX statuses={onFieldPlayer.statuses}/>
                           <HazardMarkers hazards={hazards.player}/>
                         </div>
                       </div>
                     ):mounted&&!battleStarted&&setupTrainerSpriteId?(
-                      <div style={{position:"absolute",bottom:0,left:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
-                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={halfContentW} maxRowH={spriteRowHPlayer}/>
+                      <div style={{position:"absolute",bottom:0,left:isNarrow?sidebarPad:"clamp(8px, 3cqw, 5%)",zIndex:2,pointerEvents:"auto"}}>
+                        <FieldMon number={-1} back trainerSpriteId={setupTrainerSpriteId} stageW={spriteMaxW} maxRowH={spriteRowHPlayer}/>
                       </div>
                     ):null}
                     {mounted&&!hideBench&&benchNear.length>0&&(
@@ -5690,10 +5699,10 @@ export default function BattleTrackerPage(){
                       </div>
                     )}
                     {mounted&&battleStarted&&onFieldPlayer&&(
-                      <div style={{position:"absolute",bottom:"clamp(8px, 2cqw, 16px)",right:16,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
+                      <div style={{position:"absolute",bottom:"clamp(8px, 2cqw, 16px)",right:16,maxWidth:nameplateMaxW,zIndex:3,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,pointerEvents:"auto"}}>
                         <SceneNameplate entry={onFieldPlayer} allEntries={entries} onClick={()=>setDrawerId(onFieldPlayer.id)} maxW={nameplateMaxW}/>
                         <StatChangeBadges entry={onFieldPlayer} align="right"/>
-                        <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right"/>
+                        <HazardRow hazards={hazards.player} onChange={h=>setHazards(prev=>({...prev,player:h}))} align="right" maxW={nameplateMaxW}/>
                       </div>
                     )}
                   </div>
