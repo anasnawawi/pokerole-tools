@@ -1,12 +1,18 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { C, HallOfFame } from "./components/PokedexFrame";
 import PartyBar from "./components/PartyBar";
 import { loadFromStorage, saveToStorage } from "./lib/storage";
 import { TrainerData, TrainerGender, makeBlankTrainer, setActiveTrainer, TRAINERS_KEY } from "./lib/trainer";
 import { notifySession, partyOf, useSession } from "./lib/session";
 import { Rank, TrainerAge } from "./data/game-rules";
+
+/* The ~2MB Pokémon dataset StarterPicker needs has no business loading for
+   every trainer who already has a party — only pulled in the moment one
+   without a party actually opens the picker (see needsStarter below). */
+const StarterPicker = dynamic(() => import("./components/StarterPicker"), { ssr: false });
 
 /* ── The start menu ──────────────────────────────────────────────────────────
    The device opens on the menu a Pokémon game opens on, so the fourth row is
@@ -58,6 +64,10 @@ export default function Home() {
   const [lamp, setLamp] = useState(0);
   const [newName, setNewName] = useState("");
   const [showHOF, setShowHOF] = useState(false);
+  // Clicking the starter prompt opens the picker in place, on this same
+  // screen — the whole point was to stop that click from leaving the
+  // launch window the way it used to (a plain nav to the Characters page).
+  const [pickingStarter, setPickingStarter] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const session = useSession();
@@ -99,7 +109,7 @@ export default function Home() {
   const open = useCallback(() => { router.push(menu[idx].href); }, [router, menu, idx]);
 
   useEffect(() => {
-    if (!registered) return; // the setup screen owns the keyboard
+    if (!registered || pickingStarter) return; // the setup screen — or the starter picker's own search/nickname fields — owns the keyboard
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown" || e.key === "ArrowRight") { e.preventDefault(); step(1); }
       else if (e.key === "ArrowUp" || e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
@@ -107,7 +117,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, open, registered]);
+  }, [step, open, registered, pickingStarter]);
 
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>('[data-on="true"]')?.scrollIntoView({ block: "nearest" });
@@ -221,6 +231,12 @@ export default function Home() {
                   fontSize:narrow?8:10,color:C.navy}}>LOADING…</div>
               ) : !registered ? (
                 <NewGame narrow={narrow} name={newName} setName={setNewName} onBegin={register}/>
+              ) : needsStarter && pickingStarter ? (
+                /* Picking stays on this same screen instead of navigating
+                   away — the launch window is the whole point. Only the
+                   picker's own final confirm leaves it, straight to the
+                   trainer sheet (see StarterPicker). */
+                <StarterPicker trainer={trainer!} narrow={narrow} onCancel={()=>setPickingStarter(false)}/>
               ) : needsStarter ? (
                 /* No Pokémon yet, no menu — same held-back moment as the
                    games before you leave the table with your starter.
@@ -230,7 +246,7 @@ export default function Home() {
                 <div style={{position:"relative",zIndex:1,height:"100%",display:"flex",
                   flexDirection:"column",alignItems:"center",justifyContent:"center",
                   gap:narrow?14:18,padding:narrow?"14px 10px":"20px 14px"}}>
-                  <button onClick={open} title={menu[0].desc} aria-label={`${menu[0].label} — ${menu[0].desc}`}
+                  <button onClick={()=>setPickingStarter(true)} title={menu[0].desc} aria-label={`${menu[0].label} — ${menu[0].desc}`}
                     style={{width:narrow?64:84,height:narrow?64:84,borderRadius:"50%",flexShrink:0,
                       cursor:"pointer",touchAction:"manipulation",border:"none",padding:0,
                       background:"none",filter:`drop-shadow(0 4px 0 ${C.shellDeep})`,
