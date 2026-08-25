@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { POKEMON, NATURES, TYPE_COLORS, PokemonType } from "../data/pokerole-data";
 import { Rank, getRankIndex } from "../data/game-rules";
 import {
-  TrainerData, PokemonSheetData, PokemonGender, resolveGender,
+  TrainerData, PokemonSheetData, PokemonGender, resolveGender, isAlwaysGenderless,
   TRAINERS_KEY, SHEETS_KEY, loadTrainers, loadPokemonSheets,
 } from "../lib/trainer";
 import { saveToStorage } from "../lib/storage";
@@ -23,8 +23,16 @@ const RANK_COLORS: Record<Rank, string> = {
   Starter: "#78c850", Rookie: "#6890f0", Standard: "#f8d030", Advanced: "#f08030",
   Expert: "#a040a0", Ace: "#e04040", Master: "#705898", Champion: "#ffd700",
 };
-const GENDER_CHOICES: PokemonGender[] = ["Male", "Female", "Genderless"];
 const pixel = "'Press Start 2P',monospace";
+
+// Module-scope, not inline in the component — react-hooks/purity flags
+// Math.random() called directly inside a component's own body, even from
+// an event handler, since it can't tell that call never happens at render
+// time. Plain top-level helper sidesteps that the same way resolveGender's
+// own internal Math.random() already does.
+function randomNature(): string {
+  return NATURES[Math.floor(Math.random() * NATURES.length)];
+}
 
 export default function StarterPicker({ trainer, narrow, onCancel }: {
   trainer: TrainerData; narrow: boolean; onCancel: () => void;
@@ -45,10 +53,16 @@ export default function StarterPicker({ trainer, narrow, onCancel }: {
     return arr;
   }, [search, rankFiltered, trainer.rank]);
 
+  // Species like Magnemite or the legendaries are always Genderless and
+  // never anything else; every other species is never Genderless — so the
+  // dropdown only ever offers whichever set actually applies.
+  const genderChoices: PokemonGender[] = selected && isAlwaysGenderless(selected.number)
+    ? ["Genderless"] : ["Male", "Female"];
+
   const pick = (p: typeof POKEMON[number]) => {
     setSelected(p);
     setNickname("");
-    setNature(NATURES[Math.floor(Math.random() * NATURES.length)]);
+    setNature(randomNature());
     const resolved = resolveGender(p.number, "Unknown");
     setGender(resolved === "Unknown" ? "Male" : resolved);
   };
@@ -164,7 +178,7 @@ export default function StarterPicker({ trainer, narrow, onCancel }: {
                     Gender <GenderIcon gender={gender} size={11} />
                   </span>
                   <select value={gender} onChange={e => setGender(e.target.value as PokemonGender)} style={field}>
-                    {GENDER_CHOICES.map(g => <option key={g} value={g}>{g}</option>)}
+                    {genderChoices.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </label>
               </div>

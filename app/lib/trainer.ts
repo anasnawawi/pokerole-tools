@@ -66,6 +66,13 @@ export function resolveGender(number: number, current: PokemonGender): PokemonGe
   return Math.random() < 0.5 ? "Male" : "Female";
 }
 
+/** True for a species that's always Genderless (see the dex-number list
+ * above) — the one case where offering Male/Female as a choice would be
+ * wrong, not just redundant. */
+export function isAlwaysGenderless(number: number): boolean {
+  return GENDERLESS_DEX_NUMBERS.has(number);
+}
+
 export interface TrainerData {
   id: string; name: string; playerName: string; concept: string; nature: string;
   age: TrainerAge; rank: Rank; money: number; gender: TrainerGender;
