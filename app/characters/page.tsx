@@ -187,7 +187,7 @@ function PointBudget({ used, total, label }: { used: number; total: number; labe
   );
 }
 
-function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange, hint, footnote, min = TRAINER_ATTR_BASE }: {
+function PipRow({ label, value, max, onChange, locked, base, dot, training, onTrainingChange, hint, footnote, min = TRAINER_ATTR_BASE, atCap }: {
   label: string; value: number; max: number; onChange: (v: number) => void;
   locked?: boolean; base?: number; dot?: boolean;
   training?: number; onTrainingChange?: (v: number) => void;
@@ -204,6 +204,11 @@ function PipRow({ label, value, max, onChange, locked, base, dot, training, onTr
    *  easy to miss for something this load-bearing, so it prints under the
    *  label instead of waiting to be hovered. */
   footnote?: string;
+  /** True once the point pool this row spends from is fully spent. The +
+   *  button used to only check this row's own per-stat max, so it kept
+   *  looking clickable (and, worse, kept being clickable) after the whole
+   *  budget was gone — this grays it out and disables it to match. */
+  atCap?: boolean;
 }) {
   const total = value + (training ?? 0);
   const totalMax = max;
@@ -244,7 +249,8 @@ function PipRow({ label, value, max, onChange, locked, base, dot, training, onTr
       <span style={{ fontSize: 13, fontFamily: "'Exo 2'", fontWeight: 700, color: "#202020", minWidth: 20 }}>{total}</span>
       {!locked && <>
         <button onClick={() => onChange(Math.max(min, value - 1))} style={{ background: "none", border: "none", color: "#585858", cursor: "pointer", fontSize: 14, padding: "0 2px" }}>−</button>
-        <button onClick={() => value < max && onChange(value + 1)} style={{ background: "none", border: "none", color: value < max ? "#2850A0" : "#7888A8", cursor: value < max ? "pointer" : "default", fontSize: 14, padding: "0 2px" }}>+</button>
+        <button onClick={() => value < max && !atCap && onChange(value + 1)} disabled={!(value < max) || atCap}
+          style={{ background: "none", border: "none", color: value < max && !atCap ? "#2850A0" : "#7888A8", cursor: value < max && !atCap ? "pointer" : "default", fontSize: 14, padding: "0 2px" }}>+</button>
       </>}
       {onTrainingChange && (
         <div style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: 4, borderLeft: "1px solid #A0700030", paddingLeft: 6 }}>
@@ -546,7 +552,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
             return (
               <PipRow key={attr} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sheet.attributes[attr]} max={limit}
                 footnote={pokemonAttrFootnote(attr)}
-                base={base} dot
+                base={base} dot atCap={upgradesLeft <= 0}
                 training={ta[attr]}
                 onTrainingChange={trainingMode ? v => {
                   const clamped = Math.min(v, limit - sheet.attributes[attr]);
@@ -898,18 +904,33 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
               {SOCIAL_ATTRS.map(key => {
                 const val = social[key] ?? 1;
                 const label = key.charAt(0).toUpperCase() + key.slice(1);
+                // Clicking a pip used to jump straight to it regardless of
+                // budget — a distant pip could spend more points in one
+                // click than were actually left. Clamped to whatever's
+                // still affordable, and pips past that point are disabled
+                // rather than just silently refusing the click.
+                const remaining = Math.max(0, socialInfo.socialPoints - usedSocialPts);
+                const maxReachable = val + remaining;
                 return (
                   <div key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <span style={{ fontSize: 10, color: "#383838", width: 68, flexShrink: 0 }}>{label}</span>
                     <div style={{ display: "flex", gap: 2 }}>
-                      {Array.from({ length: TRAINER_ATTR_MAX }).map((_, i) => (
-                        <button key={i} disabled={i === 0} onClick={() => {
-                          const newVal = val === i + 1 ? Math.max(1, i) : i + 1;
-                          const cost = newVal - val;
-                          if (cost > 0 && usedSocialPts >= socialInfo.socialPoints) return;
-                          upd({ socialAttributes: { ...social, [key]: newVal } });
-                        }} style={{ width: 12, height: 12, borderRadius: "50%", border: `1px solid ${i < val ? "#A040A0" : "#2850A0"}`, background: i < val ? "#A040A0" : "transparent", cursor: i === 0 ? "default" : "pointer", padding: 0 }} />
-                      ))}
+                      {Array.from({ length: TRAINER_ATTR_MAX }).map((_, i) => {
+                        const pipVal = i + 1;
+                        const locked = pipVal > maxReachable;
+                        return (
+                          <button key={i} disabled={i === 0 || locked} onClick={() => {
+                            const desired = val === pipVal ? Math.max(1, i) : pipVal;
+                            const newVal = desired > val ? Math.min(desired, maxReachable) : desired;
+                            if (newVal === val) return;
+                            upd({ socialAttributes: { ...social, [key]: newVal } });
+                          }} style={{ width: 12, height: 12, borderRadius: "50%",
+                            border: `1px solid ${i < val ? "#A040A0" : locked ? "#7888A8" : "#2850A0"}`,
+                            background: i < val ? "#A040A0" : "transparent",
+                            cursor: i === 0 || locked ? "default" : "pointer",
+                            opacity: locked ? 0.4 : 1, padding: 0 }} />
+                        );
+                      })}
                     </div>
                     <span style={{ fontSize: 10, color: "#585858", marginLeft: 2 }}>{val}</span>
                   </div>
@@ -951,6 +972,11 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 8px" }}>
               {POKEMON_SKILLS.map(({ key, label, desc, footnote }) => {
                 const val = sheet.skills[key] ?? 0;
+                // Same clamp-and-lock as the Social pips above — a pip
+                // click used to jump straight to the clicked position no
+                // matter how many points that actually cost.
+                const remaining = Math.max(0, skillInfo.skillPoints - usedPts);
+                const maxReachable = val + remaining;
                 return (
                   /* The tooltip belongs on the name, not the whole row — on the
                      row it fired over the pip boxes you actually click, which
@@ -965,14 +991,22 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
                       {footnote && <span style={{ display: "block", fontSize: 8, color: "#A07000", lineHeight: 1.2 }}>↳ {footnote}</span>}
                     </span>
                     <div style={{ display: "flex", gap: 2 }}>
-                      {Array.from({ length: skillInfo.skillLimit }).map((_, i) => (
-                        <button key={i} onClick={() => {
-                          const newVal = val === i + 1 ? i : i + 1;
-                          const cost = newVal - val;
-                          if (cost > 0 && usedPts >= skillInfo.skillPoints) return;
-                          upd({ skills: { ...sheet.skills, [key]: newVal } });
-                        }} style={{ width: 12, height: 12, borderRadius: "50%", border: `1px solid ${i < val ? "#6890f0" : "#2850A0"}`, background: i < val ? "#6890f0" : "transparent", cursor: "pointer", padding: 0 }} />
-                      ))}
+                      {Array.from({ length: skillInfo.skillLimit }).map((_, i) => {
+                        const pipVal = i + 1;
+                        const locked = pipVal > maxReachable;
+                        return (
+                          <button key={i} disabled={locked} onClick={() => {
+                            const desired = val === pipVal ? i : pipVal;
+                            const newVal = desired > val ? Math.min(desired, maxReachable) : desired;
+                            if (newVal === val) return;
+                            upd({ skills: { ...sheet.skills, [key]: newVal } });
+                          }} style={{ width: 12, height: 12, borderRadius: "50%",
+                            border: `1px solid ${i < val ? "#6890f0" : locked ? "#7888A8" : "#2850A0"}`,
+                            background: i < val ? "#6890f0" : "transparent",
+                            cursor: locked ? "default" : "pointer",
+                            opacity: locked ? 0.4 : 1, padding: 0 }} />
+                        );
+                      })}
                     </div>
                     <span style={{ fontSize: 10, color: "#585858", marginLeft: 2 }}>{val}</span>
                   </div>
@@ -1564,6 +1598,7 @@ function CharactersPageInner() {
                   </div>
                   {(["strength", "dexterity", "vitality", "insight"] as const).map(attr => (
                     <PipRow key={attr} dot hint={TRAINER_ATTR_HINTS[attr]} footnote={trainerAttrFootnote(attr)} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={TRAINER_ATTR_MAX}
+                      atCap={attrBudgetLeft <= 0}
                       onChange={v => {
                         const cost = v - sel.attributes[attr];
                         if (cost > 0 && attrBudgetLeft <= 0) return;
@@ -1577,6 +1612,7 @@ function CharactersPageInner() {
                     </div>
                     {(["tough", "cool", "beauty", "cute", "clever"] as const).map(attr => (
                       <PipRow key={attr} dot hint={TRAINER_SOCIAL_HINTS[attr]} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.socialAttributes[attr]} max={TRAINER_ATTR_MAX}
+                        atCap={socialBudgetLeft <= 0}
                         onChange={v => {
                           const cost = v - sel.socialAttributes[attr];
                           if (cost > 0 && socialBudgetLeft <= 0) return;
@@ -1598,6 +1634,7 @@ function CharactersPageInner() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                         {group.skills.map(skill => (
                           <PipRow key={skill} dot min={0} hint={TRAINER_SKILL_HINTS[skill]} footnote={trainerSkillFootnote(skill)} label={skill.charAt(0).toUpperCase() + skill.slice(1)} value={sel.skills[skill as keyof typeof sel.skills]} max={rankInfo.skillLimit}
+                            atCap={usedSkillPoints >= rankInfo.skillPoints}
                             onChange={v => {
                               const cost = v - sel.skills[skill as keyof typeof sel.skills];
                               if (cost > 0 && usedSkillPoints >= rankInfo.skillPoints) return;
