@@ -3,7 +3,7 @@ import React from "react";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
-  POKEMON, MOVES, ABILITIES, ITEMS, TYPE_COLORS, TYPE_CHART, MISSINGNO, HABITATS,
+  POKEMON, MOVES, ABILITIES, ITEMS, TYPE_COLORS, TYPE_CHART, MISSINGNO, HABITATS, NATURES,
   PokemonEntry, Move, PokemonType, Rank,
 } from "../data/pokerole-data";
 import type { ItemData, HabitatData } from "../data/pokerole-data";
@@ -1706,6 +1706,13 @@ function statAppliestoSelf(move:Move):boolean{
          moveTargetsSelf(move);
 }
 
+// Module-scope, not inline in a component — react-hooks/purity flags
+// Math.random() called directly inside a component's own body even from an
+// event handler, since it can't tell that call never happens at render time.
+function randomNature():string{
+  return NATURES[Math.floor(Math.random()*NATURES.length)];
+}
+
 // ── Bag item effects ─────────────────────────────────────────────────────────
 // Name-matched rather than data-driven — the item catalog has no numeric heal
 // field, only flavor text, so this is the one place those numbers live.
@@ -3344,16 +3351,20 @@ function CapturePopup({allEntries,defaultTargetId,defaultThrowerId,defaultBallNa
     return (thrower.inventory||[]) as ItemData[];
   },[thrower]);
   const balls=throwerInventory.filter(i=>i.pocket==="Pokeballs"||i.category?.toLowerCase().includes("ball")||i.name.toLowerCase().includes("ball"));
-  // Fallback: standard balls shown as unavailable if thrower has no inventory
+  // Fallback: standard balls shown as unavailable if thrower has no inventory.
+  // Names match the real item catalog exactly (see items-data.ts) — these
+  // used to be flavor names ("Pokéball", "Great Ball") that didn't match a
+  // real inventory item's actual name ("Pokeball", "Greatball"), so a real
+  // Ultra Ball silently fell back to the same 4d seal as a plain Pokeball.
   const STANDARD_BALLS=[
-    {name:"Pokéball",description:"Standard ball.",pocket:"Pokeballs",category:"Ball",cost:"200",oneUse:true},
-    {name:"Great Ball",description:"Better ball.",pocket:"Pokeballs",category:"Ball",cost:"600",oneUse:true},
-    {name:"Ultra Ball",description:"High-quality ball.",pocket:"Pokeballs",category:"Ball",cost:"1200",oneUse:true},
+    {name:"Pokeball",description:"Standard ball.",pocket:"Pokeballs",category:"Ball",cost:"200",oneUse:true},
+    {name:"Greatball",description:"Better ball.",pocket:"Pokeballs",category:"Ball",cost:"600",oneUse:true},
+    {name:"Ultraball",description:"High-quality ball.",pocket:"Pokeballs",category:"Ball",cost:"1200",oneUse:true},
   ] as ItemData[];
   const ballOptions=thrower?(balls.length>0?balls:STANDARD_BALLS):STANDARD_BALLS;
   const isBallAvailable=(b:ItemData)=>!thrower||balls.some(bl=>bl.name===b.name);
 
-  const SEAL_POTENCY:Record<string,number>={"Pokéball":4,"Great Ball":6,"Ultra Ball":8};
+  const SEAL_POTENCY:Record<string,number>={"Pokeball":4,"Greatball":6,"Ultraball":8};
   const getSealDice=(name:string)=>SEAL_POTENCY[name]||4;
   const selectedBall=ballOptions.find(b=>b.name===ballKey);
   const sealDice=selectedBall?getSealDice(selectedBall.name):4;
@@ -3378,53 +3389,73 @@ function CapturePopup({allEntries,defaultTargetId,defaultThrowerId,defaultBallNa
      the ball stayed in the bag and a caught Pokémon never reached the trainer.
      A thrown ball is spent either way; a successful one also mints a sheet
      (from the entry's own battle state, so a weakened catch keeps its stats)
-     and drops it in the party, or the PC box when the party is already six. */
+     and drops it in the party, or the PC box when the party is already six.
+     Wrapped in try/catch so a failure here surfaces as a visible alert
+     instead of silently leaving the ball spent, the sheet unsaved, and the
+     Pokémon still sitting on the tracker with no indication anything went
+     wrong. */
   const commitResult=()=>{
     if(!thrower||!target||committed)return;
-    const allTrainers=loadFromStorage<TrainerData[]>("trainers",[]);
-    const ti=allTrainers.findIndex(t=>t.id===thrower.id);
-    if(ti<0)return;
-    const t={...allTrainers[ti]};
+    try{
+      const allTrainers=loadFromStorage<TrainerData[]>("trainers",[]);
+      const ti=allTrainers.findIndex(t=>t.id===thrower.id);
+      if(ti<0){alert("Couldn't find this trainer's save data anymore — nothing was recorded. Reopen the capture popup and try again.");return;}
+      const t={...allTrainers[ti]};
 
-    // Spend the ball, if this thrower actually carries one of that name.
-    const inv=[...(t.inventory||[])];
-    const bi=inv.findIndex(i=>i.name.toLowerCase()===(selectedBall?.name||"").toLowerCase());
-    if(bi>=0){
-      const q=(inv[bi].quantity||1)-1;
-      if(q<=0)inv.splice(bi,1); else inv[bi]={...inv[bi],quantity:q};
+      // Spend the ball, if this thrower actually carries one of that name.
+      const inv=[...(t.inventory||[])];
+      const bi=inv.findIndex(i=>i.name.toLowerCase()===(selectedBall?.name||"").toLowerCase());
+      if(bi>=0){
+        const q=(inv[bi].quantity||1)-1;
+        if(q<=0)inv.splice(bi,1); else inv[bi]={...inv[bi],quantity:q};
+      }
+      t.inventory=inv;
+
+      let msg=`${selectedBall?.name||"Ball"} used.`;
+      if(caught){
+        // The battle entry's id is already unique per combatant, so it makes a
+        // stable sheet key without reaching for Date.now() mid-render.
+        const key=`${t.id}_${target.pokemon.number}_${target.id}`;
+        const sheets=loadFromStorage<Record<string,PokemonSheetData>>("pokemon_sheets",{});
+        // HP and status at the moment of capture have nowhere else to live —
+        // a fresh sheet has no HP/status fields of its own (those are a
+        // battle-tracker-only concept) — so they're recorded here instead of
+        // just disappearing.
+        const statusAtCapture=primaryStatus(target);
+        const captureNote=`Caught at ${target.currentHp}/${target.maxHp} HP${statusAtCapture!=="Healthy"?`, ${statusAtCapture}`:""}.`;
+        sheets[key]={
+          number:target.pokemon.number,nickname:target.nickname||"",
+          gender:resolveGender(target.pokemon.number,target.gender??"Unknown"),
+          rank:target.pokemon.suggestedRank,loyalty:1,happiness:1,
+          attributes:{...target.attrs},
+          trainingAttributes:{strength:0,dexterity:0,vitality:0,special:0,insight:0},
+          socialAttributes:{tough:1,cool:1,beauty:1,cute:1,clever:1},
+          skills:target.pokemonSkills??{brawl:0,channel:0,clash:0,evasion:0,alert:0,athletic:0,nature:0,stealth:0,charm:0,etiquette:0,intimidate:0,perform:0},
+          moves:(target.moves||[]).slice(0,4).map(m=>m.name),
+          partnerMoves:[],isPartner:false,
+          // A wild encounter has no nature of its own to carry over — the
+          // battle tracker never assigns one — so this is a random roll,
+          // same as the launch screen's own starter picker does.
+          nature:randomNature(),
+          origin:"wild" as const,
+          heldItem:"",cruelty:false,inPokeball:true,happinessPending:0,notes:captureNote,
+        };
+        saveToStorage("pokemon_sheets",sheets);
+        const toParty=(t.pokemon||[]).length<6;
+        if(toParty)t.pokemon=[...(t.pokemon||[]),key];
+        else t.pcBox=[...(t.pcBox||[]),key];
+        msg+=` ${nameOf(target,allEntries)} joined ${t.name||"the trainer"}'s ${toParty?"party":"PC Box"}.`;
+      }
+
+      allTrainers[ti]=t;
+      saveToStorage("trainers",allTrainers);
+      notifySession();
+      if(caught)onCaptured?.(target.id);
+      setCommitted(msg);
+    }catch(err){
+      console.error("Capture commit failed:",err);
+      alert(`Something went wrong recording this capture: ${err instanceof Error?err.message:String(err)}\n\nCheck the trainer's inventory and party before trying again — nothing may have been saved.`);
     }
-    t.inventory=inv;
-
-    let msg=`${selectedBall?.name||"Ball"} used.`;
-    if(caught){
-      // The battle entry's id is already unique per combatant, so it makes a
-      // stable sheet key without reaching for Date.now() mid-render.
-      const key=`${t.id}_${target.pokemon.number}_${target.id}`;
-      const sheets=loadFromStorage<Record<string,PokemonSheetData>>("pokemon_sheets",{});
-      sheets[key]={
-        number:target.pokemon.number,nickname:target.nickname||"",
-        gender:resolveGender(target.pokemon.number,target.gender??"Unknown"),
-        rank:target.pokemon.suggestedRank,loyalty:1,happiness:1,
-        attributes:{...target.attrs},
-        trainingAttributes:{strength:0,dexterity:0,vitality:0,special:0,insight:0},
-        socialAttributes:{tough:1,cool:1,beauty:1,cute:1,clever:1},
-        skills:target.pokemonSkills??{brawl:0,channel:0,clash:0,evasion:0,alert:0,athletic:0,nature:0,stealth:0,charm:0,etiquette:0,intimidate:0,perform:0},
-        moves:(target.moves||[]).slice(0,4).map(m=>m.name),
-        partnerMoves:[],isPartner:false,nature:"Hardy",origin:"wild" as const,
-        heldItem:"",cruelty:false,inPokeball:true,happinessPending:0,notes:"",
-      };
-      saveToStorage("pokemon_sheets",sheets);
-      const toParty=(t.pokemon||[]).length<6;
-      if(toParty)t.pokemon=[...(t.pokemon||[]),key];
-      else t.pcBox=[...(t.pcBox||[]),key];
-      msg+=` ${nameOf(target,allEntries)} joined ${t.name||"the trainer"}'s ${toParty?"party":"PC Box"}.`;
-    }
-
-    allTrainers[ti]=t;
-    saveToStorage("trainers",allTrainers);
-    notifySession();
-    if(caught)onCaptured?.(target.id);
-    setCommitted(msg);
   };
 
   return(
