@@ -48,7 +48,7 @@ export default function StarterPicker({ trainer, narrow, onCancel }: {
   const pick = (p: typeof POKEMON[number]) => {
     setSelected(p);
     setNickname("");
-    setNature("Hardy");
+    setNature(NATURES[Math.floor(Math.random() * NATURES.length)]);
     const resolved = resolveGender(p.number, "Unknown");
     setGender(resolved === "Unknown" ? "Male" : resolved);
   };
