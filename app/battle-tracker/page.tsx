@@ -1684,6 +1684,21 @@ function statAppliestoSelf(move:Move):boolean{
          moveTargetsSelf(move);
 }
 
+// ── Bag item effects ─────────────────────────────────────────────────────────
+// Name-matched rather than data-driven — the item catalog has no numeric heal
+// field, only flavor text, so this is the one place those numbers live.
+// Shared by the trainer-skills popup's own Bag section and the in-scene BAG
+// menu, so a restorative reads the same wherever it's used from.
+function bagItemEffect(name:string,maxHp:number):{healAmt:number|null;healRevive:number|null;statusCure:string|null;xBoost:string|null}{
+  const n=name.toLowerCase();
+  const healAmt=n.includes("max potion")||n.includes("max revive")?maxHp:n.includes("hyper potion")?50:n.includes("super potion")?20:n==="potion"||n.includes(" potion")?10:n.includes("oran berry")?10:n.includes("sitrus berry")?Math.floor(maxHp/4):n.includes("moomoo milk")?100:n.includes("lemonade")?70:n.includes("fresh water")?30:n.includes("soda pop")?50:null;
+  const isRevive=n.includes("revive");
+  const healRevive=n.includes("max revive")?maxHp:isRevive?Math.floor(maxHp/2):null;
+  const statusCure=n.includes("antidote")?"Poisoned":n.includes("burn heal")?"Burned":n.includes("ice heal")?"Frozen":(n.includes("paralyze heal")||n.includes("parlyzheal"))?"Paralyzed":(n.includes("awakening")||n.includes("chesto berry"))?"Asleep":(n.includes("full heal")||n.includes("full restore"))?"all":n.includes("pecha berry")?"Poisoned":n.includes("rawst berry")?"Burned":n.includes("aspear berry")?"Frozen":n.includes("cheri berry")?"Paralyzed":n.includes("lum berry")?"all":null;
+  const xBoost=n.includes("x attack")?"strength":n.includes("x defense")?"vitality":(n.includes("x sp. atk")||n.includes("x spatk"))?"special":(n.includes("x sp. def")||n.includes("x spdef"))?"insight":n.includes("x speed")?"dexterity":null;
+  return{healAmt,healRevive,statusCure,xBoost};
+}
+
 // ── Held Item helpers ────────────────────────────────────────────────────────
 function getHeldItem(entry:BattleEntry,trainers:any[]):string|null{
   if(!entry.linkedTrainerId)return null;
@@ -3286,14 +3301,14 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
 }
 
 // ── Capture Popup (full) ──────────────────────────────────────────────────────
-function CapturePopup({allEntries,defaultTargetId,onClose,onCaptured}:{allEntries:BattleEntry[];defaultTargetId?:string;onClose:()=>void;onCaptured?:(entryId:string)=>void;}){
+function CapturePopup({allEntries,defaultTargetId,defaultThrowerId,defaultBallName,onClose,onCaptured}:{allEntries:BattleEntry[];defaultTargetId?:string;defaultThrowerId?:string;defaultBallName?:string;onClose:()=>void;onCaptured?:(entryId:string)=>void;}){
   const trainers=useMemo(()=>loadFromStorage<any[]>("trainers",[]),[]);
   const pokemonSheets=useMemo(()=>loadFromStorage<Record<string,any>>("pokemon_sheets",{}),[]);
   const [committed,setCommitted]=useState<string|null>(null);
 
-  const [throwerId,setThrowerId]=useState<string>("");
+  const [throwerId,setThrowerId]=useState<string>(defaultThrowerId||"");
   const [targetId,setTargetId]=useState<string>(defaultTargetId||"");
-  const [ballKey,setBallKey]=useState<string>("");
+  const [ballKey,setBallKey]=useState<string>(defaultBallName||"");
   const [throwRoll,setThrowRoll]=useState<RollResult|null>(null);
   const [sealRoll,setSealRoll]=useState<RollResult|null>(null);
 
@@ -3726,11 +3741,7 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
             {inventory.length===0&&<div style={{fontSize:9,color:"#5a6080",fontStyle:"italic"}}>Empty.</div>}
             {inventory.map((item:any,ii:number)=>{
               const n=item.name.toLowerCase();
-              const healAmt=n.includes("max potion")||n.includes("max revive")?entry.maxHp:n.includes("hyper potion")?50:n.includes("super potion")?20:n==="potion"||n.includes(" potion")?10:n.includes("oran berry")?10:n.includes("sitrus berry")?Math.floor(entry.maxHp/4):n.includes("moomoo milk")?100:n.includes("lemonade")?70:n.includes("fresh water")?30:n.includes("soda pop")?50:null;
-              const isRevive=n.includes("revive");
-              const healRevive=n.includes("max revive")?entry.maxHp:isRevive?Math.floor(entry.maxHp/2):null;
-              const statusCure=n.includes("antidote")?"Poisoned":n.includes("burn heal")?"Burned":n.includes("ice heal")?"Frozen":(n.includes("paralyze heal")||n.includes("parlyzheal"))?"Paralyzed":(n.includes("awakening")||n.includes("chesto berry"))?"Asleep":(n.includes("full heal")||n.includes("full restore"))?"all":n.includes("pecha berry")?"Poisoned":n.includes("rawst berry")?"Burned":n.includes("aspear berry")?"Frozen":n.includes("cheri berry")?"Paralyzed":n.includes("lum berry")?"all":null;
-              const xBoost=n.includes("x attack")?"strength":n.includes("x defense")?"vitality":(n.includes("x sp. atk")||n.includes("x spatk"))?"special":(n.includes("x sp. def")||n.includes("x spdef"))?"insight":n.includes("x speed")?"dexterity":null;
+              const{healAmt,healRevive,statusCure,xBoost}=bagItemEffect(item.name,entry.maxHp);
               const holdNote=n.includes("leftovers")?"🔮 +1 HP/round (EOR)":n.includes("choice band")?"🔮 STR+2/locked":n.includes("choice specs")?"🔮 SPC+2/locked":n.includes("choice scarf")?"🔮 DEX+2/locked":n.includes("life orb")?"🔮 +2dmg/recoil":n.includes("focus sash")?"🔮 Survive 1-hit":n.includes("rocky helmet")?"🔮 Contact→1dmg":n.includes("assault vest")?"🔮 VIT+2/no support":n.includes("eviolite")?"🔮 VIT+INS+2":null;
               const canUse=!!(healAmt||healRevive||statusCure||xBoost);
               return(
@@ -5041,6 +5052,9 @@ export default function BattleTrackerPage(){
   // no card of its own to hang state off; this is the fix for the report that
   // Poké Balls in the bag "didn't appear as an option in the battle encounter."
   const [showSceneCapture,setShowSceneCapture]=useState(false);
+  // Which owned ball the BAG menu's row was clicked for — passed through to
+  // CapturePopup as its starting selection instead of leaving Step 3 blank.
+  const [sceneCaptureBall,setSceneCaptureBall]=useState<string>("");
   const [drawerId,setDrawerId]=useState<string|null>(null);
   const [scenePopup,setScenePopup]=useState<Move|null>(null);
   const [sceneTargetIds,setSceneTargetIds]=useState<string[]>([]);
@@ -5922,47 +5936,78 @@ export default function BattleTrackerPage(){
                   </div>
                 )}
 
-                {/* BAG overlay — quick field items */}
-                {menuMode==="bag"&&(
+                {/* BAG overlay — quick field items, read from the linked
+                    trainer's actual inventory rather than a fixed hardcoded
+                    list, so nothing shows here that isn't really in the bag
+                    (and Poké Balls, previously a single generic button
+                    unrelated to what was owned, now list per type). */}
+                {menuMode==="bag"&&(()=>{
+                  const playerTrainer=onFieldPlayer?.linkedTrainerId?allTrainersForSprites.find(t=>t.id===onFieldPlayer.linkedTrainerId):undefined;
+                  const inv:{name:string;quantity:number}[]=playerTrainer?.inventory??[];
+                  const usable=onFieldPlayer?inv.filter(it=>it.quantity>0).map(it=>({item:it,...bagItemEffect(it.name,onFieldPlayer.maxHp)}))
+                    .filter(x=>x.healAmt!=null||x.healRevive!=null||x.statusCure!=null):[];
+                  const balls=inv.filter(it=>it.quantity>0&&ITEMS.find(i=>i.name===it.name)?.pocket==="Pokeballs");
+                  return(
                   <div style={{position:"absolute",inset:0,zIndex:8,background:"rgba(24,16,8,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-                    <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:12,maxWidth:340,width:"100%"}}>
+                    <div style={{background:"#F8F8E8",border:"3px solid #181818",boxShadow:"4px 4px 0 #787878",padding:12,maxWidth:340,width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
                       <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
                         <span style={{fontSize:9,fontFamily:"'Press Start 2P',monospace",color:"#181818",flex:1}}>BAG</span>
                         <button onClick={()=>setMenuMode("root")} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#E8E8D0",border:"2px solid #181818",padding:"3px 6px",cursor:"pointer"}}>BACK</button>
                       </div>
                       <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",marginBottom:8,lineHeight:1.6}}>Quick restore for {onFieldPlayer?(nameOf(onFieldPlayer,entries)):"—"}.</div>
-                      {onFieldPlayer?(
+                      {!onFieldPlayer?(
+                        <div style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#A00808"}}>No party Pokémon on field.</div>
+                      ):!playerTrainer?(
+                        <div style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#A00808"}}>Not linked to a trainer — nothing to restore from.</div>
+                      ):(
                         <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                          {[
-                            {l:"POTION  (+2 HP)",fn:()=>upd(onFieldPlayer.id,{currentHp:Math.min(onFieldPlayer.maxHp,onFieldPlayer.currentHp+2)}),m:`${nameOf(onFieldPlayer,entries)} recovered HP!`},
-                            {l:"ETHER   (+2 WP)",fn:()=>upd(onFieldPlayer.id,{currentWill:Math.min(onFieldPlayer.maxWill,onFieldPlayer.currentWill+2)}),m:`${nameOf(onFieldPlayer,entries)} recovered WP!`},
-                            {l:"FULL RESTORE",fn:()=>upd(onFieldPlayer.id,{currentHp:onFieldPlayer.maxHp,currentWill:onFieldPlayer.maxWill,statuses:["Healthy"],statusTurnsLeft:0}),m:`${nameOf(onFieldPlayer,entries)} was fully restored!`},
-                          ].map(it=>(
-                            <button key={it.l} onClick={()=>{it.fn();setSceneMsg(it.m);setMenuMode("root");}} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#F0ECD4",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"7px 8px",cursor:"pointer",textAlign:"left"}}>{it.l}</button>
-                          ))}
+                          {usable.length===0&&<div style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#807050"}}>No usable items in the bag.</div>}
+                          {usable.map(({item,healAmt,healRevive,statusCure})=>{
+                            const label=healRevive!=null?`${item.name} (revive, +${healRevive} HP)`
+                              :healAmt!=null?`${item.name} (+${healAmt} HP)`
+                              :`${item.name} (cures ${statusCure==="all"?"status":statusCure})`;
+                            return(
+                              <button key={item.name} onClick={()=>{
+                                if(healRevive!=null)upd(onFieldPlayer.id,{currentHp:healRevive,statuses:["Healthy"]});
+                                else if(healAmt!=null)upd(onFieldPlayer.id,{currentHp:Math.min(onFieldPlayer.maxHp,onFieldPlayer.currentHp+healAmt)});
+                                else if(statusCure==="all")upd(onFieldPlayer.id,{statuses:["Healthy"],statusTurnsLeft:0});
+                                else if(statusCure)upd(onFieldPlayer.id,{statuses:removeStatus(onFieldPlayer.statuses||[],statusCure)});
+                                setSceneMsg(`${nameOf(onFieldPlayer,entries)} used ${item.name}!`);
+                                setMenuMode("root");
+                              }} style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#F0ECD4",border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"7px 8px",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",gap:8}}>
+                                <span>{label}</span><span>×{item.quantity}</span>
+                              </button>
+                            );
+                          })}
                         </div>
-                      ):<div style={{fontSize:8,fontFamily:"'Press Start 2P',monospace",color:"#A00808"}}>No party Pokémon on field.</div>}
+                      )}
 
                       {/* Poké Balls — a separate section from restoratives,
                           since a ball is thrown at the opponent, not used on
                           your own side. Only offered when there's actually a
-                          wild/enemy mon in focus to throw one at. */}
-                      {onFieldEnemy&&onFieldEnemy.side==="enemy"&&(
+                          wild/enemy mon in focus to throw one at, and only
+                          balls this trainer's bag actually has. */}
+                      {balls.length>0&&onFieldEnemy&&onFieldEnemy.side==="enemy"&&(
                         <div style={{marginTop:10,paddingTop:8,borderTop:"2px dashed #C8C8A8"}}>
                           <div style={{fontSize:7,fontFamily:"'Press Start 2P',monospace",color:"#484830",marginBottom:5,lineHeight:1.6}}>
                             Throw at {nameOf(onFieldEnemy,entries)}.
                           </div>
-                          <button onClick={()=>{setShowSceneCapture(true);setMenuMode("root");}}
-                            style={{width:"100%",fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#F0ECD4",
-                              border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"7px 8px",cursor:"pointer",
-                              textAlign:"left",display:"flex",alignItems:"center",gap:6}}>
-                            <span aria-hidden>🎯</span>POKé BALL
-                          </button>
+                          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                            {balls.map(b=>(
+                              <button key={b.name} onClick={()=>{setSceneCaptureBall(b.name);setShowSceneCapture(true);setMenuMode("root");}}
+                                style={{width:"100%",fontSize:8,fontFamily:"'Press Start 2P',monospace",background:"#F0ECD4",
+                                  border:"2px solid #181818",boxShadow:"2px 2px 0 #181818",padding:"7px 8px",cursor:"pointer",
+                                  textAlign:"left",display:"flex",alignItems:"center",gap:6,justifyContent:"space-between"}}>
+                                <span style={{display:"flex",alignItems:"center",gap:6}}><span aria-hidden>🎯</span>{b.name}</span><span>×{b.quantity}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* BOTTOM BAR — text box + menu. Height and type scale with the
@@ -6183,8 +6228,9 @@ export default function BattleTrackerPage(){
           {/* Capture popup (from BAG → POKé BALL) */}
           {mounted&&showSceneCapture&&onFieldEnemy&&(
             <CapturePopup allEntries={entries} defaultTargetId={onFieldEnemy.id}
-              onClose={()=>setShowSceneCapture(false)}
-              onCaptured={id=>{remove(id);setShowSceneCapture(false);}}/>
+              defaultThrowerId={onFieldPlayer?.linkedTrainerId} defaultBallName={sceneCaptureBall}
+              onClose={()=>{setShowSceneCapture(false);setSceneCaptureBall("");}}
+              onCaptured={id=>{remove(id);setShowSceneCapture(false);setSceneCaptureBall("");}}/>
           )}
 
         </div>
