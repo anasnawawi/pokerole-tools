@@ -35,8 +35,8 @@ function menuFor(trainer: TrainerData | null, party: number): MenuItem[] {
   return [
     /* The player's own name leads the menu — it's the row that says whose save
        this is, and the card behind it is the one they'll open most often. */
-    { id:"trainer", icon:"👤", label: who ? who.toUpperCase() : "TRAINER", href:"/trainer-card",
-      desc:"Your trainer card — ID, money, badges, attributes and skills." },
+    { id:"trainer", icon:"👤", label: who ? who.toUpperCase() : "TRAINER", href:"/characters",
+      desc:"Your trainer card and sheet — ID, money, badges, attributes and skills." },
     { id:"pokedex", icon:"📖", label:"POKéDEX", href:"/reference?tab=pokedex",
       desc:"All 1025 Pokémon — stats, types, abilities and learnable moves." },
     { id:"pokemon", icon:"🔴", label:"POKéMON", href:"/characters?tab=pokemon",

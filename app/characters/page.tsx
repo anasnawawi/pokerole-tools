@@ -22,6 +22,8 @@ import { GenderIcon } from "../components/GenderIcon";
 import { MOVES_DATA } from "../data/moves-data";
 import { POKEMON_EGG_GROUPS } from "../data/egg-groups-data";
 import PokedexFrame from "../components/PokedexFrame";
+import { TrainerCard, PokemonCard } from "../components/TrainerCards";
+import { useSession } from "../lib/session";
 
 const RANK_COLORS: Record<Rank,string> = {Starter:"#78c850",Rookie:"#6890f0",Standard:"#f8d030",Advanced:"#f08030",Expert:"#a040a0",Ace:"#e04040",Master:"#705898",Champion:"#ffd700"};
 const RANKS: Rank[] = ["Starter","Rookie","Standard","Advanced","Expert","Ace","Master","Champion"];
@@ -1242,6 +1244,13 @@ function CharactersPageInner() {
   const upd = useCallback((id: string, u: Partial<TrainerData>) => {
     setTrainers(prev => prev.map(t => t.id === id ? { ...t, ...u } : t));
   }, []);
+  // Live HP for the read-only Pokémon cards — same battle-tracker source the
+  // old standalone /trainer-card page read, so a card can't contradict a
+  // fight already in progress.
+  const battle = useSession()?.battle ?? [];
+  // "POKéDEX" on the trainer card counts everything this trainer owns, party
+  // and box alike — the box is still caught, and the games count it.
+  const owned = sel ? sel.pokemon.length + (sel.pcBox ?? []).length : 0;
 
   const rankInfo = sel ? TRAINER_RANK_POINTS[sel.rank] : TRAINER_RANK_POINTS.Rookie;
   const ageInfo = sel ? TRAINER_AGE_POINTS[sel.age] : TRAINER_AGE_POINTS.Teen;
@@ -1484,6 +1493,14 @@ function CharactersPageInner() {
             {tab === "sheet" && (
               <div style={{ display: "grid", gap: narrow ? 12 : 16,
                 gridTemplateColumns: narrow ? "1fr" : "1fr 1fr" }}>
+                {/* The trainer card — a glance at who this is before the
+                    editable form underneath spells it out field by field.
+                    Used to be its own page (/trainer-card, now a redirect
+                    here); living right above the sheet it summarizes means
+                    a GM never leaves this page just to see it. */}
+                <div style={{ gridColumn: "1/-1", maxWidth: 420 }}>
+                  <TrainerCard trainer={sel} owned={owned} />
+                </div>
                 {/* Identity */}
                 <div style={{ gridColumn: "1/-1" }}>
                 <Panel title="Trainer Identity" open={openSections.identity}
@@ -1965,7 +1982,16 @@ function CharactersPageInner() {
                   if (!sheet) return null;
                   const partyHasPartner = sel.pokemon.some(k => k !== key && pokemonSheets[k]?.isPartner);
                   return (
-                    <PokemonPartySheet key={key} sheet={sheet} trainerRank={sel.rank}
+                  <div key={key} style={{ marginBottom: 16 }}>
+                    {/* The read-only card above the editable sheet below it —
+                        same pairing as the trainer's own card above the
+                        Identity form. Shows live battle HP when this mon is
+                        on the field, which the edit form itself has no
+                        field for. */}
+                    <div style={{ marginBottom: 10 }}>
+                      <PokemonCard sheetKey={key} sheet={sheet} battle={battle} />
+                    </div>
+                    <PokemonPartySheet sheet={sheet} trainerRank={sel.rank}
                       onChange={s => updatePokemonSheet(key, s)}
                       onRemove={() => removePokemon(key)}
                       onSendToBox={() => {
@@ -2000,6 +2026,7 @@ function CharactersPageInner() {
                       }}
                       trainerAttrs={sel.attributes}
                       trainerSkills={sel.skills} />
+                  </div>
                   );
                 })}
 
