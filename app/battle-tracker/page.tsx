@@ -883,29 +883,37 @@ function HazardMarkers({hazards}:{hazards:HazardSide}){
     </div>
   );
 }
-/* Every "roll" in this file used to be simulated (Math.random). The GM runs
-   these tables with physical dice the players actually roll, so the app's
-   own random numbers just duplicated/conflicted with what happened at the
-   table — these now record what the GM read off that real roll instead.
-   `rolls` stays around only as a (usually empty) legacy display fallback;
-   every consumer below already keyed off `successes` alone, so recording a
-   manually-entered count here is a drop-in replacement for what rollDice
-   used to return. `brutal` is new: a manual damage entry has no individual
-   die faces to auto-detect "2+ sixes" from, so the GM flags it directly. */
+/* Every "roll" in this file can go either way now: the app can still
+   simulate the dice itself (rollDice, restored below), or the GM can type
+   in what a physical roll at the table actually showed — both feed the
+   same RollResult shape, so nothing downstream cares which one produced
+   it. `rolls` is the real per-die faces for an app-rolled result, or empty
+   for a manually-entered one (fmtRoll falls back to just the total then).
+   `brutal` is manual-entry-only: a typed-in result has no individual die
+   faces to auto-detect "2+ sixes" from, so the GM flags it directly;
+   rollDice's own result still gets it auto-detected off the real rolls. */
 type RollResult={rolls:number[];successes:number;brutal?:boolean};
+function rollDice(n:number):RollResult{
+  const p=Math.max(1,n);
+  const rolls=Array.from({length:p},()=>Math.floor(Math.random()*6)+1);
+  return{rolls,successes:rolls.filter(r=>r>=4).length};
+}
 function manualRoll(successes:number,brutal?:boolean):RollResult{
   return{rolls:[],successes:Math.max(0,Math.floor(successes)),brutal};
 }
 function fmtRoll(r:RollResult):string{
-  return`${r.successes} ${r.successes===1?"success":"successes"}`;
+  return r.rolls.length
+    ?`[${r.rolls.join(",")}]=${r.successes}`
+    :`${r.successes} ${r.successes===1?"success":"successes"}`;
 }
-// Manual entry for any dice-pool check the GM already resolved at the table —
-// accuracy, evasion, clash, loyalty, throw/seal, skill checks, chance dice.
+// Entry for any dice-pool check — accuracy, evasion, clash, loyalty,
+// throw/seal, skill checks, chance dice — either the GM types in what a
+// physical roll at the table showed, or the app rolls it for them.
 // Damage uses the richer ManualDamageEntry below instead.
-function ManualSuccessEntry({pool,onConfirm,accent,label}:{pool:number;onConfirm:(successes:number)=>void;accent:string;label?:string}){
+function ManualSuccessEntry({pool,onConfirm,accent,label}:{pool:number;onConfirm:(result:RollResult)=>void;accent:string;label?:string}){
   const [val,setVal]=useState("");
   const n=val===""?null:Math.max(0,Math.min(pool,Math.floor(Number(val))||0));
-  const confirm=()=>{if(n!=null)onConfirm(n);};
+  const confirm=()=>{if(n!=null)onConfirm(manualRoll(n));};
   return(
     <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
       <input type="number" inputMode="numeric" min={0} max={pool} value={val}
@@ -915,6 +923,10 @@ function ManualSuccessEntry({pool,onConfirm,accent,label}:{pool:number;onConfirm
       <button onClick={confirm} disabled={n==null}
         style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:n==null?"#5a6080":accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:n==null?"default":"pointer"}}>
         ✓ Enter {label||"Roll"} ({pool}d)
+      </button>
+      <button onClick={()=>onConfirm(rollDice(pool))}
+        style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+        🎲 Roll {label||""} ({pool}d)
       </button>
     </div>
   );
@@ -933,22 +945,30 @@ function ManualD6Entry({onConfirm,accent}:{onConfirm:(face:number)=>void;accent:
         style={{width:44,background:"#0f1117",border:`1px solid ${accent}60`,borderRadius:4,color:accent,padding:"4px 6px",fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,textAlign:"center"}}/>
       <button onClick={confirm} disabled={n==null}
         style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:n==null?"#5a6080":accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:n==null?"default":"pointer"}}>✓ Enter d6</button>
+      <button onClick={()=>onConfirm(Math.floor(Math.random()*6)+1)}
+        style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll d6</button>
     </div>
   );
 }
 // Damage-specific manual entry. `finalPool` is the pool size AFTER Defense is
 // already subtracted (what the GM should physically roll), so the number
-// typed in is the raw successes/damage — no further Defense subtraction
-// happens downstream. Brutal (2+ sixes) can't be auto-detected without
-// individual die faces, so it's a manual flag here too.
-function ManualDamageEntry({finalPool,onConfirm,accent="#f08030"}:{finalPool:number;onConfirm:(successes:number,brutal:boolean)=>void;accent?:string}){
+// typed in — or the number the app rolls, if using the auto button — is the
+// raw successes/damage; no further Defense subtraction happens downstream.
+// A typed-in Brutal (2+ sixes) can't be auto-detected without individual die
+// faces, so it's a manual checkbox; the auto-roll button detects it for real
+// off its own rolls.
+function ManualDamageEntry({finalPool,onConfirm,accent="#f08030"}:{finalPool:number;onConfirm:(result:RollResult)=>void;accent?:string}){
   const [val,setVal]=useState("");
   const [brutal,setBrutal]=useState(false);
   const n=val===""?null:Math.max(0,Math.floor(Number(val))||0);
-  const confirm=()=>{if(n!=null)onConfirm(n,brutal);};
+  const confirm=()=>{if(n!=null)onConfirm(manualRoll(n,brutal));};
+  const autoRoll=()=>{
+    const r=rollDice(finalPool);
+    onConfirm({...r,brutal:r.rolls.filter(x=>x===6).length>=2});
+  };
   return(
     <div>
-      <div style={{fontSize:10,color:"#8b90a8",marginBottom:4}}>Final Dice Pool (Defense already subtracted): <strong style={{color:accent}}>{finalPool}d</strong> — roll that many physically</div>
+      <div style={{fontSize:10,color:"#8b90a8",marginBottom:4}}>Final Dice Pool (Defense already subtracted): <strong style={{color:accent}}>{finalPool}d</strong> — roll that many physically, or use Auto Roll</div>
       <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
         <input type="number" inputMode="numeric" min={0} value={val} onChange={e=>setVal(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter")confirm();}} placeholder="successes"
@@ -958,6 +978,8 @@ function ManualDamageEntry({finalPool,onConfirm,accent="#f08030"}:{finalPool:num
         </label>
         <button onClick={confirm} disabled={n==null}
           style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:n==null?"#5a6080":accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:n==null?"default":"pointer"}}>✓ Enter Damage</button>
+        <button onClick={autoRoll}
+          style={{background:`${accent}20`,border:`1px solid ${accent}60`,borderRadius:4,color:accent,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>🎲 Roll Damage ({finalPool}d)</button>
       </div>
       <div style={{fontSize:9,color:"#5a6080",marginTop:3,fontStyle:"italic"}}>1 success = 1 damage — Brutal Hits too, it's a flat +2 on top.</div>
     </div>
@@ -1778,7 +1800,7 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
       <div style={{marginBottom:10}}>
         <div style={{fontSize:10,color:"#5a6080",textTransform:"uppercase",letterSpacing:"1px",marginBottom:4}}>Attacker: {nameOf(attacker,allEntries)} — {move.name} ({calcAccPool(move,attrs,undefined,attacker.pokemonSkills)}d)</div>
         {!atkRoll
-          ?<ManualSuccessEntry pool={calcAccPool(move,attrs,undefined,attacker.pokemonSkills)} accent="#6890f0" onConfirm={n=>setAtkRoll(manualRoll(n))}/>
+          ?<ManualSuccessEntry pool={calcAccPool(move,attrs,undefined,attacker.pokemonSkills)} accent="#6890f0" onConfirm={setAtkRoll}/>
           :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>{fmtRoll(atkRoll)}</span>}
       </div>
       {targets.map(tid=>{
@@ -1812,7 +1834,7 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
               </button>)}
               {t.moves.length===0&&<span style={{fontSize:10,color:"#5a6080",fontStyle:"italic"}}>No moves in tracker</span>}
             </div>
-            {dm&&!dr&&<ManualSuccessEntry pool={defPool} accent="#ff4757" onConfirm={n=>setDefRolls(p=>({...p,[tid]:manualRoll(n)}))}/>}
+            {dm&&!dr&&<ManualSuccessEntry pool={defPool} accent="#ff4757" onConfirm={r=>setDefRolls(p=>({...p,[tid]:r}))}/>}
             {dm&&dr&&<div style={{fontSize:11,color:"#ff4757",fontFamily:"'Exo 2'",fontWeight:700}}>{nameOf(t,allEntries)}: {fmtRoll(dr)} with {dm.name}</div>}
             {clash&&!applied.has(tid)&&(clash.tie
               ?<div style={{fontSize:11,color:"#8b90a8",marginTop:6}}>⚖ Tie ({atkRoll!.successes} vs {dr.successes}) — no damage</div>
@@ -1820,7 +1842,7 @@ function ClashSection({attacker,targets,allEntries,move,attrs,weather,stab,abilB
                 <div style={{fontSize:11,fontWeight:700,color:clash.attackerWins?"#00d4aa":"#ff4757",marginBottom:4}}>
                   {clash.attackerWins?`✓ ${nameOf(attacker,allEntries)} wins`:`✗ ${nameOf(t,allEntries)} wins Clash`} ({atkRoll!.successes} vs {dr.successes})
                 </div>
-                {!dmgR&&<ManualDamageEntry finalPool={clash.finalPool} accent={clash.attackerWins?"#f08030":"#ff4757"} onConfirm={(s,b)=>setDmgRolls(p=>({...p,[tid]:manualRoll(s,b)}))}/>}
+                {!dmgR&&<ManualDamageEntry finalPool={clash.finalPool} accent={clash.attackerWins?"#f08030":"#ff4757"} onConfirm={r=>setDmgRolls(p=>({...p,[tid]:r}))}/>}
                 {dmgR&&<button onClick={()=>applyClash(tid,t,clash.attackerWins,finalDmg!)} style={{width:"100%",background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:5,padding:7,fontWeight:700,fontSize:11,cursor:"pointer"}}>⚡ Apply {finalDmg} dmg to {clash.attackerWins?nameOf(t,allEntries):nameOf(attacker,allEntries)}</button>}
               </div>)}
             {applied.has(tid)&&<div style={{fontSize:11,color:"#00d4aa",fontWeight:700,marginTop:6}}>✓ Applied</div>}
@@ -1881,7 +1903,7 @@ function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:a
             <div>
               <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>Roll {selSkill} ({pool}d) · Need {actReq}+</div>
               {!roll
-                ?<ManualSuccessEntry pool={pool} accent="#3d8bff" onConfirm={n=>setRoll(manualRoll(n))}/>
+                ?<ManualSuccessEntry pool={pool} accent="#3d8bff" onConfirm={setRoll}/>
                 :<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>{fmtRoll(roll)} {roll.successes>=actReq?"✓ Success":"✗ Fail"}</span>}
             </div>
             {roll&&roll.successes>=actReq&&selSkill==="brawl"&&targets.length>0&&(()=>{
@@ -1892,7 +1914,7 @@ function TrainerSkillPopup({trainerData,entry,allEntries,onClose}:{trainerData:a
               <div style={{background:"#13151f",borderRadius:5,padding:"10px 12px"}}>
                 <div style={{fontSize:11,color:"#e8eaf0",fontWeight:700,marginBottom:6}}>Damage (STR {av("strength")}d vs target VIT)</div>
                 {!brawlDmg
-                  ?<ManualDamageEntry finalPool={finalPool} accent="#f08030" onConfirm={(s,b)=>setBrawlDmg(manualRoll(s,b))}/>
+                  ?<ManualDamageEntry finalPool={finalPool} accent="#f08030" onConfirm={setBrawlDmg}/>
                   :t&&<div style={{fontSize:11,color:"#8b90a8",marginTop:5}}><strong style={{color:"#ff4757"}}>{dmg} damage</strong></div>}
               </div>
               );})()}
@@ -2278,7 +2300,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               </div>
               {disobedience==="low"&&<div>
                 {!loyaltyRoll
-                  ?<ManualSuccessEntry pool={attacker.loyalty||1} accent="#ffd32a" label="Loyalty" onConfirm={n=>setLoyaltyRoll(manualRoll(n))}/>
+                  ?<ManualSuccessEntry pool={attacker.loyalty||1} accent="#ffd32a" label="Loyalty" onConfirm={setLoyaltyRoll}/>
                   :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:loyaltyRoll.successes>=3?"#00d4aa":"#ff4757"}}>{fmtRoll(loyaltyRoll)} {loyaltyRoll.successes>=3?"✓":"✗"} (need 3+)</span>}
               </div>}
             </div>
@@ -2290,7 +2312,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               <div style={{fontSize:11,fontWeight:700,color:STATUS_CONDITIONS[primaryStatus(attacker)]?.color,marginBottom:4}}>{primaryStatus(attacker)}</div>
               <div style={{fontSize:10,color:"#8b90a8",marginBottom:6}}>{STATUS_CONDITIONS[primaryStatus(attacker)]?.rollToActDesc}</div>
               {!preRollDone&&(primaryStatus(attacker)==="Infatuated"
-                ?<ManualSuccessEntry pool={attacker.currentWill} accent="#a040a0" label="WP" onConfirm={doPreRoll}/>
+                ?<ManualSuccessEntry pool={attacker.currentWill} accent="#a040a0" label="WP" onConfirm={r=>doPreRoll(r.successes)}/>
                 :<ManualD6Entry accent="#a040a0" onConfirm={doPreRoll}/>)}
               {preRollDone&&<div style={{fontSize:12,fontWeight:700,color:preRollDone.canAct?"#00d4aa":"#ff4757",marginBottom:preRollDone.canAct?0:8}}>{preRollDone.detail}</div>}
               {preRollDone&&!preRollDone.canAct&&<button onClick={()=>{onIncrementAction(attacker.id,isPriority);onClose();if(onEndTurn)onEndTurn();}} style={{background:"rgba(255,71,87,0.15)",border:"1px solid #ff475740",borderRadius:4,color:"#ff4757",padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>⏭ End Turn</button>}
@@ -2400,7 +2422,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                             {accResult?(
                               <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030"}}>{fmtRoll(accResult)} <span style={{fontSize:9,color:"#5a6080"}}>(Phase 1)</span></div>
                             ):!react.atkRoll?(
-                              <ManualSuccessEntry pool={atkAccPool} accent="#f08030" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:manualRoll(n)}}))}/>
+                              <ManualSuccessEntry pool={atkAccPool} accent="#f08030" onConfirm={r=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:r}}))}/>
                             ):(
                               <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#f08030",marginTop:4}}>{fmtRoll(react.atkRoll)}</div>
                             )}
@@ -2410,7 +2432,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                             <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(t,allEntries)} — Clash</div>
                             <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>{(()=>{const acc=react.move.accuracy.toLowerCase();const da2=getEffectiveAttrs(t);const parts:string[]=[];if(acc.includes("strength"))parts.push(`STR ${da2.strength}`);if(acc.includes("dexterity"))parts.push(`DEX ${da2.dexterity}`);if(acc.includes("special"))parts.push(`SPC ${da2.special}`);if(acc.includes("insight"))parts.push(`INS ${da2.insight}`);if(acc.includes("vitality"))parts.push(`VIT ${da2.vitality}`);const sk=acc.includes("brawl")?"Brawl":acc.includes("athletic")?"Athletic":acc.includes("channel")?"Channel":acc.includes("perform")?"Perform":acc.includes("clash")?"Clash":acc.includes("alert")?"Alert":acc.includes("evasion")?"Evasion":"Skill";const sv=t.pokemonSkills?.[sk.toLowerCase() as keyof PokemonSkills]||2;parts.push(`${sk} ${sv}`);if(defPainC>0)parts.push(`Pain −${defPainC}`);return parts.join(" + ");})() } = {defClashPool}d</div>
                             {!react.roll
-                              ?<ManualSuccessEntry pool={defClashPool??1} accent="#00d4aa" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:manualRoll(n)}}))}/>
+                              ?<ManualSuccessEntry pool={defClashPool??1} accent="#00d4aa" onConfirm={r=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:r}}))}/>
                               :<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>{fmtRoll(react.roll)}</div>}
                           </div>
                         </div>
@@ -2525,7 +2547,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                           {accResult?(
                             <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>{fmtRoll(accResult)} <span style={{fontSize:9,color:"#5a6080"}}>(from Phase 1)</span></div>
                           ):!react.atkRoll?(
-                            <ManualSuccessEntry pool={atkPool} accent="#6890f0" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:manualRoll(n)}}))}/>
+                            <ManualSuccessEntry pool={atkPool} accent="#6890f0" onConfirm={r=>setDefReactions(p=>({...p,[tid]:{...p[tid],atkRoll:r}}))}/>
                           ):(
                             <div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0",marginTop:4}}>{fmtRoll(react.atkRoll)}</div>
                           )}
@@ -2535,7 +2557,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                           <div style={{fontSize:9,color:"#00d4aa",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{nameOf(t,allEntries)} — Evasion</div>
                           <div style={{fontSize:9,color:"#5a6080",marginBottom:5}}>DEX ({da.dexterity}) + Evasion ({evasionRank}){defPain>0?` − Pain ${defPain}`:""} = {evasPool}d</div>
                           {!react.roll
-                            ?<ManualSuccessEntry pool={evasPool} accent="#00d4aa" onConfirm={n=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:manualRoll(n)}}))}/>
+                            ?<ManualSuccessEntry pool={evasPool} accent="#00d4aa" onConfirm={r=>setDefReactions(p=>({...p,[tid]:{...p[tid],roll:r}}))}/>
                             :<div style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#00d4aa",marginTop:4}}>{fmtRoll(react.roll)}</div>}
                         </div>
                       </div>
@@ -2603,7 +2625,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 {!accResult&&reactionAtkRoll?(
                   <span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:"#6890f0"}}>{fmtRoll(reactionAtkRoll)} <span style={{fontSize:9,color:"#5a6080",fontWeight:400}}>(already rolled — see the reaction check above)</span></span>
                 ):!accResult?(
-                  <ManualSuccessEntry pool={Math.max(0,accPool)} accent="#6890f0" label="Accuracy" onConfirm={n=>setAccResult(manualRoll(n))}/>
+                  <ManualSuccessEntry pool={Math.max(0,accPool)} accent="#6890f0" label="Accuracy" onConfirm={setAccResult}/>
                 ):null}
                 {accResult&&<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:accResult.successes>=actReq?"#00d4aa":"#ff4757"}}>{fmtRoll(accResult)} {accResult.successes>=actReq?"✓ HIT":"✗ MISS"}</span>}
               </div>
@@ -2641,7 +2663,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                 <div style={{marginBottom:8,paddingBottom:8,borderBottom:"1px solid #2a2f45"}}>
                   <div style={{fontSize:10,color:"#a040a0",fontWeight:700,marginBottom:4}}>Chance Die (succeeds on 4+)</div>
                   {statFxChanceRoll==null
-                    ?<ManualSuccessEntry pool={1} accent="#a040a0" label="Chance Die" onConfirm={n=>setStatFxChanceRoll(manualRoll(n))}/>
+                    ?<ManualSuccessEntry pool={1} accent="#a040a0" label="Chance Die" onConfirm={setStatFxChanceRoll}/>
                     :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:statFxChanceRoll.successes>0?"#a040a0":"#5a6080"}}>{statFxChanceRoll.successes>0?"✓ Effect triggers!":"✗ No effect"}</span>}
                 </div>
               )}
@@ -2687,7 +2709,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
               <div style={{fontSize:9,fontWeight:700,color:"#f08030",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>② Damage → {isSelf?"SELF":nameOf(t,allEntries)} ({dmgPool}d)</div>
               {!isSelf&&defB&&<div style={{fontSize:10,color:"#8b90a8",marginBottom:6,fontStyle:"italic"}}>Defense: {defB.text} = <strong style={{color:"#f08030"}}>{defB.value}</strong></div>}
               {!dr
-                ?<ManualDamageEntry finalPool={finalPool} accent="#f08030" onConfirm={(s,b)=>doDmg(tid,s,b)}/>
+                ?<ManualDamageEntry finalPool={finalPool} accent="#f08030" onConfirm={r=>doDmg(tid,r.successes,!!r.brutal)}/>
                 :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:"#e8eaf0"}}>{fmtRoll(dr)}</span>}
               {brutalHit&&<div style={{background:"rgba(255,211,42,0.12)",border:"1px solid #ffd32a60",borderRadius:4,padding:"5px 10px",fontSize:12,fontWeight:700,color:"#ffd32a",marginTop:6,marginBottom:6,textAlign:"center",letterSpacing:"1px"}}>⚡ BRUTAL HIT! +2 damage</div>}
               {dr&&tm.mod!==-999&&<div style={{marginTop:6}}>
@@ -2701,7 +2723,7 @@ function MovePopup({move,attacker,allEntries,weather,onClose,onApplyDmg,onApplyE
                       Status Chance: {statusToInflict} (if 4+ on d6)
                     </div>
                     {chanceRoll==null
-                      ?<ManualSuccessEntry pool={1} accent="#a040a0" label="Chance" onConfirm={n=>setDmgResults(p=>({...p,[chanceKey]:manualRoll(n)}))}/>
+                      ?<ManualSuccessEntry pool={1} accent="#a040a0" label="Chance" onConfirm={r=>setDmgResults(p=>({...p,[chanceKey]:r}))}/>
                       :<span style={{fontSize:11,fontFamily:"'Exo 2'",fontWeight:700,color:chanceRoll.successes>0?"#a040a0":"#5a6080"}}>{chanceRoll.successes>0?"✓ Inflict!":"✗ No effect"}</span>}
                     {chanceRoll&&chanceRoll.successes>0&&onApplySpecial&&(
                       <button onClick={()=>{onApplySpecial!(tid,{statuses:addStatus(t.statuses||[],statusToInflict!),statusTurnsLeft:statusToInflict==="Asleep"?3:0});}} style={{marginTop:4,width:"100%",background:"#a040a0",color:"#fff",border:"none",borderRadius:4,padding:"5px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
@@ -3461,7 +3483,7 @@ function CapturePopup({allEntries,defaultTargetId,defaultThrowerId,defaultBallNa
               <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>4. Throw Roll: SPC + Channel + 2 Skill = {throwPool}d · Need {required} total successes</div>
               {throwPool<required&&<div style={{background:"rgba(255,71,87,0.08)",border:"1px solid #ff475730",borderRadius:4,padding:"5px 10px",fontSize:11,color:"#ff4757",marginBottom:6}}>⚠ Throw pool ({throwPool}d) is less than required successes ({required}) — bonus from sealing and target condition needed</div>}
               {!throwRoll
-                ?<ManualSuccessEntry pool={throwPool} accent="#6890f0" label="Throw" onConfirm={n=>setThrowRoll(manualRoll(n))}/>
+                ?<ManualSuccessEntry pool={throwPool} accent="#6890f0" label="Throw" onConfirm={setThrowRoll}/>
                 :<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700,color:throwRoll.successes>0?"#00d4aa":"#ff4757"}}>{fmtRoll(throwRoll)} {throwRoll.successes===0?"✗ Miss — ball fails to reach":"✓ Ball lands"}</span>}
             </div>
           )}
@@ -3471,7 +3493,7 @@ function CapturePopup({allEntries,defaultTargetId,defaultThrowerId,defaultBallNa
             <div>
               <div style={{fontSize:10,color:"#5a6080",letterSpacing:"1px",textTransform:"uppercase",marginBottom:6}}>5. Seal Potency: {selectedBall?.name} = {sealDice}d</div>
               {!sealRoll
-                ?<ManualSuccessEntry pool={sealDice} accent="#f08030" label="Seal" onConfirm={n=>setSealRoll(manualRoll(n))}/>
+                ?<ManualSuccessEntry pool={sealDice} accent="#f08030" label="Seal" onConfirm={setSealRoll}/>
                 :<span style={{fontSize:12,fontFamily:"'Exo 2'",fontWeight:700}}>{fmtRoll(sealRoll)}</span>}
             </div>
           )}
@@ -3718,7 +3740,7 @@ function TrainerSkillsInline({trainer,entry,allEntries,onSpendWP,onIncrementActi
                   </div>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                     {!roll
-                      ?<ManualSuccessEntry pool={Math.max(1,pool)} accent="#3d8bff" label={sk} onConfirm={n=>setRoll(manualRoll(n))}/>
+                      ?<ManualSuccessEntry pool={Math.max(1,pool)} accent="#3d8bff" label={sk} onConfirm={setRoll}/>
                       :<span style={{fontSize:10,fontFamily:"'Exo 2'",fontWeight:700,color:roll.successes>=actReq?"#00d4aa":"#ff4757"}}>{fmtRoll(roll)} {roll.successes>=actReq?"✓":"✗"} (need {actReq})</span>}
                     {roll&&roll.successes>=actReq&&<button onClick={()=>{onIncrementAction(entry.id);setRoll(null);setSelSkill(null);}} style={{background:"#00d4aa",color:"#0f1117",border:"none",borderRadius:3,padding:"3px 6px",fontSize:9,fontWeight:700,cursor:"pointer"}}>✓ +Action</button>}
                   </div>
@@ -4077,7 +4099,7 @@ function ZMovePopup({entry,allEntries,onClose,onApply,onApplyDmg}:{
                 return(
                   <div style={{marginBottom:12}}>
                     {!rolled
-                      ?<ManualDamageEntry finalPool={finalPool} accent="#ffd32a" onConfirm={(s,b)=>setRolled(manualRoll(s,b))}/>
+                      ?<ManualDamageEntry finalPool={finalPool} accent="#ffd32a" onConfirm={setRolled}/>
                       :<button onClick={()=>{
                           onApplyDmg(selTarget,finalDmg!);
                           onApply(entry.id,{zMoveUsed:true,currentWill:alreadyUsed?Math.max(0,entry.currentWill-repeatCost):entry.currentWill});
