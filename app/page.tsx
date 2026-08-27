@@ -262,14 +262,13 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                /* The menu box: cream panel with a heavy navy border and a ▶
-                   cursor on the current row, the way the start menu is drawn
-                   in the GBA games. */
+                /* A grid of icon tiles rather than the GBA-style vertical
+                   list — each row loses its ▶ cursor for a highlighted
+                   border instead, since there's no single "current line" to
+                   point at once selection can move in two directions. */
                 <div ref={listRef} style={{position:"relative",zIndex:1,height:"100%",overflowY:"auto",
                   padding:narrow?8:12}}>
-                  <div style={{background:"#F8F8F0",border:`3px solid ${C.navy}`,borderRadius:4,
-                    boxShadow:`inset 0 0 0 2px #FFFFFF, 3px 3px 0 rgba(24,32,60,0.35)`,
-                    padding:narrow?4:5}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:narrow?7:10}}>
                     {menu.map((it,i)=>{
                       const on = i===idx;
                       return (
@@ -278,16 +277,15 @@ export default function Home() {
                           onMouseEnter={()=>setHover(i)} onMouseLeave={()=>setHover(null)}
                           onFocus={()=>setIdx(i)}
                           title={it.desc} aria-label={`${it.label} — ${it.desc}`}
-                          style={{display:"flex",alignItems:"center",gap:narrow?6:9,width:"100%",
-                            textAlign:"left",cursor:"pointer",touchAction:"manipulation",
-                            padding:narrow?"6px 6px":"8px 9px",borderRadius:3,
-                            background:on?"rgba(40,80,160,0.14)":"transparent"}}>
-                          <span aria-hidden style={{width:narrow?9:11,flexShrink:0,fontFamily:pixel,
-                            fontSize:narrow?8:10,color:on?C.navy:"transparent"}}>▶</span>
-                          <span style={{fontSize:narrow?15:19,lineHeight:1,flexShrink:0}}>{it.icon}</span>
-                          <span style={{flex:1,minWidth:0,fontFamily:pixel,
-                            fontSize:narrow?8:10,lineHeight:1.5,color:C.navy,
-                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                            gap:narrow?4:6,aspectRatio:"1",cursor:"pointer",touchAction:"manipulation",
+                            padding:narrow?"6px 4px":"10px 6px",borderRadius:narrow?10:14,
+                            background:"#CDEEFA",border:`2px solid ${on?C.yellow:C.navy}`,
+                            boxShadow:on?`0 0 0 2px ${C.navy}, 2px 2px 0 rgba(24,32,60,0.35)`:"2px 2px 0 rgba(24,32,60,0.35)"}}>
+                          <span aria-hidden style={{fontSize:narrow?24:32,lineHeight:1}}>{it.icon}</span>
+                          <span style={{fontFamily:pixel,fontSize:narrow?6.5:8,lineHeight:1.5,color:C.navy,
+                            textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",
+                            display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
                             {it.label}
                           </span>
                         </button>
