@@ -436,8 +436,17 @@ function pickWildOpponent(sheet: PokemonSheetData): PokemonEntry | null {
   if (!pool.length) return null;
   return pool[Math.floor(Math.random() * pool.length)];
 }
+/* HP pools and per-hit damage are tuned together so a fight actually runs
+   several rounds instead of ending on the first Fight click — a Starter-
+   rank Pokémon's real baseHp+vitality is tiny (often 3–8), and the old
+   damage formula (2 + power/3 + 0–3) could one-shot that on round one,
+   which is exactly why Defend/Evade never got the chance to matter: the
+   telegraph system needs rounds to pay off in. The flat +4 "battle
+   stamina" here is a simplified-minigame concession, not a real Pokerole
+   HP number — it's what buys the fight the room to be a fight. */
+const HP_PADDING = 4;
 function playerMaxHp(sheet: PokemonSheetData, species: PokemonEntry): number {
-  return species.baseHp + sheet.attributes.vitality + sheet.trainingAttributes.vitality;
+  return HP_PADDING + species.baseHp + sheet.attributes.vitality + sheet.trainingAttributes.vitality;
 }
 function playerPower(sheet: PokemonSheetData): number {
   return sheet.attributes.strength + sheet.trainingAttributes.strength + sheet.attributes.special + sheet.trainingAttributes.special;
@@ -445,10 +454,15 @@ function playerPower(sheet: PokemonSheetData): number {
 function playerSpeed(sheet: PokemonSheetData): number {
   return sheet.attributes.dexterity + sheet.trainingAttributes.dexterity;
 }
-function wildMaxHp(species: PokemonEntry): number { return species.baseHp + species.attributes.vitality; }
+function wildMaxHp(species: PokemonEntry): number { return HP_PADDING + species.baseHp + species.attributes.vitality; }
 function wildPower(species: PokemonEntry): number { return species.attributes.strength + species.attributes.special; }
 function wildSpeed(species: PokemonEntry): number { return species.attributes.dexterity; }
-function rollDamage(power: number): number { return Math.max(1, Math.round(2 + power / 3 + Math.random() * 3)); }
+/** Softer than a one-shot: average power (~4–6 at Starter/Rookie) lands
+ *  roughly 2–3 damage against the ~7–12 HP pools above, so most fights run
+ *  3–5 rounds — long enough that ignoring the telegraph every round and
+ *  eating full damage back genuinely risks losing the race, not just
+ *  "could've saved a couple HP" in a fight that was already decided. */
+function rollDamage(power: number): number { return Math.max(1, Math.round(1 + power / 5 + Math.random() * 1.6)); }
 const ENCOUNTER_CHANCE = 0.4;
 
 /** The wild side's action for the round ahead — chosen and shown to the
