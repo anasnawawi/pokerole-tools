@@ -265,10 +265,18 @@ export default function Home() {
                 /* A grid of icon tiles rather than the GBA-style vertical
                    list — each row loses its ▶ cursor for a highlighted
                    border instead, since there's no single "current line" to
-                   point at once selection can move in two directions. */
-                <div ref={listRef} style={{position:"relative",zIndex:1,height:"100%",overflowY:"auto",
-                  padding:narrow?8:12}}>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:narrow?7:10}}>
+                   point at once selection can move in two directions.
+                   Sized off the container's own box (cqw/cqh), not a fixed
+                   aspect ratio or viewport unit — a square tile pinned to
+                   its own width used to grow taller than the panel actually
+                   had room for, forcing a scrollbar no GBA menu ever needed.
+                   Rows instead split whatever height the panel has this
+                   time, at this window size, so every tile is always on
+                   screen at once. */
+                <div ref={listRef} style={{position:"relative",zIndex:1,height:"100%",overflow:"hidden",
+                  padding:narrow?8:12,containerType:"size"}}>
+                  <div style={{display:"grid",height:"100%",gridTemplateColumns:"repeat(3,1fr)",
+                    gridTemplateRows:`repeat(${Math.ceil(menu.length/3)},1fr)`,gap:"2.5cqh 2.5cqw"}}>
                     {menu.map((it,i)=>{
                       const on = i===idx;
                       return (
@@ -278,12 +286,12 @@ export default function Home() {
                           onFocus={()=>setIdx(i)}
                           title={it.desc} aria-label={`${it.label} — ${it.desc}`}
                           style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-                            gap:narrow?4:6,aspectRatio:"1",cursor:"pointer",touchAction:"manipulation",
-                            padding:narrow?"6px 4px":"10px 6px",borderRadius:narrow?10:14,
+                            gap:"3cqh",minWidth:0,minHeight:0,cursor:"pointer",touchAction:"manipulation",
+                            padding:"3cqh 2cqw",borderRadius:"clamp(6px, 3cqh, 14px)",
                             background:"#CDEEFA",border:`2px solid ${on?C.yellow:C.navy}`,
                             boxShadow:on?`0 0 0 2px ${C.navy}, 2px 2px 0 rgba(24,32,60,0.35)`:"2px 2px 0 rgba(24,32,60,0.35)"}}>
-                          <span aria-hidden style={{fontSize:narrow?24:32,lineHeight:1}}>{it.icon}</span>
-                          <span style={{fontFamily:pixel,fontSize:narrow?6.5:8,lineHeight:1.5,color:C.navy,
+                          <span aria-hidden style={{fontSize:"clamp(14px, 9cqh, 34px)",lineHeight:1}}>{it.icon}</span>
+                          <span style={{fontFamily:pixel,fontSize:"clamp(6px, 3.2cqh, 10px)",lineHeight:1.4,color:C.navy,
                             textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",
                             display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
                             {it.label}
