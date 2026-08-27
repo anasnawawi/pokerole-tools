@@ -317,7 +317,7 @@ function HpBar({ value, max }: { value: number; max: number }) {
 }
 
 type EncounterPhase = "active" | "won" | "lost" | "ran";
-type Popup = { id: number; text: string; side: "player" | "wild"; kind: "dmg" | "info" };
+type Popup = { id: number; text: string; side: "player" | "wild" | "center"; kind: "dmg" | "info" | "msg" };
 interface EncounterState {
   wild: PokemonEntry;
   wildHp: number; wildMaxHp: number;
@@ -325,15 +325,18 @@ interface EncounterState {
   phase: EncounterPhase;
   log: string;
   popups: Popup[];
+  /** The wild's pre-decided move for the round about to happen — telegraphed
+   *  to the player (see EncounterScene's intent tag) before they act. */
+  wildIntent: Intent;
 }
 
-/** Trainer sprite left (facing away, into the fight — the same back sprite
- *  the Characters page's own preview uses), wild sprite right (mirrored to
- *  face the trainer), HP bars, and floating hit numbers — "basically a
- *  simplified and slightly animated battle," per spec, not a second Battle
- *  Tracker. */
-function EncounterScene({ trainerSpriteId, playerNumber, enc, hitSide, onDismiss }: {
-  trainerSpriteId: string | undefined; playerNumber: number; enc: EncounterState;
+/** Just the Pokémon left and right — no trainer sprite, per spec, once a
+ *  Walk encounter is really just a fight between two Pokémon. HP bars, a
+ *  narrated "what just happened" popup for every action (not just the
+ *  floating hit numbers), and hit-shake feedback — "basically a simplified
+ *  and slightly animated battle," per spec, not a second Battle Tracker. */
+function EncounterScene({ playerNumber, enc, hitSide, onDismiss }: {
+  playerNumber: number; enc: EncounterState;
   hitSide: "player" | "wild" | null; onDismiss: () => void;
 }) {
   return (
@@ -346,28 +349,44 @@ function EncounterScene({ trainerSpriteId, playerNumber, enc, hitSide, onDismiss
         <div style={{ fontSize: 9, fontWeight: 700, marginBottom: 2 }}>Wild {enc.wild.name}</div>
         <HpBar value={enc.wildHp} max={enc.wildMaxHp} />
       </div>
-      {trainerSpriteId && (
-        // eslint-disable-next-line @next/next/no-img-element -- local pixel art, next/image would blur it
-        <img src={`/sprites/trainers/back/${trainerSpriteId}.png`} alt="" width={64} height={64}
-          style={{ position: "absolute", left: "8%", bottom: "13%", width: "clamp(40px,12cqh,72px)", height: "auto", imageRendering: "pixelated" }}
-          onError={e => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
+      {/* The telegraph — what the wild is about to do, so Fight/Defend/
+          Evade/Run is a real read-and-react choice instead of a guess. */}
+      {enc.phase === "active" && (
+        <div style={{ position: "absolute", top: 44, right: 12, display: "flex", alignItems: "center", gap: 4,
+          background: "rgba(24,24,24,0.78)", borderRadius: 5, padding: "3px 7px" }}>
+          <span style={{ fontSize: 11 }}>{INTENT_LABEL[enc.wildIntent].icon}</span>
+          <span style={{ fontSize: 8, fontWeight: 700, color: "#F8F8E8" }}>{INTENT_LABEL[enc.wildIntent].text}</span>
+        </div>
       )}
       {/* eslint-disable-next-line @next/next/no-img-element -- local pixel art, next/image would blur it */}
       <img src={`/sprites/pokemon/${playerNumber}.png`} alt="" width={92} height={92}
         className={hitSide === "player" ? "care-hit" : undefined}
-        style={{ position: "absolute", left: "24%", bottom: "16%", width: "clamp(52px,15cqh,96px)", height: "auto",
+        style={{ position: "absolute", left: "20%", bottom: "16%", width: "clamp(52px,15cqh,96px)", height: "auto",
           imageRendering: "pixelated", animation: hitSide === "player" ? "careHitShake 0.4s ease-in-out" : undefined }} />
       {/* eslint-disable-next-line @next/next/no-img-element -- local pixel art, next/image would blur it */}
       <img src={`/sprites/pokemon/${enc.wild.number}.png`} alt="" width={100} height={100}
         className={hitSide === "wild" ? "care-hit" : undefined}
         style={{ position: "absolute", right: "12%", bottom: "16%", width: "clamp(58px,17cqh,106px)", height: "auto",
           imageRendering: "pixelated", transform: "scaleX(-1)", animation: hitSide === "wild" ? "careHitShake 0.4s ease-in-out" : undefined }} />
-      {enc.popups.map(p => (
+      {enc.popups.filter(p => p.kind !== "msg").map(p => (
         <div key={p.id} className="care-dmgpop" style={{
-          position: "absolute", left: p.side === "player" ? "34%" : "76%", bottom: "42%",
+          position: "absolute", left: p.side === "player" ? "30%" : "72%", bottom: "42%",
           fontFamily: pixel, fontSize: p.kind === "dmg" ? 13 : 9, fontWeight: 700,
           color: p.kind === "dmg" ? "#D82808" : "#181818", textShadow: "1px 1px 0 #fff",
           animation: "careDamagePop 1.1s ease-out forwards", zIndex: 4 }}>
+          {p.text}
+        </div>
+      ))}
+      {/* The narrated line — what the floating numbers alone don't say
+          ("used Fight", "dodged", "couldn't get away"). One at a time, top
+          of the scene, out of the way of the sprites/hit numbers below. */}
+      {enc.popups.filter(p => p.kind === "msg").map(p => (
+        <div key={p.id} className="care-bubble" style={{
+          position: "absolute", top: 54, left: "50%", transform: "translateX(-50%)",
+          background: "#F8F8E8", border: `2px solid ${C.outline}`, borderRadius: 8, padding: "5px 12px",
+          fontSize: 11, fontWeight: 600, color: "#181818", whiteSpace: "nowrap", maxWidth: "88%",
+          overflow: "hidden", textOverflow: "ellipsis", boxShadow: "2px 2px 0 rgba(0,0,0,0.25)",
+          animation: "careBubblePop 2.3s ease-out forwards", zIndex: 5 }}>
           {p.text}
         </div>
       ))}
@@ -431,6 +450,25 @@ function wildPower(species: PokemonEntry): number { return species.attributes.st
 function wildSpeed(species: PokemonEntry): number { return species.attributes.dexterity; }
 function rollDamage(power: number): number { return Math.max(1, Math.round(2 + power / 3 + Math.random() * 3)); }
 const ENCOUNTER_CHANCE = 0.4;
+
+/** The wild side's action for the round ahead — chosen and shown to the
+ *  player BEFORE they pick their own move (see the intent tag in
+ *  EncounterScene), so Defend/Evade become a real read-and-react choice
+ *  instead of a flat damage-reduction tax paid every round regardless of
+ *  what's actually coming. Skews toward Defend/Evade once the wild is
+ *  hurting — a cornered Pokémon gets cagier, not just weaker. */
+type Intent = "attack" | "defend" | "evade";
+function pickWildIntent(wildHpFraction: number): Intent {
+  const cautious = wildHpFraction < 0.35;
+  const r = Math.random();
+  if (cautious) return r < 0.30 ? "attack" : r < 0.65 ? "defend" : "evade";
+  return r < 0.55 ? "attack" : r < 0.78 ? "defend" : "evade";
+}
+const INTENT_LABEL: Record<Intent, { text: string; icon: string }> = {
+  attack: { text: "About to Attack!", icon: "⚔️" },
+  defend: { text: "About to Defend", icon: "🛡️" },
+  evade:  { text: "About to Evade",  icon: "💨" },
+};
 
 export default function CarePage() {
   const [trainer, setTrainer] = useState<TrainerData | null>(null);
@@ -617,7 +655,9 @@ export default function CarePage() {
       if (wild) {
         const pMax = playerMaxHp(active.sheet, species);
         const wMax = wildMaxHp(wild);
-        setEncounter({ wild, wildHp: wMax, wildMaxHp: wMax, playerHp: pMax, playerMaxHp: pMax, phase: "active", log: "", popups: [] });
+        setEncounter({ wild, wildHp: wMax, wildMaxHp: wMax, playerHp: pMax, playerMaxHp: pMax, phase: "active", log: "",
+          wildIntent: pickWildIntent(1),
+          popups: [{ id: nowMs(), text: `A wild ${wild.name} appeared!`, side: "center", kind: "msg" }] });
         return;
       }
     }
@@ -651,10 +691,19 @@ export default function CarePage() {
     setEncounter(prev => prev ? { ...prev, log: logParts.join(" · ") } : prev);
   };
 
+  /** Resolves one round against the wild's already-telegraphed `wildIntent`
+   *  (see pickWildIntent) rather than the wild just always attacking — so
+   *  Defend/Evade are a real read-and-react call: right against a
+   *  telegraphed Attack, a wasted round against a telegraphed Defend/
+   *  Evade (which never attacks back regardless of the player's pick).
+   *  Fight always swings back, for chip damage even into a defending or
+   *  evading wild — halved or riskier, but never wasted the way guessing
+   *  wrong with Defend/Evade is. */
   const doEncounterAction = (action: "fight" | "defend" | "evade" | "run") => {
     if (!encounter || encounter.phase !== "active" || encBusy || !active) return;
     const sheet = active.sheet;
     const wild = encounter.wild;
+    const wildIntent = encounter.wildIntent;
     setEncBusy(true);
     let wildHp = encounter.wildHp;
     let playerHp = encounter.playerHp;
@@ -662,53 +711,106 @@ export default function CarePage() {
     const popups: Popup[] = [];
     const speedEdge = playerSpeed(sheet) - wildSpeed(wild);
     let flashSide: "player" | "wild" | null = null;
+    const parts: string[] = [];
+    const halved = (dmg: number) => Math.max(1, Math.round(dmg * 0.5));
 
     if (action === "run") {
       const chance = Math.max(0.2, Math.min(0.9, 0.4 + speedEdge * 0.05));
       if (rand() < chance) {
         phase = "ran";
-      } else {
+        parts.push(`${name} got away safely!`);
+      } else if (wildIntent === "attack") {
         const dmg = rollDamage(wildPower(wild));
         playerHp = Math.max(0, playerHp - dmg);
         popups.push({ id: nowMs(), text: `-${dmg}`, side: "player", kind: "dmg" });
         flashSide = "player";
+        parts.push(`Couldn't get away — Wild ${wild.name} hit for ${dmg}!`);
         if (playerHp <= 0) phase = "lost";
+      } else {
+        parts.push(`Couldn't get away — but Wild ${wild.name} wasn't attacking, so no harm done.`);
       }
     } else {
+      // Player's own attack, if any — Fight always swings, its effect
+      // shaped by what the wild was actually doing this round.
       if (action === "fight") {
-        const dmg = rollDamage(playerPower(sheet));
-        wildHp = Math.max(0, wildHp - dmg);
-        popups.push({ id: nowMs() + 1, text: `-${dmg}`, side: "wild", kind: "dmg" });
-        flashSide = "wild";
+        if (wildIntent === "evade") {
+          const dodgeChance = Math.max(0.15, Math.min(0.85, 0.3 - speedEdge * 0.05));
+          if (rand() < dodgeChance) {
+            popups.push({ id: nowMs() + 1, text: "Missed!", side: "wild", kind: "info" });
+            parts.push(`${name} used Fight — Wild ${wild.name} evaded it!`);
+          } else {
+            const dmg = rollDamage(playerPower(sheet));
+            wildHp = Math.max(0, wildHp - dmg);
+            popups.push({ id: nowMs() + 1, text: `-${dmg}`, side: "wild", kind: "dmg" });
+            flashSide = "wild";
+            parts.push(`${name} used Fight for ${dmg} — caught it mid-dodge!`);
+          }
+        } else if (wildIntent === "defend") {
+          const dmg = halved(rollDamage(playerPower(sheet)));
+          wildHp = Math.max(0, wildHp - dmg);
+          popups.push({ id: nowMs() + 1, text: `-${dmg}`, side: "wild", kind: "dmg" });
+          flashSide = "wild";
+          parts.push(`${name} used Fight for ${dmg} — Wild ${wild.name} blocked most of it!`);
+        } else {
+          const dmg = rollDamage(playerPower(sheet));
+          wildHp = Math.max(0, wildHp - dmg);
+          popups.push({ id: nowMs() + 1, text: `-${dmg}`, side: "wild", kind: "dmg" });
+          flashSide = "wild";
+          parts.push(`${name} used Fight for ${dmg}!`);
+        }
+        if (wildHp <= 0) parts.push(`Wild ${wild.name} went down!`);
       }
+
       if (wildHp <= 0) {
         phase = "won";
-      } else {
-        let evaded = false;
-        if (action === "evade") {
-          const chance = Math.max(0.15, Math.min(0.85, 0.3 + speedEdge * 0.05));
-          evaded = rand() < chance;
-        }
-        if (evaded) {
+      } else if (wildIntent !== "attack") {
+        // Telegraphed Defend/Evade never attacks back this round, no
+        // matter what the player picked — Fight was the only pick that
+        // actually did something with that information.
+        parts.push(action === "fight" ? `Wild ${wild.name} held back.` : `Wild ${wild.name} wasn't attacking — safe, but wasted.`);
+      } else if (action === "evade") {
+        const dodgeChance = Math.max(0.15, Math.min(0.85, 0.3 + speedEdge * 0.05));
+        if (rand() < dodgeChance) {
           popups.push({ id: nowMs() + 2, text: "Dodged!", side: "player", kind: "info" });
+          parts.push(`${name} evaded — Wild ${wild.name}'s attack missed completely!`);
         } else {
-          let dmg = rollDamage(wildPower(wild));
-          if (action === "defend") dmg = Math.round(dmg * 0.5);
+          const dmg = rollDamage(wildPower(wild));
           playerHp = Math.max(0, playerHp - dmg);
           popups.push({ id: nowMs() + 3, text: `-${dmg}`, side: "player", kind: "dmg" });
           flashSide = flashSide ?? "player";
+          parts.push(`${name} tried to evade but Wild ${wild.name} still hit for ${dmg}!`);
           if (playerHp <= 0) phase = "lost";
         }
+      } else if (action === "defend") {
+        const dmg = halved(rollDamage(wildPower(wild)));
+        playerHp = Math.max(0, playerHp - dmg);
+        popups.push({ id: nowMs() + 3, text: `-${dmg}`, side: "player", kind: "dmg" });
+        flashSide = flashSide ?? "player";
+        parts.push(`${name} braced for it — Wild ${wild.name}'s attack only did ${dmg}!`);
+        if (playerHp <= 0) phase = "lost";
+      } else { // action === "fight"
+        const dmg = rollDamage(wildPower(wild));
+        playerHp = Math.max(0, playerHp - dmg);
+        popups.push({ id: nowMs() + 3, text: `-${dmg}`, side: "player", kind: "dmg" });
+        flashSide = flashSide ?? "player";
+        parts.push(`Wild ${wild.name} struck back for ${dmg}!`);
+        if (playerHp <= 0) phase = "lost";
       }
     }
 
-    setEncounter(prev => prev ? { ...prev, wildHp, playerHp, popups, phase } : prev);
+    popups.push({ id: nowMs() + 9000, text: parts.join(" "), side: "center", kind: "msg" });
+    // Telegraph the NEXT round's move now, biased by how hurt the wild is
+    // after this one — a cornered Pokémon gets cagier.
+    const nextIntent = phase === "active" ? pickWildIntent(wildHp / encounter.wildMaxHp) : wildIntent;
+
+    setEncounter(prev => prev ? { ...prev, wildHp, playerHp, popups, phase, wildIntent: nextIntent } : prev);
     setHitSide(flashSide);
-    setTimeout(() => {
-      setEncounter(prev => prev ? { ...prev, popups: [] } : prev);
-      setHitSide(null);
-      setEncBusy(false);
-    }, 1200);
+    setTimeout(() => { setHitSide(null); setEncBusy(false); }, 1200);
+    // The narrated "msg" popup reads for longer (careBubblePop's own 2.3s
+    // animation) than the quick floating damage numbers — clear everything
+    // together only once that's had time to finish, not at the shorter
+    // hit-shake/button-lock timing above.
+    setTimeout(() => setEncounter(prev => prev ? { ...prev, popups: [] } : prev), 2300);
 
     if (phase !== "active") resolveEncounterOutcome(phase, wild);
   };
@@ -843,7 +945,7 @@ export default function CarePage() {
           </div>
 
           {inEncounterMode ? (
-            <EncounterScene trainerSpriteId={trainer?.spriteId} playerNumber={active.sheet.number} enc={encounter!} hitSide={hitSide}
+            <EncounterScene playerNumber={active.sheet.number} enc={encounter!} hitSide={hitSide}
               onDismiss={() => setEncounter(null)} />
           ) : inTrainingMode ? (
             <TrainingScene number={active.sheet.number} attr={training!.attr as TrainAttr}
