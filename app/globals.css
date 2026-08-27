@@ -243,8 +243,24 @@ html, body {
   100% { transform: translateY(-6px) scale(0.9); opacity: 0; }
 }
 @keyframes careMoodPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+/* Floating damage/heal/status numbers in the Walk mini-encounter. */
+@keyframes careDamagePop {
+  0% { transform: translate(-50%,0) scale(0.7); opacity: 0; }
+  15% { transform: translate(-50%,-6px) scale(1.12); opacity: 1; }
+  100% { transform: translate(-50%,-36px) scale(1); opacity: 0; }
+}
+/* The Training overlay's per-stat icon "working out" beside the sprite. */
+@keyframes careTrainBounce { 0%,100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-9px) rotate(6deg); } }
+/* A hit landing in the mini-encounter. */
+@keyframes careHitShake {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); } 40% { transform: translateX(5px); }
+  60% { transform: translateX(-4px); } 80% { transform: translateX(3px); }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .care-sprite, .care-bubble, .care-mood { animation: none !important; transition: none !important; }
+  .care-sprite, .care-bubble, .care-mood, .care-dmgpop, .care-trainicon, .care-hit {
+    animation: none !important; transition: none !important;
+  }
 }
 

@@ -48,6 +48,24 @@ export interface CareGauges {
   affection: number;
 }
 
+/** A Training session in progress — see app/lib/training.ts for the dice
+ *  mechanic it resolves into and app/care/page.tsx for the timer/animation.
+ *  `attr` is one of training.ts's TrainAttr values; kept as a bare string
+ *  here (rather than importing that type) so this file never has to import
+ *  anything from training.ts, which itself imports PokemonSheetData from
+ *  trainer.ts — trainer.ts already imports CareState from here, and a
+ *  three-way type cycle isn't worth the risk for one union type. */
+export interface TrainingSession {
+  attr: string;
+  startedAt: number;
+  durationMs: number;
+  /** The trainer's dice pool at the moment training started — resolved
+   *  against this, not whatever the trainer's stats are by the time the
+   *  session finishes, so a mid-session stat change can't retroactively
+   *  change a roll that (narratively) already happened. */
+  pool: number;
+}
+
 export interface CareState {
   gauges: CareGauges;
   /** Epoch ms — every tick function reads elapsed time from this and then
@@ -56,6 +74,33 @@ export interface CareState {
   /** True once neglect has crossed INCONSOLABLE_THRESHOLD on every gauge at
    *  once. Locks out every action in app/care/page.tsx until cleared. */
   inconsolable: boolean;
+  /** Epoch ms of the last successful Groom — see GROOM_COOLDOWN_MS/canGroom
+   *  below. Undefined means "never groomed here," which reads as off
+   *  cooldown. */
+  lastGroomedAt?: number;
+  /** Set while a Training session (see app/lib/training.ts) is running;
+   *  cleared once app/care/page.tsx resolves it. */
+  training?: TrainingSession;
+}
+
+/** Real items from data/items-data.ts, not invented ones — Feed only works
+ *  with something actually in the Bag, and the potency scales with what the
+ *  item is (High-Performance Food's flavor text even calls out training). */
+export const FOOD_ITEMS: Record<string, number> = {
+  "Dry Food": 20,
+  "Meal Rations": 30,
+  "Gourmet Food": 45,
+  "High-Performance Food": 25,
+};
+
+/** Groom needs this in the Bag, but — unlike food — it isn't consumed
+ *  (items-data.ts marks it oneUse:false). What limits Groom to "regular
+ *  care" instead of a spammable button is the cooldown below. */
+export const GROOM_ITEM = "Grooming Kit";
+export const GROOM_COOLDOWN_MS = 8 * 60 * 60 * 1000;
+
+export function canGroom(care: CareState, now: number = Date.now()): boolean {
+  return !care.lastGroomedAt || now - care.lastGroomedAt >= GROOM_COOLDOWN_MS;
 }
 
 function clampGauge(value: number): number {
@@ -120,6 +165,7 @@ export function applyLiveTick(care: CareState, deltaMs: number, now: Date = new 
   };
 
   return {
+    ...care,
     gauges,
     lastTickAt: care.lastTickAt + deltaMs,
     inconsolable: care.inconsolable || isThoroughlyNeglected(gauges),
@@ -143,7 +189,7 @@ export function applyOfflineTick(care: CareState, elapsedMs: number): CareState 
     affection: floor(care.gauges.affection),
   };
 
-  return { gauges, lastTickAt: care.lastTickAt + elapsedMs, inconsolable: care.inconsolable };
+  return { ...care, gauges, lastTickAt: care.lastTickAt + elapsedMs, inconsolable: care.inconsolable };
 }
 
 function computeOfflineDecay(elapsedHours: number): number {
@@ -181,8 +227,8 @@ export function feed(care: CareState, amount = 30): CareState {
   return { ...care, gauges: { ...care.gauges, hunger: clampGauge(care.gauges.hunger + amount) } };
 }
 
-export function groom(care: CareState, amount = 30): CareState {
-  return { ...care, gauges: { ...care.gauges, cleanliness: clampGauge(care.gauges.cleanliness + amount) } };
+export function groom(care: CareState, amount = 30, now: number = Date.now()): CareState {
+  return { ...care, lastGroomedAt: now, gauges: { ...care.gauges, cleanliness: clampGauge(care.gauges.cleanliness + amount) } };
 }
 
 /** Walking raises affection but — same trade-off poketama's CareActions.ts
@@ -199,6 +245,23 @@ export function walk(care: CareState, affectionAmount = 25, cleanlinessCost = 10
   };
 }
 
+/** A real activity — a Training session, a Walk that turns into a fight —
+ *  costs real gauges, spent all at once rather than dripped out, since
+ *  these are one-shot events, not ongoing decay. Never routes through
+ *  Inconsolable on its own (clampGauge floors at 0, same as decay) — it's
+ *  additive with whatever neglect was already there, not a separate
+ *  trigger. */
+export function spend(care: CareState, cost: Partial<CareGauges>): CareState {
+  return {
+    ...care,
+    gauges: {
+      hunger: clampGauge(care.gauges.hunger - (cost.hunger ?? 0)),
+      cleanliness: clampGauge(care.gauges.cleanliness - (cost.cleanliness ?? 0)),
+      affection: clampGauge(care.gauges.affection - (cost.affection ?? 0)),
+    },
+  };
+}
+
 /** Called when a linked Battle Tracker entry actually gets healed — the
  *  only door out of Inconsolable. Leaves the gauges wherever they were
  *  (a fresh, modest baseline, not full) so the Pokémon still needs real
@@ -207,6 +270,7 @@ export function walk(care: CareState, affectionAmount = 25, cleanlinessCost = 10
 export function healedInBattle(care: CareState): CareState {
   if (!care.inconsolable) return care;
   return {
+    ...care,
     gauges: { hunger: 30, cleanliness: 30, affection: 30 },
     lastTickAt: Date.now(),
     inconsolable: false,
