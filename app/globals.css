@@ -228,3 +228,23 @@ html, body {
 @keyframes fxRippleExpand { 0% { transform: scale(0.4); opacity: 0.7; } 100% { transform: scale(1.9); opacity: 0; } }
 @keyframes fxIceShimmer { 0%,100% { opacity: 0.5; } 50% { opacity: 0.85; } }
 
+/* ── TamaPoke care-stage keyframes (app/care/page.tsx) ─────────────────────
+   Amplitude is a CSS var, not a fixed px, so one keyframe set can read as
+   a tiny nervous fidget for a Timid nature at rock-bottom happiness or a
+   huge gleeful bounce for a Jolly one at full happiness — see NATURE_STYLE
+   in the page for what sets --bob-amp per nature/happiness combination. */
+@keyframes careBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(calc(-1 * var(--bob-amp, 5px))); } }
+@keyframes careSleepyBob { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(calc(-0.4 * var(--bob-amp, 5px))) rotate(-3deg); } }
+@keyframes careBubblePop {
+  0% { transform: translateY(4px) scale(0.6); opacity: 0; }
+  15% { transform: translateY(0) scale(1.08); opacity: 1; }
+  25% { transform: scale(1); opacity: 1; }
+  85% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-6px) scale(0.9); opacity: 0; }
+}
+@keyframes careMoodPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .care-sprite, .care-bubble, .care-mood { animation: none !important; transition: none !important; }
+}
+

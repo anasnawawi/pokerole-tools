@@ -108,12 +108,18 @@ export function HallOfFame({ onClose }: { onClose: () => void }) {
  * `children` render inside the display as flex-column items, so a page can
  * hand over its existing sub-nav / content / footer rows unchanged.
  */
-export default function PokedexFrame({active,children,actions,hideParty}:{
+export default function PokedexFrame({active,children,actions,hideParty,footer}:{
   active?:string; children?:React.ReactNode; actions?:React.ReactNode;
   /** Drop the party strip. For the GM Screen and Battle Tracker, which need
    *  every pixel of height to lay out panels and read a fight — and which
    *  show the party's live state themselves anyway. */
   hideParty?:boolean;
+  /** Controls that sit on the shell itself, below the display's white
+   *  border, instead of inside it — the physical-buttons-under-the-screen
+   *  layout a page reaches for when its display should read as one
+   *  uninterrupted scene rather than a scrollable panel with controls
+   *  mixed into it (see app/care/page.tsx). */
+  footer?:React.ReactNode;
 }) {
   const pathname = usePathname();
   const current = active ?? SITE_LINKS.find(l=>l.href===pathname)?.match;
@@ -235,6 +241,8 @@ export default function PokedexFrame({active,children,actions,hideParty}:{
             {children}
           </div>
         </div>
+
+        {footer && <div style={{flexShrink:0,minWidth:0}}>{footer}</div>}
 
         {/* ── Party strip ───────────────────────────────────────────────────
             The active party travels with you, the way it does in the games:
