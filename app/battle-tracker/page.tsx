@@ -15,6 +15,7 @@ import { saveToStorage, loadFromStorage, STORAGE_PREFIX } from "../lib/storage";
 import { notifySession } from "../lib/session";
 import type { TrainerData, PokemonSheetData, PokemonGender } from "../lib/trainer";
 import { resolveGender } from "../lib/trainer";
+import { healedInBattle } from "../lib/care";
 import PokedexFrame from "../components/PokedexFrame";
 import { GenderIcon } from "../components/GenderIcon";
 
@@ -5398,6 +5399,22 @@ export default function BattleTrackerPage(){
       // Sync manual loyalty/happiness edits back to sheet
       if((u.loyalty!==undefined||u.happiness!==undefined)&&e.linkedPokemonSheetKey){
         setTimeout(()=>syncSheetHappinessLoyalty({...e,...u,...merged},merged.happiness,merged.loyalty),0);
+      }
+      // TamaPoke tie-in: a real heal (HP actually going up, from a Potion,
+      // Full Restore, EOR regen, anything) is the one way out of
+      // Inconsolable — see app/lib/care.ts's module comment for why that
+      // door lives here specifically and not inside the Care page itself.
+      // Happiness/Loyalty deliberately aren't touched here; they stay at
+      // the floor Inconsolable put them at, to be rebuilt through ordinary
+      // play, not handed back by the heal that only lifts the lockout.
+      if(u.currentHp!==undefined&&u.currentHp>e.currentHp&&e.linkedPokemonSheetKey){
+        const sheets=loadFromStorage<Record<string,any>>("pokemon_sheets",{});
+        const sheet=sheets[e.linkedPokemonSheetKey];
+        if(sheet?.care?.inconsolable){
+          sheets[e.linkedPokemonSheetKey]={...sheet,care:healedInBattle(sheet.care)};
+          saveToStorage("pokemon_sheets",sheets);
+          notifySession();
+        }
       }
       return merged;
     });

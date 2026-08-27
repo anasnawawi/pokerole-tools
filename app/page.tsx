@@ -52,6 +52,8 @@ function menuFor(trainer: TrainerData | null, party: number): MenuItem[] {
       desc:"A modular panel grid you arrange yourself, with shareable layouts." },
     { id:"rules", icon:"📚", label:"RULES", href:"/reference/quick-ref",
       desc:"Roll rules, difficulty, damage and the pain penalty at a glance." },
+    { id:"care", icon:"💖", label:"CARE", href:"/care",
+      desc:"Feed, groom and walk your party in real time between sessions." },
   ];
 }
 

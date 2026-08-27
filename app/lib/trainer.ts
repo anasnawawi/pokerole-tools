@@ -5,6 +5,7 @@
    so the shapes and the blank-trainer factory live here instead. */
 import { Rank, TrainerAge } from "../data/game-rules";
 import { loadFromStorage, saveToStorage } from "./storage";
+import type { CareState } from "./care";
 
 /* Pokémon can be Genderless, so "Unknown" exists as a distinct fourth state
    from an intentional "Genderless" choice — but it's meant to be transient:
@@ -119,6 +120,12 @@ export interface PokemonSheetData {
   inPokeball: boolean;
   happinessPending: number; // overflow happiness toward loyalty (2 = +1 loyalty)
   notes: string;
+  /** TamaPoke's real-time care state — see app/lib/care.ts. Undefined means
+   *  "never opened the Care page for this one yet," not "no care needed";
+   *  app/care/page.tsx lazily initializes it to a fresh blankCare() the
+   *  first time it actually looks at this sheet, rather than migrating
+   *  every existing sheet up front. */
+  care?: CareState;
 }
 
 export function makeBlankTrainer(): TrainerData {
