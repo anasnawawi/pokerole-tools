@@ -21,7 +21,8 @@ const AGES: TrainerAge[] = ["Child","Teen","Adult","Senior"];
 interface TrainerData {
   id: string; name: string; playerName: string; concept: string; nature: string;
   age: TrainerAge; rank: Rank; money: number;
-  attributes: { strength: number; dexterity: number; vitality: number; insight: number };
+  mode: "trainer" | "pokemon"; species: number | null;
+  attributes: { strength: number; dexterity: number; vitality: number; insight: number; special: number };
   socialAttributes: { tough: number; cool: number; beauty: number; cute: number; clever: number };
   skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; etiquette: number; intimidate: number; perform: number; capture: number };
   customSkills: { name: string; points: number }[];
@@ -41,11 +42,12 @@ interface PokemonSheetData {
   notes: string;
 }
 
-function makeBlank(): TrainerData {
+function makeBlank(mode: "trainer" | "pokemon" = "trainer"): TrainerData {
   return {
     id: Date.now().toString(), name: "", playerName: "", concept: "", nature: "Hardy",
     age: "Teen", rank: "Rookie", money: 2000,
-    attributes: { strength: 1, dexterity: 1, vitality: 1, insight: 1 },
+    mode, species: null,
+    attributes: { strength: 1, dexterity: 1, vitality: 1, insight: 1, special: 1 },
     socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
     skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, etiquette: 0, intimidate: 0, perform: 0, capture: 0 },
     customSkills: [], inventory: [],
@@ -223,6 +225,8 @@ export default function CharactersPage() {
   const [selId, setSelId] = useState<string | null>(null);
   const [tab, setTab] = useState<"sheet" | "pokemon">("sheet");
   const [pSearch, setPSearch] = useState("");
+  const [newMode, setNewMode] = useState<"trainer" | "pokemon">("trainer");
+  const [speciesSearch, setSpeciesSearch] = useState("");
 
   useEffect(() => { saveToStorage("trainers", trainers); }, [trainers]);
   useEffect(() => { saveToStorage("pokemon_sheets", pokemonSheets); }, [pokemonSheets]);
@@ -237,7 +241,7 @@ export default function CharactersPage() {
 
   // 4 base attrs * 1 each = 4 base points spent, plus distributed
   const totalAttrPoints = rankInfo.attrPoints + ageInfo.attrPoints;
-  const usedAttrPoints = sel ? Object.values(sel.attributes).reduce((a, b) => a + b, 0) - 4 : 0; // subtract 4 base (1 each)
+  const usedAttrPoints = sel ? sel.attributes.strength + sel.attributes.dexterity + sel.attributes.vitality + sel.attributes.insight - 4 : 0; // subtract 4 base (1 each); trainer's 4 core attrs only
   const attrBudgetLeft = totalAttrPoints - usedAttrPoints;
 
   const totalSocialPoints = rankInfo.socialPoints + ageInfo.socialPoints;
@@ -278,8 +282,19 @@ export default function CharactersPage() {
         {/* Sidebar */}
         <div style={{ width: 220, background: "#13151f", borderRight: "1px solid #2a2f45", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "10px 8px", borderBottom: "1px solid #2a2f45" }}>
-            <button onClick={() => { const t = makeBlank(); setTrainers(p => [...p, t]); setSelId(t.id); }}
-              style={{ width: "100%", background: "#3d8bff", color: "#fff", border: "none", borderRadius: 5, padding: 7, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ New Trainer</button>
+            <div style={{ display: "flex", gap: 2, marginBottom: 8, background: "#0f1117", borderRadius: 5, padding: 2 }}>
+              {[["trainer", "👤 Trainer"], ["pokemon", "🐾 Mystery Dungeon"]].map(([v, l]) => (
+                <button key={v} onClick={() => setNewMode(v as "trainer" | "pokemon")}
+                  style={{ flex: 1, padding: "5px 4px", borderRadius: 4, border: "none", fontSize: 10, fontWeight: 700, cursor: "pointer", background: newMode === v ? "#3d8bff" : "transparent", color: newMode === v ? "#fff" : "#8b90a8" }}>{l}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 9, color: "#5a6080", marginBottom: 8, lineHeight: 1.4 }}>
+              {newMode === "pokemon" ? "Mystery Dungeon mode: you ARE the Pokémon." : "Standard trainer + party of Pokémon."}
+            </div>
+            <button onClick={() => { const t = makeBlank(newMode); setTrainers(p => [...p, t]); setSelId(t.id); }}
+              style={{ width: "100%", background: "#3d8bff", color: "#fff", border: "none", borderRadius: 5, padding: 7, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+              + New {newMode === "pokemon" ? "Mystery Dungeon Pokémon" : "Trainer"}
+            </button>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: 4 }}>
             {trainers.length === 0 && <div style={{ textAlign: "center", color: "#5a6080", padding: 20, fontSize: 12 }}>No trainers yet</div>}
@@ -288,9 +303,10 @@ export default function CharactersPage() {
                 style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 5, cursor: "pointer", background: selId === t.id ? "#242842" : "transparent", borderLeft: `2px solid ${selId === t.id ? "#3d8bff" : "transparent"}` }}
                 onMouseEnter={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "#1e2235"; }}
                 onMouseLeave={e => { if (selId !== t.id) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}>
+                <span style={{ fontSize: 12, flexShrink: 0 }}>{t.mode === "pokemon" ? "🐾" : "👤"}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#e8eaf0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name || "Unnamed"}</div>
-                  <div style={{ fontSize: 10, color: RANK_COLORS[t.rank] }}>{t.rank} · {t.age}</div>
+                  <div style={{ fontSize: 10, color: RANK_COLORS[t.rank] }}>{t.rank} · {t.mode === "pokemon" ? (POKEMON.find(p=>p.number===t.species)?.name ?? "No species") : t.age}</div>
                 </div>
                 <button onClick={e => { e.stopPropagation(); setTrainers(p => p.filter(x => x.id !== t.id)); if (selId === t.id) setSelId(null); }}
                   style={{ background: "none", border: "none", color: "#5a6080", cursor: "pointer", fontSize: 12 }}>✕</button>
@@ -306,7 +322,7 @@ export default function CharactersPage() {
         ) : (
           <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
             <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-              {[["sheet", "📋 Trainer Sheet"], ["pokemon", "🎮 Pokémon Party"]] .map(([v, l]) => (
+              {[["sheet", sel.mode === "pokemon" ? "📋 Character Sheet" : "📋 Trainer Sheet"], ["pokemon", sel.mode === "pokemon" ? "🎮 Team" : "🎮 Pokémon Party"]] .map(([v, l]) => (
                 <button key={v} onClick={() => setTab(v as "sheet" | "pokemon")}
                   style={{ padding: "6px 16px", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none", background: tab === v ? "rgba(61,139,255,0.15)" : "transparent", color: tab === v ? "#3d8bff" : "#8b90a8" }}>{l}</button>
               ))}
@@ -316,9 +332,47 @@ export default function CharactersPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
                 {/* Identity */}
                 <div style={{ gridColumn: "1/-1", background: "#1e2235", border: "1px solid #2a2f45", borderRadius: 8, padding: 16 }}>
-                  <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 15, color: "#3d8bff", marginBottom: 14 }}>Trainer Identity</h3>
+                  <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 15, color: "#3d8bff", marginBottom: 14 }}>{sel.mode === "pokemon" ? "🐾 Pokémon Identity (Mystery Dungeon)" : "Trainer Identity"}</h3>
+                  {sel.mode === "pokemon" && (
+                    <div style={{ marginBottom: 14, background: "#13151f", border: "1px solid #2a2f45", borderRadius: 6, padding: 10 }}>
+                      <div style={{ fontSize: 10, color: "#5a6080", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>Your Species</div>
+                      {sel.species != null ? (() => {
+                        const species = POKEMON.find(p => p.number === sel.species)!;
+                        return (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#e8eaf0" }}>#{String(species.number).padStart(3, "0")} {species.name}</span>
+                            {species.types.map(t => <TypeBadge key={t} type={t} />)}
+                            <button onClick={() => upd(sel.id, { species: null })} style={{ marginLeft: "auto", fontSize: 11, color: "#5a6080", background: "none", border: "none", cursor: "pointer" }}>Change</button>
+                          </div>
+                        );
+                      })() : (
+                        <>
+                          <input type="text" placeholder="Search Pokémon by name or #…" value={speciesSearch} onChange={e => setSpeciesSearch(e.target.value)}
+                            style={{ width: "100%", background: "#0f1117", border: "1px solid #2a2f45", borderRadius: 5, padding: "6px 10px", color: "#e8eaf0", fontSize: 12, marginBottom: 6, outline: "none" }} />
+                          <div style={{ maxHeight: 160, overflowY: "auto" }}>
+                            {speciesSearch && POKEMON.filter(p => p.name.toLowerCase().includes(speciesSearch.toLowerCase())).slice(0, 30).map(p => (
+                              <div key={p.number} onClick={() => {
+                                upd(sel.id, {
+                                  species: p.number,
+                                  attributes: { ...p.attributes },
+                                  name: sel.name || p.name,
+                                });
+                                setSpeciesSearch("");
+                              }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 4, cursor: "pointer" }}
+                                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = "#1e2235"}
+                                onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = "transparent"}>
+                                <span style={{ fontSize: 9, color: "#3a4060", width: 26, fontFamily: "'Exo 2'", fontWeight: 700 }}>#{String(p.number).padStart(3, "0")}</span>
+                                <span style={{ fontSize: 12, color: "#e8eaf0", flex: 1 }}>{p.name}</span>
+                                {p.types.map(t => <TypeBadge key={t} type={t} />)}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
-                    {[["Trainer Name", "name"], ["Player Name", "playerName"], ["Concept", "concept"]].map(([l, k]) => (
+                    {[[sel.mode === "pokemon" ? "Nickname" : "Trainer Name", "name"], ["Player Name", "playerName"], ["Concept", "concept"]].map(([l, k]) => (
                       <div key={k}>
                         <div style={{ fontSize: 10, color: "#5a6080", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3 }}>{l}</div>
                         <input value={(sel as any)[k]} onChange={e => upd(sel.id, { [k]: e.target.value })}
@@ -348,19 +402,24 @@ export default function CharactersPage() {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-                    <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>Max HP = 4+VIT</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#00d4aa" }}>{4 + sel.attributes.vitality}</div></div>
+                    {sel.mode === "pokemon" && sel.species != null ? (() => {
+                      const species = POKEMON.find(p => p.number === sel.species)!;
+                      return <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>Max HP = {species.baseHp}+VIT</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#00d4aa" }}>{species.baseHp + sel.attributes.vitality}</div></div>;
+                    })() : (
+                      <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>Max HP = 4+VIT</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#00d4aa" }}>{4 + sel.attributes.vitality}</div></div>
+                    )}
                     <div style={{ textAlign: "center" }}><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>Will = INS+3</div><div style={{ fontSize: 22, fontFamily: "'Exo 2'", fontWeight: 800, color: "#6890f0" }}>{sel.attributes.insight + 3}</div></div>
-                    <div><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>Money ₽</div>
+                    <div><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>{sel.mode === "pokemon" ? "Poké (found)" : "Money ₽"}</div>
                       <input type="number" value={sel.money} onChange={e => upd(sel.id, { money: +e.target.value })}
                         style={{ width: 80, textAlign: "center", background: "#13151f", border: "1px solid #2a2f45", borderRadius: 4, color: "#ffd32a", fontSize: 16, fontFamily: "'Exo 2'", fontWeight: 700, padding: "2px 6px" }} /></div>
-                    <div><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>Gym Badges</div>
+                    {sel.mode !== "pokemon" && <div><div style={{ fontSize: 10, color: "#5a6080", marginBottom: 4 }}>Gym Badges</div>
                       <div style={{ display: "flex", gap: 4 }}>
                         {sel.gymBadges.map((b, i) => (
                           <button key={i} onClick={() => { const bg = [...sel.gymBadges]; bg[i] = !b; upd(sel.id, { gymBadges: bg }); }}
                             style={{ width: 24, height: 24, borderRadius: 3, border: `1px solid ${b ? "#ffd32a" : "#3a4060"}`, background: b ? "rgba(255,211,42,0.2)" : "transparent", color: b ? "#ffd32a" : "#5a6080", fontSize: 12, cursor: "pointer" }}>🏅</button>
                         ))}
                       </div>
-                    </div>
+                    </div>}
                   </div>
                 </div>
 
@@ -368,8 +427,24 @@ export default function CharactersPage() {
                 <div style={{ background: "#1e2235", border: "1px solid #2a2f45", borderRadius: 8, padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                     <h3 style={{ fontFamily: "'Exo 2'", fontWeight: 700, fontSize: 14, color: "#e8eaf0", margin: 0 }}>Attributes</h3>
-                    <PointBudget used={usedAttrPoints} total={totalAttrPoints} label="pts distributed" />
+                    {sel.mode !== "pokemon" && <PointBudget used={usedAttrPoints} total={totalAttrPoints} label="pts distributed" />}
                   </div>
+                  {sel.mode === "pokemon" ? (
+                    sel.species == null ? (
+                      <div style={{ fontSize: 11, color: "#5a6080", fontStyle: "italic" }}>Select your species above to set attributes.</div>
+                    ) : (() => {
+                      const species = POKEMON.find(p => p.number === sel.species)!;
+                      return (["strength", "dexterity", "vitality", "special", "insight"] as const).map(attr => {
+                        const base = species.attributes[attr];
+                        const limit = species.attributeLimits?.[attr] ?? Math.min(base + 4, 8);
+                        return (
+                          <PipRow key={attr} label={attr.charAt(0).toUpperCase() + attr.slice(1)} value={sel.attributes[attr]} max={limit}
+                            onChange={v => upd(sel.id, { attributes: { ...sel.attributes, [attr]: v } })} />
+                        );
+                      });
+                    })()
+                  ) : (
+                  <>
                   <div style={{ fontSize: 10, color: "#5a6080", marginBottom: 8 }}>
                     {sel.age} + {sel.rank}: +{ageInfo.attrPoints} + {rankInfo.attrPoints} = {totalAttrPoints} distributable points (base 1 per attribute)
                   </div>
@@ -381,6 +456,8 @@ export default function CharactersPage() {
                         upd(sel.id, { attributes: { ...sel.attributes, [attr]: v } });
                       }} />
                   ))}
+                  </>
+                  )}
                   <div style={{ borderTop: "1px solid #2a2f45", paddingTop: 12, marginTop: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "#5a6080", letterSpacing: "1px", textTransform: "uppercase" }}>Social Attributes</div>
