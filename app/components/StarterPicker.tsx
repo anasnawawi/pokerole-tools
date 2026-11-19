@@ -1,21 +1,18 @@
 "use client";
 /* The launch screen's own starter-picking flow — search a species, fill in
    the handful of details a fresh sheet actually needs (nickname, nature,
-   gender), then hand off to the real Trainer sheet to finish attribute and
-   skill allocation for both trainer and Pokémon. Split out of app/page.tsx
-   and loaded with next/dynamic (see there) specifically so the ~2MB
-   Pokémon dataset this needs never loads for a trainer who already has a
-   party — only the moment they're actually choosing a starter. */
+   gender), then hand the built sheet back to the caller. Split out of
+   app/page.tsx and loaded with next/dynamic (see there) specifically so the
+   ~2MB Pokémon dataset this needs never loads for a trainer who already has
+   a party — only the moment someone's actually choosing a Pokémon.
+   Storage-agnostic on purpose: it's used both to add a party member to an
+   existing trainer (post-registration) and, in Mystery Dungeon mode, to
+   pick the Pokémon a brand-new save's character IS — a trainer that may
+   not exist in storage yet — so persisting the result is the caller's job. */
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { POKEMON, NATURES, TYPE_COLORS, PokemonType } from "../data/pokerole-data";
 import { Rank, getRankIndex } from "../data/game-rules";
-import {
-  TrainerData, PokemonSheetData, PokemonGender, resolveGender, isAlwaysGenderless,
-  TRAINERS_KEY, SHEETS_KEY, loadTrainers, loadPokemonSheets,
-} from "../lib/trainer";
-import { saveToStorage } from "../lib/storage";
-import { notifySession } from "../lib/session";
+import { PokemonSheetData, PokemonGender, resolveGender, isAlwaysGenderless } from "../lib/trainer";
 import { GenderIcon } from "./GenderIcon";
 import { C } from "./PokedexFrame";
 
@@ -34,10 +31,18 @@ function randomNature(): string {
   return NATURES[Math.floor(Math.random() * NATURES.length)];
 }
 
-export default function StarterPicker({ trainer, narrow, onCancel }: {
-  trainer: TrainerData; narrow: boolean; onCancel: () => void;
+export default function StarterPicker({ rank, narrow, own, onCancel, onConfirm }: {
+  /** The trainer's rank — filters the list and caps starting move count.
+   *  Passed directly rather than a whole TrainerData so this also works
+   *  before a trainer record exists (mid character-creation). */
+  rank: Rank; narrow: boolean;
+  /** True when this Pokémon IS the character (Mystery Dungeon mode) rather
+   *  than the first member of a separate trainer's party — only changes
+   *  the closing caption's wording. */
+  own?: boolean;
+  onCancel: () => void;
+  onConfirm: (sheet: PokemonSheetData) => void;
 }) {
-  const router = useRouter();
   const [search, setSearch] = useState("");
   const [rankFiltered, setRankFiltered] = useState(true);
   const [selected, setSelected] = useState<typeof POKEMON[number] | null>(null);
@@ -47,11 +52,11 @@ export default function StarterPicker({ trainer, narrow, onCancel }: {
 
   const list = useMemo(() => {
     let arr = POKEMON;
-    if (rankFiltered) arr = arr.filter(p => getRankIndex(p.suggestedRank) <= getRankIndex(trainer.rank));
+    if (rankFiltered) arr = arr.filter(p => getRankIndex(p.suggestedRank) <= getRankIndex(rank));
     const q = search.trim().toLowerCase();
     if (q) arr = arr.filter(p => p.name.toLowerCase().includes(q) || String(p.number).includes(q.replace("#", "")));
     return arr;
-  }, [search, rankFiltered, trainer.rank]);
+  }, [search, rankFiltered, rank]);
 
   // Species like Magnemite or the legendaries are always Genderless and
   // never anything else; every other species is never Genderless — so the
@@ -69,32 +74,17 @@ export default function StarterPicker({ trainer, narrow, onCancel }: {
 
   const confirm = () => {
     if (!selected) return;
-    const key = `${trainer.id}_${selected.number}_${Date.now()}`;
-    const sheet: PokemonSheetData = {
+    onConfirm({
       number: selected.number, nickname: nickname.trim(), gender, rank: selected.suggestedRank,
       loyalty: 1, happiness: 1,
       attributes: { ...selected.attributes },
       trainingAttributes: { strength: 0, dexterity: 0, vitality: 0, special: 0, insight: 0 },
       socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
       skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, charm: 0, etiquette: 0, intimidate: 0, perform: 0 },
-      moves: selected.moves.filter(m => getRankIndex(m.rank) <= getRankIndex(trainer.rank)).slice(0, 4).map(m => m.name),
+      moves: selected.moves.filter(m => getRankIndex(m.rank) <= getRankIndex(rank)).slice(0, 4).map(m => m.name),
       partnerMoves: [], isPartner: false, nature, origin: "wild",
       heldItem: "", cruelty: false, inPokeball: false, happinessPending: 0, notes: "",
-    };
-    const trainers = loadTrainers();
-    const idx = trainers.findIndex(t => t.id === trainer.id);
-    if (idx >= 0) {
-      const next = [...trainers];
-      next[idx] = { ...next[idx], pokemon: [...next[idx].pokemon, key] };
-      saveToStorage(TRAINERS_KEY, next);
-    }
-    saveToStorage(SHEETS_KEY, { ...loadPokemonSheets(), [key]: sheet });
-    notifySession();
-    // Only now does the device leave the launch screen — straight to the
-    // sheet that has both the trainer's own remaining points and (via its
-    // party tab, one click away) the Pokémon's, matching every other todo
-    // this page already jumps a GM to.
-    router.push("/characters?tab=sheet");
+    });
   };
 
   const field: React.CSSProperties = {
@@ -119,7 +109,7 @@ export default function StarterPicker({ trainer, narrow, onCancel }: {
               padding: narrow ? "3px 8px" : "4px 10px", borderRadius: 4, border: `2px solid ${C.navy}`,
               background: rankFiltered ? C.navy : "#FFFFFF", color: rankFiltered ? "#FFFFFF" : C.navy,
               fontSize: narrow ? 9 : 10, fontFamily: pixel }}>
-            {rankFiltered ? `${trainer.rank.toUpperCase()} & BELOW` : "ALL POKéMON"}
+            {rankFiltered ? `${rank.toUpperCase()} & BELOW` : "ALL POKéMON"}
           </button>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: "#F8F8F0",
             border: `3px solid ${C.navy}`, borderRadius: 4, boxShadow: `inset 0 0 0 2px #FFFFFF`, padding: 4 }}>
@@ -190,7 +180,8 @@ export default function StarterPicker({ trainer, narrow, onCancel }: {
                 ✓ CHOOSE {selected.name.toUpperCase()}
               </button>
               <span style={{ fontSize: narrow ? 10 : 11, lineHeight: 1.5, color: "#5A6280" }}>
-                Attribute and skill points, moves and everything else are filled in next, on the trainer sheet.
+                Attribute and skill points, moves and everything else are filled in next,
+                {own ? " on this Pokémon's own sheet." : " on the trainer sheet."}
               </span>
             </div>
           </div>

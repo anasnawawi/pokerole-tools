@@ -4297,7 +4297,9 @@ function BattleCard({entry,allEntries,weather,isActive,onUpdate,onRemove,onNextT
               }
               {entry.currentHp<=0&&<span style={{fontSize:7,fontWeight:700,color:"#F8F8E8",background:"#705898",border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>FNT</span>}
               {isActive&&entry.currentHp>0&&<span style={{fontSize:7,fontWeight:700,color:"#181818",background:sideAccent,border:"1px solid #181818",padding:"1px 4px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>▶</span>}
-              {linkedTrainer&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} title={trainerView?"Switch to Pokémon view":"Switch to Trainer view"} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{trainerView?"PKM":"TRN"}</button>}
+              {/* No separate trainer to switch to in Mystery Dungeon mode —
+                  this Pokémon's own sheet already is the character sheet. */}
+              {linkedTrainer&&linkedTrainer.mode!=="pokemon"&&<button onClick={()=>upd({showTrainerView:!entry.showTrainerView})} title={trainerView?"Switch to Pokémon view":"Switch to Trainer view"} style={{background:"rgba(255,255,255,0.15)",border:"1px solid #F8F8E880",color:"#F8F8E8",cursor:"pointer",fontSize:7,padding:"1px 3px",flexShrink:0,fontFamily:"'Press Start 2P',monospace"}}>{trainerView?"PKM":"TRN"}</button>}
               <button onClick={()=>upd({isExpanded:!entry.isExpanded})} title={entry.isExpanded?"Collapse details":"Expand details"} style={{background:"none",border:"none",color:"#B0C0E8",cursor:"pointer",fontSize:9,flexShrink:0}}>{entry.isExpanded?"▲":"▼"}</button>
               <button onClick={()=>onRemove(entry.id)} title="Remove from battle" style={{background:"none",border:"none",color:"#F8A8A8",cursor:"pointer",fontSize:12,flexShrink:0,fontWeight:700}}>×</button>
             </div>
@@ -4606,7 +4608,10 @@ function CharactersSidebar({onAddPokemon,entries}:{onAddPokemon:(pokemon:Pokemon
                 </div>
               );
             })}
-            {(()=>{
+            {/* Mystery Dungeon mode has no separate human trainer standing in
+                battle — the player already fields themself via the Pokémon
+                list above — so there's nothing for this button to add. */}
+            {t.mode!=="pokemon"&&(()=>{
               const trainerAdded=entries.some(e=>e.linkedTrainerId===t.id&&e.pokemon.number<=0);
               return(
                 <button onClick={()=>{

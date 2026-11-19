@@ -74,9 +74,16 @@ export function isAlwaysGenderless(number: number): boolean {
   return GENDERLESS_DEX_NUMBERS.has(number);
 }
 
+/* "trainer" is the default save — a person with a party. "pokemon" is the
+   Mystery Dungeon-style save: the player IS the Pokémon in their party, so
+   the landing menu points its own-sheet tile at that Pokémon instead of a
+   separate human sheet. Missing on any save from before this existed, which
+   normalizeTrainer treats as "trainer" (see below). */
+export type TrainerMode = "trainer" | "pokemon";
+
 export interface TrainerData {
   id: string; name: string; playerName: string; concept: string; nature: string;
-  age: TrainerAge; rank: Rank; money: number; gender: TrainerGender;
+  age: TrainerAge; rank: Rank; money: number; gender: TrainerGender; mode: TrainerMode;
   attributes: { strength: number; dexterity: number; vitality: number; insight: number };
   socialAttributes: { tough: number; cool: number; beauty: number; cute: number; clever: number };
   skills: { brawl: number; channel: number; clash: number; evasion: number; alert: number; athletic: number; nature: number; stealth: number; empathy: number; etiquette: number; intimidate: number; perform: number; crafts: number; lore: number; medicine: number; science: number };
@@ -128,10 +135,10 @@ export interface PokemonSheetData {
   care?: CareState;
 }
 
-export function makeBlankTrainer(): TrainerData {
+export function makeBlankTrainer(mode: TrainerMode = "trainer"): TrainerData {
   return {
     id: Date.now().toString(), name: "", playerName: "", concept: "", nature: "Hardy",
-    age: "Teen", rank: "Rookie", money: 2000, gender: "Unspecified",
+    age: "Teen", rank: "Rookie", money: 2000, gender: "Unspecified", mode,
     attributes: { strength: 1, dexterity: 1, vitality: 1, insight: 1 },
     socialAttributes: { tough: 1, cool: 1, beauty: 1, cute: 1, clever: 1 },
     skills: { brawl: 0, channel: 0, clash: 0, evasion: 0, alert: 0, athletic: 0, nature: 0, stealth: 0, empathy: 0, etiquette: 0, intimidate: 0, perform: 0, crafts: 0, lore: 0, medicine: 0, science: 0 },
@@ -177,6 +184,7 @@ export function normalizeTrainer(t: TrainerData): TrainerData {
     socialAttributes: t.socialAttributes ?? BLANK_SOCIAL,
     skills: skills as TrainerData["skills"],
     gender: t.gender ?? "Unspecified",
+    mode: t.mode ?? "trainer",
   };
 }
 

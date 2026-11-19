@@ -1192,14 +1192,31 @@ export default function CharactersPage() {
 
 function CharactersPageInner() {
   const searchParams = useSearchParams();
-  const [trainers, setTrainers] = useState<TrainerData[]>(() => loadTrainers());
-  const [pokemonSheets, setPokemonSheets] = useState<Record<string, PokemonSheetData>>(() => loadPokemonSheets());
+  /* Starting empty and filling in from storage inside an effect — rather than
+     a useState lazy initializer — matters here: an initializer runs during
+     SSR too (where there's no localStorage, so it'd see empty/default data)
+     and then again on the client's first render, where it sees the real
+     saved trainers. Those two renders produce different HTML, which is a
+     hydration mismatch React has to discard and redo. An effect only ever
+     runs client-side, after the SSR-matching first paint, so there's nothing
+     to reconcile. */
+  const [trainers, setTrainers] = useState<TrainerData[]>([]);
+  const [pokemonSheets, setPokemonSheets] = useState<Record<string, PokemonSheetData>>({});
   /* Open on whoever the Pokédex device is currently playing as. Landing on an
      empty panel when a trainer is already saved is a step nobody wants, and
      the active trainer is the one they were just looking at. */
-  const [selId, setSelId] = useState<string | null>(
-    () => getActiveTrainer(loadTrainers())?.id ?? null
-  );
+  const [selId, setSelId] = useState<string | null>(null);
+  // Flips true once the effect below has loaded the real data — the two
+  // saveToStorage effects further down key off this so they can't fire with
+  // the transient empty state and stomp a real save before it's even read.
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    const loadedTrainers = loadTrainers();
+    setTrainers(loadedTrainers);
+    setPokemonSheets(loadPokemonSheets());
+    setSelId(getActiveTrainer(loadedTrainers)?.id ?? null);
+    setLoaded(true);
+  }, []);
   /* The landing device's POKéMON row links straight to ?tab=pokemon rather
      than always opening on the trainer sheet — a click meant "show me my
      party" shouldn't need a second click once it lands here. */
@@ -1233,8 +1250,8 @@ function CharactersPageInner() {
     setOpenSections(s => ({ ...s, [k]: !s[k] }));
   }, []);
 
-  useEffect(() => { saveToStorage("trainers", trainers); }, [trainers]);
-  useEffect(() => { saveToStorage("pokemon_sheets", pokemonSheets); }, [pokemonSheets]);
+  useEffect(() => { if (loaded) saveToStorage("trainers", trainers); }, [trainers, loaded]);
+  useEffect(() => { if (loaded) saveToStorage("pokemon_sheets", pokemonSheets); }, [pokemonSheets, loaded]);
   /* The landing Pokédex plays as one trainer. Opening a trainer here is the
      natural way to say which one, so the device follows the sheet you're
      actually working on. */

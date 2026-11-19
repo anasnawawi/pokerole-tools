@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { C, HallOfFame } from "./components/PokedexFrame";
 import PartyBar from "./components/PartyBar";
 import { loadFromStorage, saveToStorage } from "./lib/storage";
-import { TrainerData, TrainerGender, makeBlankTrainer, setActiveTrainer, TRAINERS_KEY } from "./lib/trainer";
+import { TrainerData, TrainerGender, TrainerMode, PokemonSheetData, makeBlankTrainer, setActiveTrainer, TRAINERS_KEY, SHEETS_KEY } from "./lib/trainer";
 import { notifySession, partyOf, useSession } from "./lib/session";
 import { Rank, TrainerAge } from "./data/game-rules";
 
@@ -21,26 +21,43 @@ const StarterPicker = dynamic(() => import("./components/StarterPicker"), { ssr:
    from these eight rows; the reference tabs (moves, abilities, types, status,
    weather) live inside POKéDEX and BAG, where a player would look for them. */
 type MenuItem = { id: string; icon: string; label: string; href: string; desc: string };
+type PartyEntry = { key: string; sheet: { nickname: string } };
 
-function menuFor(trainer: TrainerData | null, party: number): MenuItem[] {
+/* Mystery Dungeon mode drops the separate human trainer identity — the
+   player's own-sheet tile has to point at their Pokémon's sheet instead of
+   a trainer sheet, and the intro copy has to ask "who are you" rather than
+   "who's your partner". Everything else on the menu (Pokédex, bag, battle,
+   etc.) reads the same either way. */
+function menuFor(trainer: TrainerData | null, party: PartyEntry[]): MenuItem[] {
+  const isPokemonMode = trainer?.mode === "pokemon";
   const who = (trainer?.name || "").trim();
   /* An empty party means the save hasn't really started yet — the games
      don't let you wander the menu before picking a starter, so neither
      does this one. Every other row collapses down to the one that gets
      you a first Pokémon. */
-  if (party === 0) {
-    return [{ id:"starter", icon:"🔴", label:"CHOOSE YOUR STARTER POKéMON", href:"/characters?tab=pokemon",
-      desc:"Pick your first Pokémon partner to begin your journey." }];
+  if (party.length === 0) {
+    return [{ id:"starter", icon:"🔴",
+      label: isPokemonMode ? "CHOOSE THE POKéMON YOU'LL PLAY AS" : "CHOOSE YOUR STARTER POKéMON",
+      href:"/characters?tab=pokemon",
+      desc: isPokemonMode ? "Pick the Pokémon whose story this is — that's you."
+                          : "Pick your first Pokémon partner to begin your journey." }];
   }
+  const selfLabel = isPokemonMode
+    ? (party[0].sheet.nickname.trim() || "YOUR POKéMON").toUpperCase()
+    : (who ? who.toUpperCase() : "TRAINER");
   return [
-    /* The player's own name leads the menu — it's the row that says whose save
-       this is, and the card behind it is the one they'll open most often. */
-    { id:"trainer", icon:"👤", label: who ? who.toUpperCase() : "TRAINER", href:"/characters",
-      desc:"Your trainer card and sheet — ID, money, badges, attributes and skills." },
+    /* The player's own identity leads the menu — it's the row that says whose
+       save this is, and the card behind it is the one they'll open most often. */
+    { id:"trainer", icon: isPokemonMode ? "🔴" : "👤", label: selfLabel,
+      href: isPokemonMode ? "/characters?tab=pokemon" : "/characters",
+      desc: isPokemonMode ? "Your character sheet — you're a Pokémon, not a trainer."
+                          : "Your trainer card and sheet — ID, money, badges, attributes and skills." },
     { id:"pokedex", icon:"📖", label:"POKéDEX", href:"/reference?tab=pokedex",
       desc:"All 1025 Pokémon — stats, types, abilities and learnable moves." },
-    { id:"pokemon", icon:"🔴", label:"POKéMON", href:"/characters?tab=pokemon",
-      desc: party ? `Your party of ${party}. Train them, feed them, teach them moves.`
+    { id:"pokemon", icon:"🔴", label: isPokemonMode ? "TEAM" : "POKéMON", href:"/characters?tab=pokemon",
+      desc: isPokemonMode
+        ? `Your team of ${party.length}. Recruit, train and teach them moves.`
+        : party.length ? `Your party of ${party.length}. Train them, feed them, teach them moves.`
                   : "Your party — empty for now. Catch something." },
     { id:"bag", icon:"🎒", label:"BAG", href:"/reference?tab=items",
       desc:"236 items by pocket, with costs and give-to-party support." },
@@ -79,7 +96,7 @@ export default function Home() {
 
   // Memoised so the keyboard handler's deps are stable — rebuilt only when
   // the trainer's name or party size actually changes the rows.
-  const menu = useMemo(() => menuFor(trainer, party.length), [trainer, party.length]);
+  const menu = useMemo(() => menuFor(trainer, party), [trainer, party.length, party[0]?.sheet.nickname]);
   const caption = menu[hover ?? idx];
   const needsStarter = registered && party.length === 0;
 
@@ -127,14 +144,43 @@ export default function Home() {
 
   /* Registering writes a real trainer through the same keys the Characters
      page uses, so the sheet the player lands on afterwards is already theirs
-     to fill in. */
-  const register = useCallback((name: string, rank: Rank, age: TrainerAge, gender: TrainerGender) => {
-    const t = { ...makeBlankTrainer(), name: name.trim(), rank, age, gender };
+     to fill in. Mystery Dungeon mode folds picking the Pokémon you play as
+     into this same step (see NewGame below) — when a starter sheet comes
+     along with it, it's attached and saved in the same write instead of
+     leaving the save in the momentary "no party yet" state a Trainer-mode
+     save passes through on the way to StarterPicker. */
+  const register = useCallback((name: string, rank: Rank, age: TrainerAge, gender: TrainerGender, mode: TrainerMode, starter?: PokemonSheetData) => {
+    const t = { ...makeBlankTrainer(mode), name: name.trim(), rank, age, gender };
+    if (starter) {
+      const key = `${t.id}_${starter.number}_${Date.now()}`;
+      t.pokemon = [key];
+      const sheets = loadFromStorage<Record<string, PokemonSheetData>>(SHEETS_KEY, {}) ?? {};
+      saveToStorage(SHEETS_KEY, { ...sheets, [key]: starter });
+    }
     const all = loadFromStorage<TrainerData[]>(TRAINERS_KEY, []) ?? [];
     saveToStorage(TRAINERS_KEY, [...all, t]);
     setActiveTrainer(t.id);
     notifySession();
-  }, []);
+    if (starter) router.push("/characters?tab=pokemon");
+  }, [router]);
+
+  /* The Trainer-mode counterpart: a trainer already exists (registered
+     earlier, still needs its first party member), so this only has to
+     attach the new sheet rather than build the trainer record too. */
+  const attachStarter = useCallback((trainerId: string, sheet: PokemonSheetData) => {
+    const key = `${trainerId}_${sheet.number}_${Date.now()}`;
+    const trainers = loadFromStorage<TrainerData[]>(TRAINERS_KEY, []) ?? [];
+    const idx = trainers.findIndex(t => t.id === trainerId);
+    if (idx >= 0) {
+      const next = [...trainers];
+      next[idx] = { ...next[idx], pokemon: [...next[idx].pokemon, key] };
+      saveToStorage(TRAINERS_KEY, next);
+    }
+    const sheets = loadFromStorage<Record<string, PokemonSheetData>>(SHEETS_KEY, {}) ?? {};
+    saveToStorage(SHEETS_KEY, { ...sheets, [key]: sheet });
+    notifySession();
+    router.push("/characters?tab=sheet");
+  }, [router]);
 
   /* The round key swaps which saved trainer the device is playing as — the
      whole machine follows: the menu's name row, the party below, and the
@@ -200,8 +246,9 @@ export default function Home() {
                   opacity:lamp===i?1:0.45,transition:"opacity 200ms"}}/>
               ))}
             </div>
-            {/* Money and badges, the two numbers a Pokémon menu always shows */}
-            {registered&&(
+            {/* Money and badges — trainer concepts a Pokémon-mode save has no
+                use for, since there's no separate human carrying the wallet. */}
+            {registered&&trainer.mode!=="pokemon"&&(
               <div style={{marginLeft:"auto",display:"flex",gap:narrow?6:8,alignItems:"center"}}>
                 <span style={{fontFamily:pixel,fontSize:narrow?7:8,color:"#FFFFFF"}}>
                   ₽{trainer.money.toLocaleString()}
@@ -238,7 +285,8 @@ export default function Home() {
                    away — the launch window is the whole point. Only the
                    picker's own final confirm leaves it, straight to the
                    trainer sheet (see StarterPicker). */
-                <StarterPicker trainer={trainer!} narrow={narrow} onCancel={()=>setPickingStarter(false)}/>
+                <StarterPicker rank={trainer!.rank} narrow={narrow} onCancel={()=>setPickingStarter(false)}
+                  onConfirm={sheet=>attachStarter(trainer!.id, sheet)}/>
               ) : needsStarter ? (
                 /* No Pokémon yet, no menu — same held-back moment as the
                    games before you leave the table with your starter.
@@ -456,11 +504,15 @@ const TRAINER_GENDERS: TrainerGender[] = ["Unspecified","Male","Female"];
 
 function NewGame({ narrow, name, setName, onBegin }: {
   narrow: boolean; name: string; setName: (s: string) => void;
-  onBegin: (name: string, rank: Rank, age: TrainerAge, gender: TrainerGender) => void;
+  onBegin: (name: string, rank: Rank, age: TrainerAge, gender: TrainerGender, mode: TrainerMode, starter?: PokemonSheetData) => void;
 }) {
   const [rank, setRank] = useState<Rank>("Rookie");
   const [age, setAge] = useState<TrainerAge>("Teen");
   const [gender, setGender] = useState<TrainerGender>("Unspecified");
+  const [mode, setMode] = useState<TrainerMode>("trainer");
+  // Mystery Dungeon mode has a second step — choosing which Pokémon you are
+  // is part of character creation, not something left for after BEGIN.
+  const [pickingSpecies, setPickingSpecies] = useState(false);
   const pixel = "'Press Start 2P',monospace";
   const ok = name.trim().length > 0;
 
@@ -470,23 +522,60 @@ function NewGame({ narrow, name, setName, onBegin }: {
     fontSize:narrow?12:13,fontFamily:"inherit",
   };
 
+  if (pickingSpecies) {
+    return (
+      <div style={{position:"relative",zIndex:1,height:"100%",display:"flex",flexDirection:"column"}}>
+        <div style={{flexShrink:0,padding:narrow?"8px 8px 0":"10px 12px 0"}}>
+          <span style={{fontFamily:pixel,fontSize:narrow?9:10,lineHeight:1.6,color:C.navy}}>
+            Choose the Pokémon you&apos;ll play as
+          </span>
+        </div>
+        <div style={{flex:1,minHeight:0}}>
+          <StarterPicker rank={rank} narrow={narrow} own
+            onCancel={()=>setPickingSpecies(false)}
+            onConfirm={starter=>onBegin(name,rank,age,gender,mode,starter)}/>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{position:"relative",zIndex:1,height:"100%",overflowY:"auto",padding:narrow?8:12}}>
-      <form onSubmit={e=>{e.preventDefault(); if(ok) onBegin(name,rank,age,gender);}}
+      <form onSubmit={e=>{e.preventDefault(); if(!ok) return;
+          if(mode==="pokemon") setPickingSpecies(true); else onBegin(name,rank,age,gender,mode);}}
         style={{background:"#F8F8F0",border:`3px solid ${C.navy}`,borderRadius:4,
           boxShadow:`inset 0 0 0 2px #FFFFFF, 3px 3px 0 rgba(24,32,60,0.35)`,
           padding:narrow?10:14,display:"flex",flexDirection:"column",gap:narrow?9:12}}>
+
+        {/* Trainer is the default save — a person with a party. Mystery
+            Dungeon flips that: the player IS the Pokémon, so there's no
+            separate human sheet at all (see menuFor in the parent). */}
+        <label style={{display:"flex",flexDirection:"column",gap:5}}>
+          <span style={{fontSize:narrow?10:11,color:"#4A5470"}}>Game mode</span>
+          <div style={{display:"flex",gap:narrow?6:8}}>
+            {([["trainer","👤 Trainer"],["pokemon","🔴 Mystery Dungeon"]] as const).map(([m,label])=>(
+              <button key={m} type="button" onClick={()=>setMode(m)}
+                aria-pressed={mode===m}
+                style={{flex:1,padding:narrow?"7px 6px":"9px 8px",borderRadius:3,
+                  border:`2px solid ${C.navy}`,cursor:"pointer",touchAction:"manipulation",
+                  background:mode===m?C.navy:"#FFFFFF",color:mode===m?"#FFFFFF":C.navy,
+                  fontSize:narrow?10:11,fontFamily:"inherit"}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </label>
 
         <span style={{fontFamily:pixel,fontSize:narrow?9:11,lineHeight:1.6,color:C.navy}}>
           What is your name?
         </span>
 
         <label style={{display:"flex",flexDirection:"column",gap:5}}>
-          <span style={{fontSize:narrow?10:11,color:"#4A5470"}}>Trainer name</span>
+          <span style={{fontSize:narrow?10:11,color:"#4A5470"}}>{mode==="pokemon" ? "Name" : "Trainer name"}</span>
           {/* The games put the cursor in the name box, and there is nothing
               else on this screen to compete with it. */}
           <input autoFocus value={name} onChange={e=>setName(e.target.value)}
-            maxLength={24} placeholder="RED" style={field}/>
+            maxLength={24} placeholder={mode==="pokemon" ? "PIKACHU" : "RED"} style={field}/>
         </label>
 
         <div style={{display:"flex",gap:narrow?8:10}}>
@@ -517,12 +606,13 @@ function NewGame({ narrow, name, setName, onBegin }: {
             color:"#FFFFFF",fontFamily:pixel,fontSize:narrow?9:10,
             cursor:ok?"pointer":"default",touchAction:"manipulation",
             boxShadow:ok?`0 3px 0 ${C.shellDeep}`:"none"}}>
-          BEGIN
+          {mode==="pokemon" ? "NEXT →" : "BEGIN"}
         </button>
 
         <span style={{fontSize:narrow?10:11,lineHeight:1.5,color:"#5A6280"}}>
-          Rank and age set your starting attribute and skill budgets. Everything
-          else is filled in on the trainer sheet.
+          {mode==="pokemon"
+            ? "Rank and age set your starting attribute and skill budgets. Next, pick which Pokémon you are."
+            : "Rank and age set your starting attribute and skill budgets. Everything else is filled in on the trainer sheet."}
         </span>
       </form>
     </div>
