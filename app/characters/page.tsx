@@ -535,11 +535,13 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
       {/* minmax(0,1fr) rather than a bare 1fr — a grid item's default
           min-width is auto, not 0, so unwrapped content in either column
           (the move list especially) was forcing this grid, and the whole
-          card, wider than the page and cutting the right side off. */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16 }}>
+          card, wider than the page and cutting the right side off. The
+          min(100%, 280px) floor drops it to one column on a phone, where two
+          ~170px columns made Attributes and Loyalty/Happiness overlap. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 16 }}>
         {/* Attributes */}
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase" }}>Attributes</div>
               <button onClick={() => setTrainingMode(m => !m)} style={{ fontSize: 9, padding: "2px 7px", borderRadius: 3, border: `1px solid ${trainingMode ? "#A07000" : "#7888A8"}`, background: trainingMode ? "#A0700018" : "transparent", color: trainingMode ? "#A07000" : "#585858", cursor: "pointer", fontWeight: 700, letterSpacing: "0.5px" }}>
@@ -682,7 +684,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
 
         {/* Loyalty, Happiness, Moves */}
         <div>
-          <div style={{ display: "flex", gap: 16, marginBottom: 6 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 6 }}>
             {/* Loyalty */}
             <div>
               <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>Loyalty (0–5)</div>
@@ -702,7 +704,7 @@ function PokemonPartySheet({ sheet, trainerRank, onChange, onRemove, onSendToBox
               </button>
             </div>
             {/* Happiness */}
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: "1 1 150px", minWidth: 0 }}>
               <div style={{ fontSize: 10, color: "#585858", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 4 }}>Happiness (0–5)</div>
               <div style={{ display: "flex", gap: 3 }}>
                 {[0,1,2,3,4,5].map(i => (
