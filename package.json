@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:backup": "node --test tests/save-backup.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

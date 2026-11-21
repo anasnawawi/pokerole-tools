@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import PartyBar from "./PartyBar";
+import SaveManager from "./SaveManager";
 
 /* Palette lifted from the Pokédex reference illustration: a crimson shell
    with a darker tone for moulded edges, navy for hard chrome, cyan for the
@@ -172,7 +173,7 @@ export default function PokedexFrame({active,children,actions,hideParty,footer}:
         boxShadow:isPortrait?"none":`0 5px 0 ${C.shellDeep}, 0 9px 20px rgba(0,0,0,0.28)`,overflow:"hidden"}}>
 
         {/* ── Top chrome: lens, lamps, destination keys ─────────────────── */}
-        <div style={{display:"flex",alignItems:"center",gap:narrow?6:9,flexShrink:0,minWidth:0}}>
+        <div className="device-toolbar" style={{display:"flex",alignItems:"center",gap:narrow?6:9,flexShrink:0,minWidth:0}}>
           {/* Lens — a real button here too, same quiet way in to the Hall of
               Fame screen as the landing page's own lens (see HallOfFame in
               this file). A no-op everywhere else this chrome is drawn, so
@@ -214,7 +215,7 @@ export default function PokedexFrame({active,children,actions,hideParty,footer}:
 
           {/* Destination keys. Scrolls rather than clipping — a nav that
               silently hides its tail is worse than one that scrolls. */}
-          <div style={{flex:1,minWidth:0,display:"flex",gap:narrow?4:5,overflowX:"auto",overflowY:"hidden"}}>
+          <nav aria-label="Main navigation" className="device-nav" style={{flex:1,minWidth:0,display:"flex",gap:narrow?4:5,overflowX:"auto",overflowY:"hidden"}}>
             {SITE_LINKS.map(l=>{
               const on = current===l.match;
               return (
@@ -223,14 +224,15 @@ export default function PokedexFrame({active,children,actions,hideParty,footer}:
                     height:narrow?22:26,padding:narrow?"0 7px":"0 10px",borderRadius:4,textDecoration:"none",
                     background:on?C.navy:C.cyan,border:`2px solid ${C.outline}`,
                     boxShadow:on?`inset 0 0 0 2px ${C.yellow}`:"none",
-                    fontFamily:"'Press Start 2P',monospace",fontSize:narrow?7:8,
+                    fontFamily:"inherit",fontWeight:700,fontSize:13,
                     color:on?"#FFFFFF":C.navy,whiteSpace:"nowrap"}}>
                   {l.label}
                 </Link>
               );
             })}
-          </div>
+          </nav>
 
+          <SaveManager/>
           {actions&&<div style={{flexShrink:0,display:"flex",alignItems:"center",gap:6}}>{actions}</div>}
         </div>
 

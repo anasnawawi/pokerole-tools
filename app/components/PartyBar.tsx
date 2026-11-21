@@ -184,7 +184,7 @@ export default function PartyBar({ compact = false, onPanel = false, dark = fals
     <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:0}}>
       {/* Six equal columns whether or not they're filled, so the party reads
           as a party — empty slots are part of the information. */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,minWidth:0}}>
+      <div className="party-strip" style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,minWidth:0}}>
         {Array.from({length:6},(_,i)=>{
           const member = party[i];
           if (!member) return <EmptySlot key={i} compact sprite={sprite} dim={!registered} light={light} dark={dark}/>;
@@ -244,7 +244,7 @@ function EmptySlot({ compact, sprite, dim, light, dark }: {
         border:`2px dashed ${ring}`,color:ink,
         display:"flex",alignItems:"center",justifyContent:"center",
         fontSize:compact?13:17,opacity:0.6}}>◦</span>
-      <span style={{fontFamily:PIXEL,fontSize:compact?6:7,color:ink}}>—</span>
+      <span style={{fontFamily:"inherit",fontWeight:700,fontSize:compact?12:13,color:ink}}>—</span>
     </div>
   );
 }
@@ -302,10 +302,10 @@ function Slot({ sheetKey, sheet, dex, battle, compact, sprite, onClick }: {
 
       <span style={{width:"100%",minWidth:0,display:"flex",alignItems:"center",
         justifyContent:"center",gap:2}}>
-        <span style={{minWidth:0,fontFamily:PIXEL,fontSize:compact?6:7,
+        <span style={{minWidth:0,fontFamily:"inherit",fontWeight:700,fontSize:compact?12:13,
           color:C.navy,overflow:"hidden",textOverflow:"ellipsis",
           whiteSpace:"nowrap"}}>{v.name}</span>
-        <GenderIcon gender={sheet.gender} size={compact?7:8}/>
+        <GenderIcon gender={sheet.gender} size={compact?11:12}/>
       </span>
 
       <span style={{width:"100%",height:compact?5:6,borderRadius:3,overflow:"hidden",
@@ -314,7 +314,7 @@ function Slot({ sheetKey, sheet, dex, battle, compact, sprite, onClick }: {
           transition:"width 240ms"}}/>
       </span>
 
-      <span style={{fontSize:compact?8:9,fontWeight:700,color:"#2B3350",
+      <span style={{fontSize:compact?11:12,fontWeight:700,color:"#2B3350",
         fontVariantNumeric:"tabular-nums",lineHeight:1.2}}>
         {v.known ? `${v.curHp}/${v.maxHp}` : "—"}
       </span>

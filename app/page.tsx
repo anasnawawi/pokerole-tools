@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { C, HallOfFame } from "./components/PokedexFrame";
 import PartyBar from "./components/PartyBar";
+import SaveManager from "./components/SaveManager";
 import { loadFromStorage, saveToStorage } from "./lib/storage";
 import { TrainerData, TrainerGender, TrainerMode, PokemonSheetData, makeBlankTrainer, setActiveTrainer, TRAINERS_KEY, SHEETS_KEY } from "./lib/trainer";
 import { notifySession, partyOf, useSession } from "./lib/session";
@@ -203,7 +204,7 @@ export default function Home() {
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: narrow ? 11 : 13, lineHeight: 1, padding: 0, cursor: "pointer", touchAction: "manipulation",
   };
-  const dpadCell = narrow ? 26 : 30;
+  const dpadCell = 44;
   const pixel = "'Press Start 2P',monospace";
 
   return (
@@ -227,9 +228,9 @@ export default function Home() {
 
           {/* Lens + indicator lamps. The lens itself is a real button now —
               a quiet, undocumented way in to the Hall of Fame screen below. */}
-          <div style={{display:"flex",alignItems:"center",gap:narrow?10:14,flexShrink:0}}>
+          <div className="home-toolbar" style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:narrow?10:14,flexShrink:0}}>
             <button onClick={()=>setShowHOF(true)} title="???" aria-label="???"
-              style={{width:narrow?38:54,height:narrow?38:54,borderRadius:"50%",flexShrink:0,
+              style={{width:narrow?44:54,height:narrow?44:54,borderRadius:"50%",flexShrink:0,
               background:C.bezel,border:`3px solid ${C.outline}`,padding:0,cursor:"pointer",
               display:"flex",alignItems:"center",justifyContent:"center"}}>
               <div style={{width:"68%",height:"68%",borderRadius:"50%",position:"relative",
@@ -246,14 +247,15 @@ export default function Home() {
                   opacity:lamp===i?1:0.45,transition:"opacity 200ms"}}/>
               ))}
             </div>
+            <div style={{marginLeft:"auto"}}><SaveManager/></div>
             {/* Money and badges — trainer concepts a Pokémon-mode save has no
                 use for, since there's no separate human carrying the wallet. */}
             {registered&&trainer.mode!=="pokemon"&&(
-              <div style={{marginLeft:"auto",display:"flex",gap:narrow?6:8,alignItems:"center"}}>
-                <span style={{fontFamily:pixel,fontSize:narrow?7:8,color:"#FFFFFF"}}>
+              <div style={{display:"flex",gap:narrow?6:8,alignItems:"center"}}>
+                <span style={{fontFamily:"inherit",fontWeight:700,fontSize:12,color:"#FFFFFF"}}>
                   ₽{trainer.money.toLocaleString()}
                 </span>
-                <span style={{fontFamily:pixel,fontSize:narrow?7:8,color:C.yellow}}>
+                <span style={{fontFamily:"inherit",fontWeight:700,fontSize:12,color:C.yellow}}>
                   {trainer.gymBadges.filter(Boolean).length}/8
                 </span>
               </div>
