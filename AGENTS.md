@@ -79,6 +79,8 @@ All state is browser localStorage. Keys use the `pokerole_` prefix. [Certain]
 - [Guessing] The production-branch setting in Vercel is the cause. Nobody has checked it yet.
 - Production state on 2026-11-20: latest production deployment is `master` at `4d06fbe`. No runtime errors in the last 7 days. [Certain]
 - Work happens on a feature branch and goes to `master` through a pull request.
+- Standing rule from the owner: `master` must always hold the latest finished work. After each finished change, open a pull request, merge it into `master`, then confirm the production deployment (target `production`). Do not leave finished work only on a branch.
+- Direct pushes to `master` can be blocked by the agent's permission check. A pull request and merge works.
 
 ## Known issues
 
