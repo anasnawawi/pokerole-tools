@@ -9,6 +9,7 @@ import { POKEMON, TYPE_COLORS, PokemonType } from "../data/pokerole-data";
 import { TrainerData, PokemonSheetData } from "../lib/trainer";
 import { BattleLite } from "../lib/session";
 import { GenderIcon } from "./GenderIcon";
+import { readableInk } from "../lib/contrast";
 
 /* FRLG upgrades the trainer card's colour as you earn stars, so the card
    itself reports progress before you read a single number. Stars there come
@@ -47,10 +48,10 @@ function StatRow({ label, value, max, color, dim }: {
 }) {
   return (
     <div style={{display:"flex",alignItems:"center",gap:8,padding:"2px 0",opacity:dim?0.45:1}}>
-      <span style={{flex:1,minWidth:0,fontSize:11,textTransform:"capitalize",
+      <span style={{flex:1,minWidth:0,fontSize:13,textTransform:"capitalize",
         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
       <Pips value={value} max={max} color={color}/>
-      <span style={{width:16,textAlign:"right",fontSize:11,fontWeight:700,
+      <span style={{width:16,textAlign:"right",fontSize:13,fontWeight:700,
         fontVariantNumeric:"tabular-nums"}}>{value}</span>
     </div>
   );
@@ -59,7 +60,7 @@ function StatRow({ label, value, max, color, dim }: {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{background:"#FBF8E4",border:`2px solid #2850A0`,borderRadius:6,padding:"9px 11px"}}>
-      <div style={{fontFamily:PIXEL,fontSize:8,color:"#2850A0",marginBottom:7}}>{title}</div>
+      <div style={{fontFamily:"inherit",fontWeight:700,fontSize:12,color:"#2850A0",marginBottom:7}}>{title}</div>
       {children}
     </div>
   );
@@ -101,9 +102,9 @@ export function TrainerCard({ trainer, owned }: {
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       <div style={face}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-          <span style={{fontFamily:PIXEL,fontSize:10}}>TRAINER CARD</span>
+          <span style={{fontFamily:PIXEL,fontSize:12}}>TRAINER CARD</span>
           <span style={{flex:1}}/>
-          <span style={{fontFamily:PIXEL,fontSize:8,opacity:0.9}}>IDNo.{idNo}</span>
+          <span style={{fontFamily:"inherit",fontWeight:700,fontSize:12,opacity:0.9}}>IDNo.{idNo}</span>
         </div>
 
         {!flipped ? (
@@ -129,7 +130,7 @@ export function TrainerCard({ trainer, owned }: {
                       style={{width:22,height:22,borderRadius:"50%",flexShrink:0,
                         border:`2px solid ${INK}`,
                         display:"flex",alignItems:"center",justifyContent:"center",
-                        fontSize:11,textShadow:"none",
+                        fontSize:13,textShadow:"none",
                         background:got?"#F8D030":"rgba(255,255,255,0.22)"}}>
                       {got?"◆":""}
                     </span>
@@ -144,7 +145,7 @@ export function TrainerCard({ trainer, owned }: {
             <CardLine label="NATURE" value={trainer.nature || "—"}/>
             <CardLine label="PLAYER" value={trainer.playerName.trim() || "—"}/>
             <CardLine label="CARD" value={`${tier.name} · ${badges}/8 badges`}/>
-            <div style={{fontSize:11,lineHeight:1.6,marginTop:2,opacity:0.95}}>
+            <div style={{fontSize:13,lineHeight:1.6,marginTop:2,opacity:0.95}}>
               {trainer.achievements.length
                 ? `${trainer.achievements.length} achievement${trainer.achievements.length===1?"":"s"} recorded.`
                 : "No achievements recorded yet."}
@@ -154,7 +155,7 @@ export function TrainerCard({ trainer, owned }: {
       </div>
 
       <button onClick={()=>setFlipped(f=>!f)}
-        style={{alignSelf:"flex-start",fontFamily:PIXEL,fontSize:8,cursor:"pointer",
+        style={{alignSelf:"flex-start",fontFamily:"inherit",fontWeight:700,fontSize:12,cursor:"pointer",
           background:"#F0ECD4",border:`2px solid ${INK}`,boxShadow:`2px 2px 0 #787878`,
           padding:"5px 9px",color:INK}}>
         {flipped ? "◀ FRONT" : "BACK ▶"}
@@ -203,21 +204,21 @@ export function PokemonCard({ sheetKey, sheet, battle }: {
         </span>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"baseline",gap:6}}>
-            <span style={{fontFamily:PIXEL,fontSize:11,overflow:"hidden",
+            <span style={{fontFamily:PIXEL,fontSize:13,overflow:"hidden",
               textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
             <GenderIcon gender={sheet.gender} size={12}/>
-            {sheet.isPartner&&<span title="Partner Pokémon" style={{fontSize:11}}>⭐</span>}
+            {sheet.isPartner&&<span title="Partner Pokémon" style={{fontSize:13}}>⭐</span>}
           </div>
-          <div style={{fontSize:11,opacity:0.9,marginTop:2}}>
+          <div style={{fontSize:13,opacity:0.9,marginTop:2}}>
             {species && species.name !== name ? species.name : ""}
           </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
-          <span style={{fontFamily:PIXEL,fontSize:8}}>{sheet.rank}</span>
+          <span style={{fontFamily:"inherit",fontWeight:700,fontSize:12}}>{sheet.rank}</span>
           <span style={{display:"flex",gap:3}}>
             {(species?.types ?? []).map(t=>(
-              <span key={t} style={{fontSize:8,fontFamily:PIXEL,padding:"2px 4px",
-                border:`1px solid ${INK}`,color:"#F8F8F8",textShadow:"none",
+              <span key={t} style={{fontSize:12,fontFamily:"inherit",fontWeight:700,padding:"2px 4px",
+                border:`1px solid ${INK}`,color:readableInk(TYPE_COLORS[t as PokemonType] ?? "#787878"),textShadow:"none",
                 background:TYPE_COLORS[t as PokemonType] ?? "#787878"}}>{t}</span>
             ))}
           </span>
@@ -225,34 +226,53 @@ export function PokemonCard({ sheetKey, sheet, battle }: {
       </div>
 
       <div style={{padding:12,display:"grid",gap:10,
-        gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))"}}>
+        gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,240px),1fr))",alignItems:"start"}}>
 
         {/* Vitals */}
         <Section title="VITALS">
           <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
-            <span style={{fontFamily:PIXEL,fontSize:8,color:"#C8A000"}}>HP</span>
+            <span style={{fontFamily:"inherit",fontWeight:700,fontSize:12,color:"#C8A000"}}>HP</span>
             <span style={{flex:1,height:9,border:`1px solid ${INK}`,background:"#404030",overflow:"hidden"}}>
               <span style={{display:"block",height:"100%",width:`${pct*100}%`,background:hpColor}}/>
             </span>
-            <span style={{fontSize:11,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>
+            <span style={{fontSize:13,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>
               {curHp}/{maxHp}
             </span>
           </div>
-          <div style={{display:"flex",gap:14,fontSize:11,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:14,fontSize:13,flexWrap:"wrap"}}>
             <span>WILL <strong style={{color:"#2850A0"}}>{maxWill}</strong></span>
             <span>DEF <strong>{attr("vitality")}</strong></span>
             <span>SP.DEF <strong>{attr("insight")}</strong></span>
           </div>
-          <div style={{display:"flex",gap:14,fontSize:11,marginTop:6,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:14,fontSize:13,marginTop:6,flexWrap:"wrap"}}>
             <span>😊 {sheet.happiness}/5</span>
             <span>💛 {sheet.loyalty}/5</span>
             {sheet.heldItem && <span style={{color:"#A07000"}}>🎒 {sheet.heldItem}</span>}
           </div>
-          <div style={{fontSize:11,marginTop:6,color:"#585858"}}>
+          <div style={{fontSize:13,marginTop:6,color:"#585858"}}>
             {sheet.nature} · {sheet.origin === "wild" ? "Caught wild" : sheet.origin === "egg" ? "Hatched" : "Traded"}
           </div>
         </Section>
 
+        {/* Moves */}
+        <Section title="MOVES">
+          {sheet.moves.length === 0 && sheet.partnerMoves.length === 0 ? (
+            <div style={{fontSize:13,color:"#585858",fontStyle:"italic"}}>No moves learned yet.</div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:3}}>
+              {sheet.moves.map(m => (
+                <div key={m} style={{fontSize:13}}>▸ {m}</div>
+              ))}
+              {sheet.partnerMoves.map(m => (
+                <div key={m} style={{fontSize:13,color:"#A07000"}}>★ {m}</div>
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
+      <details className="pokemon-card-details">
+        <summary>View attributes, social stats &amp; skills</summary>
+        <div className="pokemon-stats-grid">
         {/* Attributes — capped at the species' own limits, as the sheet does */}
         <Section title="ATTRIBUTES">
           {(["strength","dexterity","vitality","special","insight"] as const).map(k=>(
@@ -274,26 +294,13 @@ export function PokemonCard({ sheetKey, sheet, battle }: {
             .map(k => <StatRow key={k} label={k} value={sheet.skills[k]} max={5}
               color="#00A080" dim={sheet.skills[k]===0}/>)}
           {Object.values(sheet.skills).every(v => v === 0) && (
-            <div style={{fontSize:10,color:"#585858",fontStyle:"italic",marginTop:6}}>No skill points spent yet.</div>
+            <div style={{fontSize:12,color:"#585858",fontStyle:"italic",marginTop:6}}>No skill points spent yet.</div>
           )}
         </Section>
 
-        {/* Moves */}
-        <Section title="MOVES">
-          {sheet.moves.length === 0 && sheet.partnerMoves.length === 0 ? (
-            <div style={{fontSize:11,color:"#585858",fontStyle:"italic"}}>No moves learned yet.</div>
-          ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {sheet.moves.map(m => (
-                <div key={m} style={{fontSize:11}}>▸ {m}</div>
-              ))}
-              {sheet.partnerMoves.map(m => (
-                <div key={m} style={{fontSize:11,color:"#A07000"}}>★ {m}</div>
-              ))}
-            </div>
-          )}
-        </Section>
-      </div>
+
+        </div>
+      </details>
     </div>
   );
 }

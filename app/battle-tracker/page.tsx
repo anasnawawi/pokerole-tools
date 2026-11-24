@@ -860,16 +860,19 @@ function HazardRow({hazards,onChange,align,maxW=210,stacked}:{hazards:HazardSide
     onChange(next);
   };
   return(
-    <div style={{display:"flex",flexDirection:stacked?"column":"row",gap:3,flexWrap:stacked?"nowrap":"wrap",
+    <details className="battle-hazards">
+      <summary>Field hazards{items.some(it=>it.active)?" • active":""}</summary>
+      <div style={{display:"flex",flexDirection:stacked?"column":"row",gap:3,flexWrap:stacked?"nowrap":"wrap",
       alignItems:stacked?(align==="right"?"flex-end":"flex-start"):undefined,
       justifyContent:align==="right"?"flex-end":"flex-start",maxWidth:stacked?undefined:maxW}}>
       {items.map(it=>(
-        <button key={it.key} onClick={()=>cycle(it.key)} title="Click to cycle"
+        <button key={it.key} onClick={()=>cycle(it.key)} aria-label={`Cycle ${it.label}`} title="Click to cycle"
           style={{fontSize:6,fontFamily:"'Press Start 2P',monospace",padding:"2px 4px",cursor:"pointer",
             background:it.active?"#785838":"rgba(248,248,232,0.7)",color:it.active?"#F8F0D8":"#888870",
             border:`1px solid ${it.active?"#181818":"#C8C8A8"}`}}>{it.icon} {it.label}</button>
       ))}
-    </div>
+      </div>
+    </details>
   );
 }
 // Small icon cluster drawn at the base of a platform showing active hazards for that side.
@@ -5584,7 +5587,7 @@ export default function BattleTrackerPage(){
   // has to shrink in step with whatever this resolves to, which is why
   // it's computed once and shared as commandBarH rather than re-guessed at
   // each call site.
-  const commandBarH=isShort?"clamp(90px, 20vw, 130px)":isNarrow?"clamp(180px, 34vw, 260px)":"clamp(120px, 16vw, 170px)";
+  const commandBarH=isShort?"clamp(90px, 20vw, 130px)":isNarrow?"clamp(220px, 34vw, 280px)":"clamp(120px, 16vw, 170px)";
   const bottomBarH=(!mounted||entries.length===0)?"0px"
     :battleStarted&&scenePopup&&onFieldPlayer?(isShort?"35vh":"40vh")
     :battleStarted?commandBarH
@@ -5644,7 +5647,7 @@ export default function BattleTrackerPage(){
           ].map(b=>(
             /* No literal `background` here — every entry supplies its own via
                b.style, and a duplicate key would just be overwritten. */
-            <button key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#181818",...b.style}}>{b.label}</button>
+            <button className="battle-turn-button" key={b.label} onClick={b.onClick} style={{border:"2px solid #181818",boxShadow:"2px 2px 0 #787878",padding:"3px 8px",fontSize:9,fontFamily:"'Press Start 2P',monospace",cursor:"pointer",color:"#181818",...b.style}}>{b.label}</button>
           ))}
         </div>
 

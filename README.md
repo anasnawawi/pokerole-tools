@@ -31,3 +31,16 @@ npm run dev
 ```
 
 Open http://localhost:3000
+
+## Save and restore your game
+
+Open **Save & backup** from the home screen or any tool page. Games save in this browser on this device, and do not sync between devices or different deployment URLs. Clearing browser data removes the local game.
+
+- **Download backup** exports trainers, party and PC Pokémon (including care progress), and GM notes and layout as a JSON file.
+- **Choose backup file** validates the file and shows its date and trainer/Pokémon counts before you confirm replacement. Close other PokeRole tabs before restoring.
+- Restoring clears active battles and queued encounters. Those temporary states are not included in backups.
+- After a successful restore, **Review previous save** lets you recover the previous local game. Keep a downloaded backup as well, since browser recovery is also removed when browser data is cleared.
+
+On the party sheet, vitals and moves are shown first. Expand **View attributes, social stats & skills** for the full summary, or **Edit [Pokémon] — stats, moves & care** to make changes.
+
+Run backup validation, restore, and storage-failure tests with `npm run test:backup`.
